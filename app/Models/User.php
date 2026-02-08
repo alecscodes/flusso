@@ -22,6 +22,7 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'reset_date',
     ];
 
     /**
@@ -47,6 +48,59 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
+        ];
+    }
+
+    public function accounts()
+    {
+        return $this->hasMany(Account::class);
+    }
+
+    public function categories()
+    {
+        return $this->hasMany(Category::class);
+    }
+
+    public function transactions()
+    {
+        return $this->hasMany(Transaction::class);
+    }
+
+    public function recurringPayments()
+    {
+        return $this->hasMany(RecurringPayment::class);
+    }
+
+    public function payments()
+    {
+        return $this->hasMany(Payment::class);
+    }
+
+    public function getFinancialPeriod(): array
+    {
+        $resetDate = $this->reset_date;
+
+        if ($resetDate === null) {
+            return [
+                'start' => now()->startOfMonth(),
+                'end' => now()->endOfMonth(),
+            ];
+        }
+
+        $today = now();
+        $currentDay = $today->day;
+
+        if ($currentDay >= $resetDate) {
+            $start = $today->copy()->day($resetDate)->startOfDay();
+            $end = $today->copy()->addMonth()->day($resetDate)->subDay()->endOfDay();
+        } else {
+            $start = $today->copy()->subMonth()->day($resetDate)->startOfDay();
+            $end = $today->copy()->day($resetDate)->subDay()->endOfDay();
+        }
+
+        return [
+            'start' => $start,
+            'end' => $end,
         ];
     }
 }
