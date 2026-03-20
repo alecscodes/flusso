@@ -117,6 +117,7 @@ class TransactionController extends Controller
 
         $categorySpending = $categoryQuery
             ->get()
+            ->filter(fn ($transaction) => $transaction->category_id !== null)
             ->groupBy('category_id')
             ->map(function ($transactions) use ($user) {
                 $category = $transactions->first()->category;
