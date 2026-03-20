@@ -42,28 +42,49 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(function (Throwable $e, Request $request) {
             $service = app(IpBanService::class);
 
+            // If IP is already banned, return 403 immediately
             if ($service->isBanned($request)) {
                 return response('Access denied', 403);
             }
 
             $path = $request->path();
 
-            $shouldBan = $service->shouldBanPath($path) && (
-                $e instanceof NotFoundHttpException ||
-                (str_starts_with($path, 'storage/') && ! file_exists(storage_path('app/public/'.ltrim(substr($path, 8), '/'))))
-            );
+            // Handle storage paths - ban if file doesn't exist
+            if (str_starts_with($path, 'storage/')) {
+                $filePath = storage_path('app/public/'.ltrim(substr($path, 8), '/'));
 
-            if ($shouldBan) {
-                Log::channel('database')->warning('Suspicious path access attempt', [
-                    'category' => 'security',
-                    'path' => $path,
-                ]);
+                if (! file_exists($filePath)) {
+                    Log::warning('Suspicious path access attempt', [
+                        'category' => 'security',
+                        'path' => $path,
+                    ]);
 
-                $service->ban($request, "Non-existent route: {$path}");
+                    $service->ban($request, "Non-existent storage file: {$path}");
 
-                return response('Access denied', 403);
+                    return response('Access denied', 403);
+                }
+
+                // File exists - let normal 404 handling proceed
+                return null;
             }
 
-            return null;
+            // Handle non-storage paths - only process 404 exceptions
+            if (! ($e instanceof NotFoundHttpException)) {
+                return null;
+            }
+
+            // Check if path should be banned
+            if (! $service->shouldBanPath($path)) {
+                return null;
+            }
+
+            Log::warning('Suspicious path access attempt', [
+                'category' => 'security',
+                'path' => $path,
+            ]);
+
+            $service->ban($request, "Non-existent route: {$path}");
+
+            return response('Access denied', 403);
         });
     })->create();

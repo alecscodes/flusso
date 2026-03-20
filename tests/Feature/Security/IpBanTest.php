@@ -3,7 +3,6 @@
 use App\Http\Middleware\CheckBannedIp;
 use App\Models\User;
 use App\Services\IpBanService;
-use App\Services\LogService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -28,7 +27,6 @@ test('middleware blocks banned IPs', function () {
 
     $middleware = new CheckBannedIp(
         app(IpBanService::class),
-        app(LogService::class)
     );
 
     try {
@@ -47,7 +45,6 @@ test('middleware allows non-banned IPs', function () {
 
     $middleware = new CheckBannedIp(
         app(IpBanService::class),
-        app(LogService::class)
     );
 
     $response = $middleware->handle($request, fn ($req) => response('ok'));
@@ -270,12 +267,14 @@ test('storage paths trigger IP bans when file does not exist and return 403', fu
     Cache::flush();
 
     $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.62']);
+    $this->withHeader('User-Agent', 'Test Browser');
     $response = $this->get('/storage/config.php');
     $response->assertForbidden();
     expect(DB::table('banned_ips')->where('ip', '203.0.113.62')->exists())->toBeTrue();
 
     Cache::flush();
     $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.63']);
+    $this->withHeader('User-Agent', 'Test Browser');
     $response = $this->get('/storage/secret.txt');
     $response->assertForbidden();
     expect(DB::table('banned_ips')->where('ip', '203.0.113.63')->exists())->toBeTrue();

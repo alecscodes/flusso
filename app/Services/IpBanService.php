@@ -22,9 +22,7 @@ class IpBanService
         }
 
         foreach ($allIps as $ip) {
-            $cacheKey = "banned_ip_{$ip}";
-            $isBanned = Cache::remember($cacheKey, self::CACHE_TTL, fn () => DB::table('banned_ips')->where('ip', $ip)->exists()
-            );
+            $isBanned = Cache::remember("banned_ip_{$ip}", self::CACHE_TTL, fn () => DB::table('banned_ips')->where('ip', $ip)->exists());
 
             if ($isBanned) {
                 return true;
@@ -43,18 +41,10 @@ class IpBanService
         }
 
         $now = now();
-        $records = [];
 
-        foreach ($allIps as $ip) {
-            $records[] = [
-                'ip' => $ip,
-                'reason' => $reason,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ];
-        }
-
-        DB::table('banned_ips')->insertOrIgnore($records);
+        DB::table('banned_ips')->insertOrIgnore(
+            array_map(fn ($ip) => ['ip' => $ip, 'reason' => $reason, 'created_at' => $now, 'updated_at' => $now], $allIps)
+        );
 
         foreach ($allIps as $ip) {
             Cache::forget("banned_ip_{$ip}");
@@ -85,12 +75,19 @@ class IpBanService
         Log::warning('Failed login attempt', [
             'category' => 'security',
             'ip' => $primaryIp,
-            'attempt_count' => $count,
+            'attempts' => $count,
+            'email' => $request->input('email'),
         ]);
 
         if ($count >= self::MAX_LOGIN_ATTEMPTS) {
             $this->ban($request, 'Failed login attempts');
             Cache::forget($key);
+
+            Log::warning('IP banned due to failed login attempts', [
+                'category' => 'security',
+                'ip' => $primaryIp,
+                'attempts' => $count,
+            ]);
 
             return true;
         }
@@ -104,6 +101,10 @@ class IpBanService
 
         if ($deleted) {
             Cache::forget("banned_ip_{$ip}");
+            Log::info('IP unbanned', [
+                'category' => 'security',
+                'ip' => $ip,
+            ]);
         }
 
         return $deleted;
@@ -143,57 +144,25 @@ class IpBanService
 
     private function getAllRealClientIps(Request $request): array
     {
-        $allHeaders = [
-            'HTTP_CF_CONNECTING_IP' => $_SERVER['HTTP_CF_CONNECTING_IP'] ?? $request->server('HTTP_CF_CONNECTING_IP'),
-            'HTTP_CF_CONNECTING_IPV6' => $_SERVER['HTTP_CF_CONNECTING_IPV6'] ?? $request->server('HTTP_CF_CONNECTING_IPV6'),
-            'HTTP_X_REAL_IP' => $_SERVER['HTTP_X_REAL_IP'] ?? $request->server('HTTP_X_REAL_IP'),
-            'HTTP_X_FORWARDED_FOR' => $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $request->server('HTTP_X_FORWARDED_FOR'),
-            'HTTP_CF_RAY' => $_SERVER['HTTP_CF_RAY'] ?? $request->server('HTTP_CF_RAY'),
-            'HTTP_CF_VISITOR' => $_SERVER['HTTP_CF_VISITOR'] ?? $request->server('HTTP_CF_VISITOR'),
-            'HTTP_CF_IPCOUNTRY' => $_SERVER['HTTP_CF_IPCOUNTRY'] ?? $request->server('HTTP_CF_IPCOUNTRY'),
-            'REMOTE_ADDR' => $_SERVER['REMOTE_ADDR'] ?? $request->server('REMOTE_ADDR'),
-        ];
+        $server = fn (string $key) => $_SERVER[$key] ?? $request->server($key);
 
-        // Check if request is behind Cloudflare
-        $isCloudflareRequest = ! empty($allHeaders['HTTP_CF_RAY']) || ! empty($allHeaders['HTTP_CF_VISITOR']);
+        $cfRay = $server('HTTP_CF_RAY');
+        $cfVisitor = $server('HTTP_CF_VISITOR');
+        $isCloudflare = ! empty($cfRay) || ! empty($cfVisitor);
 
-        $allClientIps = [];
+        if ($isCloudflare) {
+            $ips = array_merge(
+                $this->extractValidIps($server('HTTP_CF_CONNECTING_IPV6')),
+                $this->extractValidIps($server('HTTP_CF_CONNECTING_IP')),
+            );
 
-        // Collect all IPs from Cloudflare headers (both IPv4 and IPv6)
-        if ($isCloudflareRequest) {
-            // Check CF-Connecting-IPv6 (contains real IPv6)
-            $cfIpv6 = $allHeaders['HTTP_CF_CONNECTING_IPV6'];
-            if ($cfIpv6) {
-                $ips = $this->extractValidIps($cfIpv6);
-                $allClientIps = array_merge($allClientIps, $ips);
-            }
-
-            // Check CF-Connecting-IP (contains real IPv4 or IPv6)
-            $cfIp = $allHeaders['HTTP_CF_CONNECTING_IP'];
-            if ($cfIp) {
-                $ips = $this->extractValidIps($cfIp);
-                $allClientIps = array_merge($allClientIps, $ips);
-            }
-
-            // If we found IPs from Cloudflare headers, return them (both IPv4 and IPv6)
-            if (! empty($allClientIps)) {
-                return array_values(array_unique($allClientIps));
-            }
-
-            // If behind Cloudflare but CF-Connecting-IP is missing, we cannot determine real client IP
-            // Do not trust X-Real-IP or X-Forwarded-For as they may contain Cloudflare IPs
-            return [];
+            // Behind Cloudflare but no CF-Connecting-IP — cannot trust other headers
+            return array_values(array_unique($ips));
         }
 
-        // Not behind Cloudflare: use standard headers
-        $sources = [
-            'HTTP_X_REAL_IP' => $allHeaders['HTTP_X_REAL_IP'],
-            'HTTP_X_FORWARDED_FOR' => $allHeaders['HTTP_X_FORWARDED_FOR'],
-            'REMOTE_ADDR' => $allHeaders['REMOTE_ADDR'],
-        ];
-
-        foreach ($sources as $source) {
-            $ips = $this->extractValidIps($source);
+        // Not behind Cloudflare: try headers in priority order
+        foreach (['HTTP_X_REAL_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR'] as $header) {
+            $ips = $this->extractValidIps($server($header));
             if (! empty($ips)) {
                 return $ips;
             }
@@ -229,14 +198,14 @@ class IpBanService
 
     private function isPrivateIp(string $ip): bool
     {
-        if (! filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_IPV6)) {
+        if (! filter_var($ip, FILTER_VALIDATE_IP)) {
             return false;
         }
 
-        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
-            return ! filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE);
-        }
-
-        return ! filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6 | FILTER_FLAG_NO_PRIV_RANGE);
+        return ! filter_var(
+            $ip,
+            FILTER_VALIDATE_IP,
+            FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
+        );
     }
 }
