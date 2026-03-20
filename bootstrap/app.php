@@ -11,7 +11,6 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -23,7 +22,6 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 
-        // Block bots and crawlers first
         $middleware->web(prepend: [
             BlockBots::class,
             CheckBannedIp::class,
@@ -34,37 +32,34 @@ return Application::configure(basePath: dirname(__DIR__))
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
         ]);
+
+        $middleware->api(prepend: [
+            BlockBots::class,
+            CheckBannedIp::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        $exceptions->render(function (HttpException $e, Request $request) {
+        $exceptions->render(function (Throwable $e, Request $request) {
             $service = app(IpBanService::class);
 
-            // If IP is banned, always return 403, even for 404 errors
             if ($service->isBanned($request)) {
                 return response('Access denied', 403);
             }
 
             $path = $request->path();
 
-            if (str_starts_with($path, 'storage/')) {
-                $filePath = storage_path('app/public/'.ltrim(substr($path, 8), '/'));
-                if (! file_exists($filePath) && $service->shouldBanPath($path)) {
-                    Log::warning('Suspicious path access attempt', [
-                        'category' => 'security',
-                        'path' => $path,
-                        'type' => 'non-existent storage file',
-                    ]);
-                    $service->ban($request, 'Non-existent storage file: '.$path);
+            $shouldBan = $service->shouldBanPath($path) && (
+                $e instanceof NotFoundHttpException ||
+                (str_starts_with($path, 'storage/') && ! file_exists(storage_path('app/public/'.ltrim(substr($path, 8), '/'))))
+            );
 
-                    return response('Access denied', 403);
-                }
-            } elseif ($e instanceof NotFoundHttpException && ! $request->route() && $service->shouldBanPath($path)) {
-                Log::warning('Suspicious route access attempt', [
+            if ($shouldBan) {
+                Log::channel('database')->warning('Suspicious path access attempt', [
                     'category' => 'security',
                     'path' => $path,
-                    'type' => 'non-existent route',
                 ]);
-                $service->ban($request, 'Non-existent route: '.$path);
+
+                $service->ban($request, "Non-existent route: {$path}");
 
                 return response('Access denied', 403);
             }
