@@ -130,7 +130,6 @@ class TransactionController extends Controller
             })
             ->sortByDesc('total_in_primary')
             ->values()
-            ->take(5)
             ->toArray();
 
         return [$categorySpending, true];
