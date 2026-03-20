@@ -20,6 +20,14 @@ class AccountService
             ->get();
     }
 
+    public function getNonSavingsAccountsForUser(User $user): Collection
+    {
+        return $user->accounts()
+            ->orderByName()
+            ->whereNotSavings()
+            ->get();
+    }
+
     public function createAccount(User $user, array $data): Account
     {
         $balance = $data['balance'] ?? 0;
@@ -29,6 +37,7 @@ class AccountService
             'currency' => strtoupper($data['currency']),
             'balance' => $balance,
             'initial_balance' => $balance,
+            'is_savings' => $data['is_savings'] ?? false,
         ]);
     }
 
@@ -37,6 +46,7 @@ class AccountService
         $account->update([
             'name' => $data['name'] ?? $account->name,
             'currency' => isset($data['currency']) ? strtoupper($data['currency']) : $account->currency,
+            'is_savings' => $data['is_savings'] ?? $account->is_savings,
         ]);
 
         return $account->fresh();
@@ -92,7 +102,21 @@ class AccountService
 
     public function getTotalBalanceInPrimaryCurrency(User $user): float
     {
+        $accounts = $user->accounts()->whereNotSavings()->get();
+
+        return $this->currencyService->sumInPrimaryCurrency($accounts, 'balance', 'currency', $user);
+    }
+
+    public function getFullBalanceInPrimaryCurrency(User $user): float
+    {
         $accounts = $user->accounts()->get();
+
+        return $this->currencyService->sumInPrimaryCurrency($accounts, 'balance', 'currency', $user);
+    }
+
+    public function getSavingsBalanceInPrimaryCurrency(User $user): float
+    {
+        $accounts = $user->accounts()->where('is_savings', true)->get();
 
         return $this->currencyService->sumInPrimaryCurrency($accounts, 'balance', 'currency', $user);
     }
@@ -103,12 +127,16 @@ class AccountService
     public function getAccountSummary(User $user): array
     {
         $accounts = $this->getAccountsForUser($user);
-        $totalBalance = $this->getTotalBalanceInPrimaryCurrency($user);
+        $availableBalance = $this->getTotalBalanceInPrimaryCurrency($user);
+        $totalBalance = $this->getFullBalanceInPrimaryCurrency($user);
+        $savingsBalance = $this->getSavingsBalanceInPrimaryCurrency($user);
         $primaryCurrency = $this->currencyService->getPrimaryCurrency($user);
 
         return [
             'accounts' => $accounts,
+            'availableBalance' => $availableBalance,
             'totalBalance' => $totalBalance,
+            'savingsBalance' => $savingsBalance,
             'primaryCurrency' => $primaryCurrency,
         ];
     }

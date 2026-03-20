@@ -28,6 +28,7 @@ const formData = ref({
     name: props.account?.name || '',
     currency: props.account?.currency || 'EUR',
     balance: props.account?.balance || '0',
+    is_savings: props.account?.is_savings || false,
 });
 
 const popularCurrencies = [
@@ -95,6 +96,33 @@ const currencyOptions = computed(() => {
                 />
                 <p v-if="isEditing" class="text-xs text-muted-foreground">
                     Balance is updated by transactions only.
+                </p>
+            </div>
+
+            <div class="space-y-2">
+                <div class="flex items-center space-x-2">
+                    <input
+                        id="is_savings"
+                        v-model="formData.is_savings"
+                        name="is_savings"
+                        type="checkbox"
+                        class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    />
+                    <input
+                        type="hidden"
+                        name="is_savings"
+                        :value="formData.is_savings ? '1' : '0'"
+                    />
+                    <Label
+                        for="is_savings"
+                        class="text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                        Savings Account
+                    </Label>
+                </div>
+                <p class="text-xs text-muted-foreground">
+                    Savings accounts will be excluded from available balance
+                    calculations
                 </p>
             </div>
         </div>

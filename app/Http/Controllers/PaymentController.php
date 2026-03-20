@@ -36,8 +36,9 @@ class PaymentController extends Controller
         );
 
         // Get totals from services
-        $totalBalance = $this->accountService->getTotalBalanceInPrimaryCurrency($user);
-        $paymentSummary['balance_after_planned'] = $totalBalance - $paymentSummary['total_due'];
+        $availableBalance = $this->accountService->getTotalBalanceInPrimaryCurrency($user);
+        $totalBalance = $this->accountService->getFullBalanceInPrimaryCurrency($user);
+        $paymentSummary['balance_after_planned'] = $availableBalance - $paymentSummary['total_due'];
 
         $overduePayments = $this->paymentService->getOverduePayments($user);
         $overdueTotal = $this->currencyService->sumInPrimaryCurrency($overduePayments, 'amount', 'currency', $user);
@@ -54,6 +55,7 @@ class PaymentController extends Controller
             'upcomingPayments' => $upcomingPayments,
             'monthlyTotals' => $monthlyTotals,
             'totals' => [
+                'available_balance' => $availableBalance,
                 'total_balance' => $totalBalance,
                 'overdue_amount' => $overdueTotal,
                 'upcoming_amount' => $upcomingTotal,

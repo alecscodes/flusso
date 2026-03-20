@@ -22,6 +22,7 @@ import {
 import { computed } from 'vue';
 
 interface PaymentTotals {
+    available_balance: number;
     total_balance: number;
     overdue_amount: number;
     upcoming_amount: number;
@@ -114,12 +115,12 @@ function markUnpaid(payment: Payment) {
                             </div>
                             <div>
                                 <p class="text-sm text-muted-foreground">
-                                    Total balance
+                                    Available balance
                                 </p>
                                 <p class="text-2xl font-bold text-foreground">
                                     {{
                                         formatCurrency(
-                                            totals.total_balance,
+                                            totals.available_balance,
                                             totals.primary_currency,
                                         )
                                     }}

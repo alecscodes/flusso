@@ -11,7 +11,9 @@ import { ref } from 'vue';
 
 interface Props {
     accounts: Account[];
+    availableBalance: number;
     totalBalance: number;
+    savingsBalance: number;
     primaryCurrency: string;
 }
 
@@ -72,23 +74,73 @@ function deleteAccount(account: Account) {
                 </Button>
             </div>
 
-            <div
-                v-if="accounts.length > 0"
-                class="rounded-2xl border border-border bg-gradient-to-r from-primary/5 to-accent/5 p-6"
-            >
-                <p class="text-sm font-medium text-muted-foreground">
-                    Total Balance
-                </p>
-                <p
-                    class="mt-1 text-4xl font-bold tracking-tight text-foreground"
+            <div v-if="accounts.length > 0" class="space-y-4">
+                <div
+                    class="rounded-2xl border border-border bg-gradient-to-r from-primary/5 to-accent/5 p-6"
                 >
-                    {{ formatCurrency(totalBalance, primaryCurrency) }}
-                </p>
-                <p class="mt-1 text-sm text-muted-foreground">
-                    Across {{ accounts.length }} account{{
-                        accounts.length !== 1 ? 's' : ''
-                    }}
-                </p>
+                    <p class="text-sm font-medium text-muted-foreground">
+                        Available Balance
+                    </p>
+                    <p
+                        class="mt-1 text-4xl font-bold tracking-tight text-foreground"
+                    >
+                        {{ formatCurrency(availableBalance, primaryCurrency) }}
+                    </p>
+                    <p class="mt-1 text-sm text-muted-foreground">
+                        Across
+                        {{ accounts.filter((a) => !a.is_savings).length }}
+                        regular account{{
+                            accounts.filter((a) => !a.is_savings).length !== 1
+                                ? 's'
+                                : ''
+                        }}
+                    </p>
+                </div>
+
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <div
+                        class="rounded-xl border border-border bg-muted/30 p-4"
+                    >
+                        <p class="text-sm font-medium text-muted-foreground">
+                            Total Balance (including savings)
+                        </p>
+                        <p
+                            class="mt-1 text-2xl font-bold tracking-tight text-foreground"
+                        >
+                            {{ formatCurrency(totalBalance, primaryCurrency) }}
+                        </p>
+                    </div>
+
+                    <div
+                        v-if="savingsBalance > 0"
+                        class="rounded-xl border border-border bg-green-50 p-4 dark:bg-green-950/20"
+                    >
+                        <p
+                            class="text-sm font-medium text-green-700 dark:text-green-300"
+                        >
+                            Savings Balance
+                        </p>
+                        <p
+                            class="mt-1 text-2xl font-bold tracking-tight text-green-700 dark:text-green-300"
+                        >
+                            {{
+                                formatCurrency(savingsBalance, primaryCurrency)
+                            }}
+                        </p>
+                        <p
+                            class="mt-1 text-xs text-green-600 dark:text-green-400"
+                        >
+                            Across
+                            {{ accounts.filter((a) => a.is_savings).length }}
+                            savings account{{
+                                accounts.filter((a) => a.is_savings).length !==
+                                1
+                                    ? 's'
+                                    : ''
+                            }}
+                        </p>
+                    </div>
+                </div>
             </div>
 
             <div

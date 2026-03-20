@@ -44,7 +44,9 @@ interface Props {
     upcomingPayments: Payment[];
     overduePayments: Payment[];
     categorySpending: CategorySpending[];
+    availableBalance: number;
     totalBalance: number;
+    savingsBalance: number;
 }
 
 const props = defineProps<Props>();
@@ -113,10 +115,17 @@ function markPaid(payment: Payment) {
 
             <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
                 <StatCard
+                    title="Available Balance"
+                    :value="formatCurrency(availableBalance, primaryCurrency)"
+                    subtitle="Ready to use"
+                    :icon="Wallet"
+                />
+                <StatCard
                     title="Total Balance"
                     :value="formatCurrency(totalBalance, primaryCurrency)"
-                    subtitle="What you have now"
-                    :icon="Wallet"
+                    subtitle="Including savings"
+                    :icon="CircleDollarSign"
+                    class="border-muted"
                 />
                 <StatCard
                     title="Income (period)"
@@ -132,15 +141,15 @@ function markPaid(payment: Payment) {
                     trend="down"
                     class="border-rose-200 dark:border-rose-900/50"
                 />
+            </div>
+
+            <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 <StatCard
                     title="Net (period)"
                     :value="formatCurrency(summary.net, primaryCurrency)"
                     :icon="TrendingUp"
                     :trend="summary.net >= 0 ? 'up' : 'down'"
                 />
-            </div>
-
-            <div class="grid gap-6 sm:grid-cols-2">
                 <StatCard
                     title="Planned expenses"
                     :value="
@@ -154,20 +163,12 @@ function markPaid(payment: Payment) {
                     class="border-rose-200 dark:border-rose-900/50"
                 />
                 <StatCard
-                    title="Balance after planned"
-                    :value="
-                        formatCurrency(
-                            paymentSummary.balance_after_planned,
-                            primaryCurrency,
-                        )
-                    "
-                    subtitle="After paying all planned expenses"
+                    v-if="savingsBalance > 0"
+                    title="Savings Balance"
+                    :value="formatCurrency(savingsBalance, primaryCurrency)"
+                    subtitle="Set aside for future"
                     :icon="CircleDollarSign"
-                    :trend="
-                        paymentSummary.balance_after_planned >= 0
-                            ? 'up'
-                            : 'down'
-                    "
+                    class="border-green-200 dark:border-green-900/50"
                 />
             </div>
 

@@ -35,8 +35,10 @@ class DashboardService
         $overduePayments = $this->paymentService->getOverduePayments($user);
 
         $paymentSummary = $this->paymentService->getPaymentSummaryForPeriod($user, $startDate, $endDate);
-        $totalBalance = $this->accountService->getTotalBalanceInPrimaryCurrency($user);
-        $paymentSummary['balance_after_planned'] = $totalBalance - $paymentSummary['total_due'];
+        $availableBalance = $this->accountService->getTotalBalanceInPrimaryCurrency($user);
+        $totalBalance = $this->accountService->getFullBalanceInPrimaryCurrency($user);
+        $savingsBalance = $this->accountService->getSavingsBalanceInPrimaryCurrency($user);
+        $paymentSummary['balance_after_planned'] = $availableBalance - $paymentSummary['total_due'];
 
         return [
             'accounts' => $accounts,
@@ -49,7 +51,9 @@ class DashboardService
             'overduePayments' => $overduePayments,
             'categorySpending' => $categorySpending,
             'paymentSummary' => $paymentSummary,
+            'availableBalance' => $availableBalance,
             'totalBalance' => $totalBalance,
+            'savingsBalance' => $savingsBalance,
         ];
     }
 
@@ -76,7 +80,8 @@ class DashboardService
         $endDate = $period['end'];
 
         $summary = $this->transactionService->getTransactionSummaryForPeriod($user, $startDate, $endDate);
-        $totalBalance = $this->accountService->getTotalBalanceInPrimaryCurrency($user);
+        $availableBalance = $this->accountService->getTotalBalanceInPrimaryCurrency($user);
+        $totalBalance = $this->accountService->getFullBalanceInPrimaryCurrency($user);
         $accountsByCurrency = $this->accountService->getAccountsByCurrency($user);
 
         $overduePayments = $this->paymentService->getOverduePayments($user);
@@ -105,6 +110,7 @@ class DashboardService
                 'net' => $projectedIncome - $projectedExpenses,
             ],
             'balances' => [
+                'available' => $availableBalance,
                 'total' => $totalBalance,
                 'primary_currency' => $this->currencyService->getPrimaryCurrency($user),
                 'by_currency' => $accountsByCurrency->map(function ($accounts) use ($user) {

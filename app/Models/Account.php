@@ -24,6 +24,7 @@ class Account extends Model
         'currency',
         'balance',
         'initial_balance',
+        'is_savings',
     ];
 
     /** {@inheritdoc} */
@@ -32,6 +33,7 @@ class Account extends Model
         return [
             'balance' => 'decimal:2',
             'initial_balance' => 'decimal:2',
+            'is_savings' => 'boolean',
         ];
     }
 
@@ -103,6 +105,17 @@ class Account extends Model
     public function scopeOrderByName($query)
     {
         return $query->orderBy('name');
+    }
+
+    /**
+     * Scope a query to exclude savings accounts.
+     *
+     * @param  Builder  $query
+     * @return Builder
+     */
+    public function scopeWhereNotSavings($query)
+    {
+        return $query->where('is_savings', false);
     }
 
     /**

@@ -16,6 +16,7 @@ export interface Account {
     currency: string;
     balance: string;
     initial_balance: string;
+    is_savings: boolean;
     created_at: string;
     updated_at: string;
     deleted_at: string | null;

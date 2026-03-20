@@ -25,7 +25,9 @@ class DashboardController extends Controller
             'overduePayments' => $dashboardData['overduePayments'],
             'categorySpending' => $dashboardData['categorySpending'],
             'paymentSummary' => $dashboardData['paymentSummary'],
+            'availableBalance' => $dashboardData['availableBalance'],
             'totalBalance' => $dashboardData['totalBalance'],
+            'savingsBalance' => $dashboardData['savingsBalance'],
         ]);
     }
 }

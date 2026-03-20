@@ -7,6 +7,7 @@ import {
     CreditCard,
     MoreHorizontal,
     Pencil,
+    PiggyBank,
     Trash2,
     TrendingDown,
     TrendingUp,
@@ -76,16 +77,28 @@ const gradientClass = computed(() => {
             <div class="flex items-center gap-3">
                 <div
                     :class="[
-                        'flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br text-white shadow-lg',
-                        gradientClass,
+                        'flex h-12 w-12 items-center justify-center rounded-xl bg-linear-to-br text-white shadow-lg',
+                        account.is_savings
+                            ? 'from-green-500 to-emerald-600'
+                            : gradientClass,
                     ]"
                 >
-                    <CreditCard class="h-6 w-6" />
+                    <PiggyBank v-if="account.is_savings" class="h-6 w-6" />
+                    <CreditCard v-else class="h-6 w-6" />
                 </div>
                 <div>
-                    <h3 class="font-semibold text-foreground">
-                        {{ account.name }}
-                    </h3>
+                    <div class="flex items-center gap-2">
+                        <h3 class="font-semibold text-foreground">
+                            {{ account.name }}
+                        </h3>
+                        <span
+                            v-if="account.is_savings"
+                            class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-300"
+                        >
+                            <PiggyBank class="h-3 w-3" />
+                            Savings
+                        </span>
+                    </div>
                     <p class="text-sm text-muted-foreground">
                         {{ account.currency }}
                     </p>
@@ -153,7 +166,7 @@ const gradientClass = computed(() => {
         </div>
 
         <div
-            class="absolute -right-12 -bottom-12 h-32 w-32 rounded-full bg-gradient-to-br opacity-10"
+            class="absolute -right-12 -bottom-12 h-32 w-32 rounded-full bg-linear-to-br opacity-10"
             :class="gradientClass"
         />
     </div>
