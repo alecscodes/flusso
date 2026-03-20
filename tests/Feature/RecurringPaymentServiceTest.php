@@ -6,6 +6,7 @@ use App\Models\Category;
 use App\Models\Payment;
 use App\Models\RecurringPayment;
 use App\Models\User;
+use App\Services\CurrencyService;
 use App\Services\RecurringPaymentService;
 
 test('recurring payment service creates recurring payment and generates initial payments', function () {
@@ -229,7 +230,7 @@ test('recurring payment service provides statistics', function () {
     $stats = $service->getStatistics($recurringPayment);
 
     // Test currency conversion to primary currency
-    $currencyService = app(\App\Services\CurrencyService::class);
+    $currencyService = app(CurrencyService::class);
     $primaryCurrency = $currencyService->getPrimaryCurrency($user);
     $expectedAmount = $primaryCurrency === 'EUR' ? 500.0 :
         $currencyService->convert(500.0, 'EUR', $primaryCurrency) ?? 500.0;

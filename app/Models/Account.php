@@ -2,7 +2,10 @@
 
 namespace App\Models;
 
+use App\Enums\TransactionType;
 use App\Services\CurrencyService;
+use Database\Factories\AccountFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,7 +14,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Account extends Model
 {
-    /** @use HasFactory<\Database\Factories\AccountFactory> */
+    /** @use HasFactory<AccountFactory> */
     use HasFactory, SoftDeletes;
 
     /** {@inheritdoc} */
@@ -83,8 +86,8 @@ class Account extends Model
     /**
      * Scope a query to only include accounts for the given user.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder  $query
-     * @return \Illuminate\Database\Eloquent\Builder
+     * @param  Builder  $query
+     * @return Builder
      */
     public function scopeForUser($query, int $userId)
     {
@@ -94,8 +97,8 @@ class Account extends Model
     /**
      * Scope a query to order by name.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder  $query
-     * @return \Illuminate\Database\Eloquent\Builder
+     * @param  Builder  $query
+     * @return Builder
      */
     public function scopeOrderByName($query)
     {
@@ -111,11 +114,11 @@ class Account extends Model
         $currencyService = app(CurrencyService::class);
 
         $incomeTransactions = $this->transactions()
-            ->where('type', \App\Enums\TransactionType::Income)
+            ->where('type', TransactionType::Income)
             ->get();
 
         $expenseTransactions = $this->transactions()
-            ->where('type', \App\Enums\TransactionType::Expense)
+            ->where('type', TransactionType::Expense)
             ->get();
 
         $income = $incomeTransactions->sum(function (Transaction $transaction) use ($currencyService) {

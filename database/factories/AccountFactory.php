@@ -2,10 +2,12 @@
 
 namespace Database\Factories;
 
+use App\Models\Account;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Account>
+ * @extends Factory<Account>
  */
 class AccountFactory extends Factory
 {
@@ -17,7 +19,7 @@ class AccountFactory extends Factory
     public function definition(): array
     {
         return [
-            'user_id' => \App\Models\User::factory(),
+            'user_id' => User::factory(),
             'name' => fake()->words(2, true),
             'currency' => fake()->randomElement(['EUR', 'RON', 'USD', 'GBP']),
             'balance' => fake()->randomFloat(2, 0, 10000),

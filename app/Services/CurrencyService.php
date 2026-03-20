@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\CurrencyExchangeRate;
 use App\Models\User;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -92,7 +93,7 @@ class CurrencyService
                     'rate' => $rate,
                 ]
             );
-        } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
+        } catch (UniqueConstraintViolationException $e) {
             // Handle race condition - another process already inserted this rate
             Log::debug('Currency rate already exists, handling race condition', [
                 'from' => $fromCurrency,

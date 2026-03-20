@@ -3,10 +3,15 @@
 namespace Database\Factories;
 
 use App\Enums\PaymentType;
+use App\Models\Account;
+use App\Models\Category;
+use App\Models\Payment;
+use App\Models\RecurringPayment;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Payment>
+ * @extends Factory<Payment>
  */
 class PaymentFactory extends Factory
 {
@@ -18,10 +23,10 @@ class PaymentFactory extends Factory
     public function definition(): array
     {
         return [
-            'user_id' => \App\Models\User::factory(),
-            'account_id' => \App\Models\Account::factory(),
-            'category_id' => \App\Models\Category::factory(),
-            'recurring_payment_id' => \App\Models\RecurringPayment::factory(),
+            'user_id' => User::factory(),
+            'account_id' => Account::factory(),
+            'category_id' => Category::factory(),
+            'recurring_payment_id' => RecurringPayment::factory(),
             'type' => fake()->randomElement([PaymentType::Income, PaymentType::Expense]),
             'amount' => fake()->randomFloat(2, 10, 500),
             'currency' => fake()->randomElement(['EUR', 'RON', 'USD', 'GBP']),

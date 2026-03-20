@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Settings\BannedIpsController;
+use App\Http\Controllers\Settings\FinanceController;
 use App\Http\Controllers\Settings\PasswordController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\RegistrationController;
@@ -34,8 +35,8 @@ Route::middleware('auth')->group(function () {
     Route::get('settings/banned-ips', [BannedIpsController::class, 'index'])->name('banned-ips.index');
     Route::delete('settings/banned-ips/unban', [BannedIpsController::class, 'destroy'])->name('banned-ips.destroy');
 
-    Route::get('settings/finance', [\App\Http\Controllers\Settings\FinanceController::class, 'edit'])
+    Route::get('settings/finance', [FinanceController::class, 'edit'])
         ->name('settings.finance.edit');
-    Route::patch('settings/finance', [\App\Http\Controllers\Settings\FinanceController::class, 'update'])
+    Route::patch('settings/finance', [FinanceController::class, 'update'])
         ->name('settings.finance.update');
 });

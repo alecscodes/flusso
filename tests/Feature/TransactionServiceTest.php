@@ -220,7 +220,7 @@ test('transaction service throws exception for transfer to same account', functi
         'from_account_id' => $account->id,
         'to_account_id' => $account->id,
         'amount' => 100.00,
-    ]))->toThrow(\InvalidArgumentException::class);
+    ]))->toThrow(InvalidArgumentException::class);
 });
 
 test('transaction service calculates period summary correctly', function () {

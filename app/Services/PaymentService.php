@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\CategoryType;
 use App\Enums\PaymentType;
 use App\Enums\TransactionType;
+use App\Models\Category;
 use App\Models\Payment;
 use App\Models\RecurringPayment;
 use App\Models\Transaction;
@@ -267,7 +268,7 @@ class PaymentService
         $monthlyTotals = [];
 
         foreach ($upcomingPayments as $payment) {
-            $month = \Carbon\Carbon::parse($payment->due_date)->format('F Y');
+            $month = Carbon::parse($payment->due_date)->format('F Y');
 
             if (! isset($monthlyTotals[$month])) {
                 $monthlyTotals[$month] = 0;
@@ -301,7 +302,7 @@ class PaymentService
         }
 
         if (isset($data['category_id'])) {
-            $category = \App\Models\Category::find($data['category_id']);
+            $category = Category::find($data['category_id']);
             if ($category) {
                 return $this->getPaymentTypeFromCategory($category);
             }

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\PaymentType;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -81,8 +82,8 @@ class DashboardService
         $overduePayments = $this->paymentService->getOverduePayments($user);
         $upcomingPayments = $this->paymentService->getUpcomingPayments($user, $endDate);
 
-        $projectedExpensePayments = $upcomingPayments->where('type', \App\Enums\PaymentType::Expense);
-        $projectedIncomePayments = $upcomingPayments->where('type', \App\Enums\PaymentType::Income);
+        $projectedExpensePayments = $upcomingPayments->where('type', PaymentType::Expense);
+        $projectedIncomePayments = $upcomingPayments->where('type', PaymentType::Income);
 
         $projectedExpenses = $this->currencyService->sumInPrimaryCurrency($projectedExpensePayments, 'amount', 'currency', $user);
         $projectedIncome = $this->currencyService->sumInPrimaryCurrency($projectedIncomePayments, 'amount', 'currency', $user);

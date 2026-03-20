@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Enums\IntervalType;
+use Carbon\Carbon;
+use Database\Factories\RecurringPaymentFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,7 +13,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class RecurringPayment extends Model
 {
-    /** @use HasFactory<\Database\Factories\RecurringPaymentFactory> */
+    /** @use HasFactory<RecurringPaymentFactory> */
     use HasFactory, SoftDeletes;
 
     protected static function booted(): void
@@ -126,18 +128,18 @@ class RecurringPayment extends Model
         return false;
     }
 
-    public function getNextDueDate(): ?\Carbon\Carbon
+    public function getNextDueDate(): ?Carbon
     {
         $latestPayment = $this->payments()->latest('due_date')->first();
 
         if ($latestPayment) {
-            return $this->calculateNextDate(\Carbon\Carbon::parse($latestPayment->due_date));
+            return $this->calculateNextDate(Carbon::parse($latestPayment->due_date));
         }
 
-        return \Carbon\Carbon::parse($this->start_date);
+        return Carbon::parse($this->start_date);
     }
 
-    public function calculateNextDate(\Carbon\Carbon $fromDate): \Carbon\Carbon
+    public function calculateNextDate(Carbon $fromDate): Carbon
     {
         $intervalValue = (int) $this->interval_value;
 
