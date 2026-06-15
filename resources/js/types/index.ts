@@ -170,8 +170,4 @@ export type PageProps<
     auth: {
         user: User;
     };
-    flash?: {
-        success?: string;
-        error?: string;
-    };
 };

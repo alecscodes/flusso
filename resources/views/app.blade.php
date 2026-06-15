@@ -30,20 +30,19 @@
             }
         </style>
 
-        <title inertia>{{ config('app.name', 'Flusso') }}</title>
-
         <link rel="icon" href="/images/logo.png" type="image/png">
         <link rel="apple-touch-icon" href="/images/logo.png">
 
         @laravelPWA
 
-        <link rel="preconnect" href="https://fonts.bunny.net">
-        <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600" rel="stylesheet" />
+        @fonts
 
-        @vite(['resources/js/app.ts'])
-        @inertiaHead
+        @vite(['resources/css/app.css', 'resources/js/app.ts', "resources/js/pages/{$page['component']}.vue"])
+        <x-inertia::head>
+            <title>{{ config('app.name', 'Flusso') }}</title>
+        </x-inertia::head>
     </head>
     <body class="font-sans antialiased">
-        @inertia
+        <x-inertia::app />
     </body>
 </html>

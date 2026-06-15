@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
 use App\Services\FinancialPeriodService;
+use App\Support\FlashToast;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -45,7 +46,8 @@ class FinanceController extends Controller
             'reset_date' => $validated['reset_date'] ?? null,
         ]);
 
-        return redirect()->route('settings.finance.edit')
-            ->with('success', 'Finance settings updated successfully.');
+        FlashToast::success('Finance settings updated successfully.');
+
+        return redirect()->route('settings.finance.edit');
     }
 }

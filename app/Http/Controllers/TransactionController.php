@@ -12,6 +12,7 @@ use App\Services\AccountService;
 use App\Services\CategoryService;
 use App\Services\CurrencyService;
 use App\Services\TransactionService;
+use App\Support\FlashToast;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -142,8 +143,9 @@ class TransactionController extends Controller
 
         $this->transactionService->createTransaction($request->user(), $request->validated());
 
-        return redirect()->route('transactions.index')
-            ->with('success', 'Transaction created successfully.');
+        FlashToast::success('Transaction created successfully.');
+
+        return redirect()->route('transactions.index');
     }
 
     public function update(TransactionUpdateRequest $request, Transaction $transaction): RedirectResponse
@@ -152,8 +154,9 @@ class TransactionController extends Controller
 
         $this->transactionService->updateTransaction($transaction, $request->validated());
 
-        return redirect()->route('transactions.index')
-            ->with('success', 'Transaction updated successfully.');
+        FlashToast::success('Transaction updated successfully.');
+
+        return redirect()->route('transactions.index');
     }
 
     public function destroy(Transaction $transaction): RedirectResponse
@@ -162,8 +165,9 @@ class TransactionController extends Controller
 
         $this->transactionService->deleteTransaction($transaction);
 
-        return redirect()->route('transactions.index')
-            ->with('success', 'Transaction deleted successfully.');
+        FlashToast::success('Transaction deleted successfully.');
+
+        return redirect()->route('transactions.index');
     }
 
     public function transfer(TransferRequest $request): RedirectResponse
@@ -173,8 +177,9 @@ class TransactionController extends Controller
         try {
             $this->transactionService->createTransfer($request->user(), $request->validated());
 
-            return redirect()->route('transactions.index')
-                ->with('success', 'Transfer completed successfully.');
+            FlashToast::success('Transfer completed successfully.');
+
+            return redirect()->route('transactions.index');
         } catch (\Exception $e) {
             return redirect()->back()
                 ->withErrors(['error' => $e->getMessage()]);

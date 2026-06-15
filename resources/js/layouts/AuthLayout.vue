@@ -1,20 +1,29 @@
 <script setup lang="ts">
-import { useTheme } from '@/composables';
+import { useAppearance } from '@/composables';
+import { home } from '@/routes';
 import { Link } from '@inertiajs/vue3';
 import { CreditCard, Moon, Sun } from 'lucide-vue-next';
+import { computed } from 'vue';
+import { Toaster } from 'vue-sonner';
 
 defineProps<{
     title?: string;
     description?: string;
 }>();
 
-const { toggleTheme, isDark } = useTheme();
+const { resolvedAppearance, updateAppearance } = useAppearance();
+
+const isDark = computed(() => resolvedAppearance.value === 'dark');
+
+function toggleTheme(): void {
+    updateAppearance(resolvedAppearance.value === 'dark' ? 'light' : 'dark');
+}
 </script>
 
 <template>
     <div class="flex min-h-screen flex-col bg-background">
         <header class="flex items-center justify-between p-6">
-            <Link href="/" class="flex items-center gap-3">
+            <Link :href="home().url" class="flex items-center gap-3">
                 <div
                     class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent"
                 >
@@ -61,5 +70,6 @@ const { toggleTheme, isDark } = useTheme();
                 reserved.
             </p>
         </footer>
+        <Toaster theme="system" position="top-right" />
     </div>
 </template>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui';
 import { GITHUB_REPO_URL } from '@/lib/constants';
+import { dashboard, login, register } from '@/routes';
 import { Head, Link } from '@inertiajs/vue3';
 import { AlertCircle, CreditCard, Github } from 'lucide-vue-next';
 
@@ -23,10 +24,10 @@ withDefaults(
         <div class="w-full max-w-2xl space-y-8">
             <!-- Header Navigation -->
             <nav class="flex items-center justify-end">
-                <Link v-if="$page.props.auth?.user" href="/dashboard">
+                <Link v-if="$page.props.auth?.user" :href="dashboard().url">
                     <Button variant="ghost">Dashboard</Button>
                 </Link>
-                <Link v-else href="/login">
+                <Link v-else :href="login().url">
                     <Button variant="ghost">Sign In</Button>
                 </Link>
             </nav>
@@ -95,18 +96,18 @@ withDefaults(
                     </a>
 
                     <template v-if="!$page.props.auth?.user">
-                        <Link href="/login">
+                        <Link :href="login().url">
                             <Button variant="outline" class="w-full sm:w-auto">
                                 Sign In
                             </Button>
                         </Link>
 
-                        <Link v-if="canRegister" href="/register">
+                        <Link v-if="canRegister" :href="register().url">
                             <Button class="w-full sm:w-auto"> Sign Up </Button>
                         </Link>
                     </template>
 
-                    <Link v-else href="/dashboard">
+                    <Link v-else :href="dashboard().url">
                         <Button variant="outline" class="w-full sm:w-auto">
                             Go to Dashboard
                         </Button>

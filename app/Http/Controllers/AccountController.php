@@ -7,6 +7,7 @@ use App\Http\Requests\AccountUpdateRequest;
 use App\Models\Account;
 use App\Services\AccountService;
 use App\Services\CategoryService;
+use App\Support\FlashToast;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -34,8 +35,9 @@ class AccountController extends Controller
 
         $this->accountService->createAccount($request->user(), $request->validated());
 
-        return redirect()->route('accounts.index')
-            ->with('success', 'Account created successfully.');
+        FlashToast::success('Account created successfully.');
+
+        return redirect()->route('accounts.index');
     }
 
     public function show(Account $account, Request $request): Response
@@ -59,8 +61,9 @@ class AccountController extends Controller
 
         $this->accountService->updateAccount($account, $request->validated());
 
-        return redirect()->route('accounts.index')
-            ->with('success', 'Account updated successfully.');
+        FlashToast::success('Account updated successfully.');
+
+        return redirect()->route('accounts.index');
     }
 
     public function destroy(Account $account): RedirectResponse
@@ -69,7 +72,8 @@ class AccountController extends Controller
 
         $this->accountService->deleteAccount($account);
 
-        return redirect()->route('accounts.index')
-            ->with('success', 'Account deleted successfully.');
+        FlashToast::success('Account deleted successfully.');
+
+        return redirect()->route('accounts.index');
     }
 }

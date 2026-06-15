@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { Avatar, Dropdown, DropdownItem, Separator } from '@/components/ui';
-import { useTheme } from '@/composables';
+import { useAppearance } from '@/composables';
+import { dashboard, logout } from '@/routes';
+import { index as accountsIndex } from '@/routes/accounts';
+import { index as categoriesIndex } from '@/routes/categories';
+import { index as paymentsIndex } from '@/routes/payments';
+import { edit as profileEdit } from '@/routes/profile';
+import { index as recurringPaymentsIndex } from '@/routes/recurring-payments';
+import { index as transactionsIndex } from '@/routes/transactions';
 import type { User } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
 import {
@@ -19,23 +26,34 @@ import {
     X,
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
+import { Toaster } from 'vue-sonner';
 
 const page = usePage();
-const { toggleTheme, isDark } = useTheme();
+const { resolvedAppearance, updateAppearance } = useAppearance();
 const user = computed(() => page.props.auth?.user as User);
 const showMoreMenu = ref(false);
 
+const isDark = computed(() => resolvedAppearance.value === 'dark');
+
+function toggleTheme(): void {
+    updateAppearance(resolvedAppearance.value === 'dark' ? 'light' : 'dark');
+}
+
 const navigation = [
-    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { name: 'Accounts', href: '/accounts', icon: Wallet },
-    { name: 'Transactions', href: '/transactions', icon: ArrowLeftRight },
-    { name: 'Payments', href: '/payments', icon: Receipt },
+    { name: 'Dashboard', href: dashboard.url(), icon: LayoutDashboard },
+    { name: 'Accounts', href: accountsIndex.url(), icon: Wallet },
+    {
+        name: 'Transactions',
+        href: transactionsIndex.url(),
+        icon: ArrowLeftRight,
+    },
+    { name: 'Payments', href: paymentsIndex.url(), icon: Receipt },
 ];
 
 const secondaryNavigation = [
-    { name: 'Planned', href: '/recurring-payments', icon: RefreshCw },
-    { name: 'Categories', href: '/categories', icon: Tag },
-    { name: 'Settings', href: '/settings/profile', icon: Settings },
+    { name: 'Planned', href: recurringPaymentsIndex.url(), icon: RefreshCw },
+    { name: 'Categories', href: categoriesIndex.url(), icon: Tag },
+    { name: 'Settings', href: profileEdit.url(), icon: Settings },
 ];
 
 const bottomNavItems = [
@@ -44,7 +62,7 @@ const bottomNavItems = [
 ];
 
 const isActive = (href: string) =>
-    href === '/dashboard' ? page.url === href : page.url.startsWith(href);
+    href === dashboard.url() ? page.url === href : page.url.startsWith(href);
 </script>
 
 <template>
@@ -109,7 +127,7 @@ const isActive = (href: string) =>
                         </button>
                     </template>
                     <template #default="{ close }">
-                        <Link href="/settings/profile" @click="close">
+                        <Link :href="profileEdit().url" @click="close">
                             <DropdownItem>
                                 <Settings class="h-4 w-4" />
                                 Settings
@@ -122,7 +140,7 @@ const isActive = (href: string) =>
                         </DropdownItem>
                         <Separator class="my-1" />
                         <Link
-                            href="/logout"
+                            :href="logout().url"
                             method="post"
                             as="button"
                             class="w-full"
@@ -238,7 +256,7 @@ const isActive = (href: string) =>
                             </span>
                         </button>
                         <Link
-                            href="/logout"
+                            :href="logout().url"
                             method="post"
                             as="button"
                             class="flex w-full items-center gap-3 rounded-xl p-3 text-destructive hover:bg-destructive/10"
@@ -251,5 +269,6 @@ const isActive = (href: string) =>
                 </div>
             </div>
         </nav>
+        <Toaster theme="system" position="top-right" />
     </div>
 </template>

@@ -1,40 +1,33 @@
 import 'vue-sonner/style.css';
-import '../css/app.css';
 
-import { createInertiaApp, router } from '@inertiajs/vue3';
-import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
-import type { DefineComponent } from 'vue';
-import { createApp, h } from 'vue';
-import { Toaster, toast } from 'vue-sonner';
+import { initializeTheme } from '@/composables/useAppearance';
+import AppLayout from '@/layouts/AppLayout.vue';
+import AuthLayout from '@/layouts/AuthLayout.vue';
+import SettingsLayout from '@/layouts/SettingsLayout.vue';
+import { initializeFlashToast } from '@/lib/flashToast';
+import { createInertiaApp } from '@inertiajs/vue3';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Flusso';
 
-router.on('success', (event) => {
-    const flash = event.detail.page?.props?.flash as
-        | { success?: string; error?: string }
-        | undefined;
-    if (flash?.success) toast.success(flash.success);
-    if (flash?.error) toast.error(flash.error);
-});
-
 createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),
-    resolve: (name) =>
-        resolvePageComponent(
-            `./pages/${name}.vue`,
-            import.meta.glob<DefineComponent>('./pages/**/*.vue'),
-        ),
-    setup({ el, App, props, plugin }) {
-        createApp({
-            render: () => [
-                h(App, props),
-                h(Toaster, { theme: 'system', position: 'top-right' }),
-            ],
-        })
-            .use(plugin)
-            .mount(el);
+    pages: './pages',
+    layout: (name) => {
+        switch (true) {
+            case name === 'Welcome':
+                return null;
+            case name.startsWith('Auth/'):
+                return AuthLayout;
+            case name.startsWith('Settings/'):
+                return SettingsLayout;
+            default:
+                return AppLayout;
+        }
     },
     progress: {
         color: '#7C3AED',
     },
 });
+
+initializeTheme();
+initializeFlashToast();

@@ -4,6 +4,7 @@ import { computed, useAttrs } from 'vue';
 
 interface Props {
     modelValue?: string | number;
+    defaultValue?: string | number;
     type?: string;
     error?: string;
     class?: string;
@@ -43,7 +44,7 @@ function handleInput(event: Event) {
     <div class="w-full">
         <input
             :type="type"
-            :value="modelValue"
+            :value="modelValue ?? defaultValue"
             :class="inputClasses"
             v-bind="attrs"
             @input="handleInput"

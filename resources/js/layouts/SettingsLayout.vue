@@ -1,5 +1,12 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
+import { edit as appearanceEdit } from '@/routes/appearance';
+import { index as bannedIpsIndex } from '@/routes/banned-ips';
+import { edit as profileEdit } from '@/routes/profile';
+import { edit as registrationEdit } from '@/routes/registration';
+import { edit as financeEdit } from '@/routes/settings/finance';
+import { show as twoFactorShow } from '@/routes/two-factor';
+import { edit as passwordEdit } from '@/routes/user-password';
 import { Link, usePage } from '@inertiajs/vue3';
 import {
     KeyRound,
@@ -14,13 +21,13 @@ import {
 const page = usePage();
 
 const navigation = [
-    { name: 'Profile', href: '/settings/profile', icon: User },
-    { name: 'Password', href: '/settings/password', icon: KeyRound },
-    { name: 'Appearance', href: '/settings/appearance', icon: Palette },
-    { name: 'Two-Factor Auth', href: '/settings/two-factor', icon: Shield },
-    { name: 'Registration', href: '/settings/registration', icon: UserPlus },
-    { name: 'Banned IPs', href: '/settings/banned-ips', icon: ShieldOff },
-    { name: 'Finance', href: '/settings/finance', icon: Wallet },
+    { name: 'Profile', href: profileEdit.url(), icon: User },
+    { name: 'Password', href: passwordEdit.url(), icon: KeyRound },
+    { name: 'Appearance', href: appearanceEdit.url(), icon: Palette },
+    { name: 'Two-Factor Auth', href: twoFactorShow.url(), icon: Shield },
+    { name: 'Registration', href: registrationEdit.url(), icon: UserPlus },
+    { name: 'Banned IPs', href: bannedIpsIndex.url(), icon: ShieldOff },
+    { name: 'Finance', href: financeEdit.url(), icon: Wallet },
 ];
 
 const isActive = (href: string) => page.url === href;

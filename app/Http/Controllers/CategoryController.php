@@ -6,6 +6,7 @@ use App\Http\Requests\CategoryStoreRequest;
 use App\Http\Requests\CategoryUpdateRequest;
 use App\Models\Category;
 use App\Services\CategoryService;
+use App\Support\FlashToast;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -32,8 +33,9 @@ class CategoryController extends Controller
 
         $this->categoryService->createCategory($request->user(), $request->validated());
 
-        return redirect()->route('categories.index')
-            ->with('success', 'Category created successfully.');
+        FlashToast::success('Category created successfully.');
+
+        return redirect()->route('categories.index');
     }
 
     public function show(Category $category): Response
@@ -51,8 +53,9 @@ class CategoryController extends Controller
 
         $this->categoryService->updateCategory($category, $request->validated());
 
-        return redirect()->route('categories.index')
-            ->with('success', 'Category updated successfully.');
+        FlashToast::success('Category updated successfully.');
+
+        return redirect()->route('categories.index');
     }
 
     public function destroy(Category $category): RedirectResponse
@@ -61,7 +64,8 @@ class CategoryController extends Controller
 
         $this->categoryService->deleteCategory($category);
 
-        return redirect()->route('categories.index')
-            ->with('success', 'Category deleted successfully.');
+        FlashToast::success('Category deleted successfully.');
+
+        return redirect()->route('categories.index');
     }
 }

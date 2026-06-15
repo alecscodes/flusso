@@ -2,6 +2,7 @@
 import { AmountDisplay, CategoryBadge } from '@/components/data-display';
 import { Button } from '@/components/ui';
 import { useDate } from '@/composables';
+import { download as downloadTransactionFile } from '@/routes/transactions/files';
 import type { Transaction } from '@/types';
 import {
     ArrowDownLeft,
@@ -77,7 +78,10 @@ const formatFileSize = (bytes: number): string => {
 
 const downloadFile = (file: any) => {
     const link = document.createElement('a');
-    link.href = `/transactions/${props.transaction.id}/files/${file.id}/download`;
+    link.href = downloadTransactionFile.url({
+        transaction: props.transaction.id,
+        file: file.id,
+    });
     link.target = '_blank';
     link.click();
 };

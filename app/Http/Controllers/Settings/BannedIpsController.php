@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
 use App\Services\IpBanService;
+use App\Support\FlashToast;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -38,18 +39,21 @@ class BannedIpsController extends Controller
         $ip = request()->input('ip');
 
         if (! $ip || filter_var($ip, FILTER_VALIDATE_IP) === false) {
-            return redirect()->route('banned-ips.index')
-                ->with('error', 'Invalid IP address provided.');
+            FlashToast::error('Invalid IP address provided.');
+
+            return redirect()->route('banned-ips.index');
         }
 
         $unbanned = $ipBanService->unban($ip);
 
         if ($unbanned) {
-            return redirect()->route('banned-ips.index')
-                ->with('success', "IP address {$ip} has been unbanned.");
+            FlashToast::success("IP address {$ip} has been unbanned.");
+
+            return redirect()->route('banned-ips.index');
         }
 
-        return redirect()->route('banned-ips.index')
-            ->with('error', "IP address {$ip} was not found in the banned list.");
+        FlashToast::error("IP address {$ip} was not found in the banned list.");
+
+        return redirect()->route('banned-ips.index');
     }
 }

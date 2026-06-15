@@ -8,6 +8,7 @@ use App\Models\RecurringPayment;
 use App\Services\AccountService;
 use App\Services\CategoryService;
 use App\Services\RecurringPaymentService;
+use App\Support\FlashToast;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -40,8 +41,9 @@ class RecurringPaymentController extends Controller
 
         $this->recurringPaymentService->createRecurringPayment($request->user(), $request->validated());
 
-        return redirect()->route('recurring-payments.index')
-            ->with('success', 'Planned payment created successfully.');
+        FlashToast::success('Planned payment created successfully.');
+
+        return redirect()->route('recurring-payments.index');
     }
 
     public function show(RecurringPayment $recurringPayment): Response
@@ -60,8 +62,9 @@ class RecurringPaymentController extends Controller
 
         $this->recurringPaymentService->updateRecurringPayment($recurringPayment, $request->validated());
 
-        return redirect()->route('recurring-payments.index')
-            ->with('success', 'Planned payment updated successfully.');
+        FlashToast::success('Planned payment updated successfully.');
+
+        return redirect()->route('recurring-payments.index');
     }
 
     public function destroy(RecurringPayment $recurringPayment): RedirectResponse
@@ -70,7 +73,8 @@ class RecurringPaymentController extends Controller
 
         $this->recurringPaymentService->deleteRecurringPayment($recurringPayment);
 
-        return redirect()->route('recurring-payments.index')
-            ->with('success', 'Planned payment deleted successfully.');
+        FlashToast::success('Planned payment deleted successfully.');
+
+        return redirect()->route('recurring-payments.index');
     }
 }

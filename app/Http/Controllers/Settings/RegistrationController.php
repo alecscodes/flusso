@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\RegistrationUpdateRequest;
 use App\Models\Setting;
+use App\Support\FlashToast;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -31,6 +32,8 @@ class RegistrationController extends Controller
     {
         Setting::set('registration_enabled', $request->boolean('registration_enabled') ? '1' : '0');
 
-        return redirect()->route('registration.edit')->with('success', 'Registration settings updated successfully.');
+        FlashToast::success('Registration settings updated successfully.');
+
+        return redirect()->route('registration.edit');
     }
 }

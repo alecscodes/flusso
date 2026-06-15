@@ -7,6 +7,7 @@ use App\Models\Payment;
 use App\Services\AccountService;
 use App\Services\CurrencyService;
 use App\Services\PaymentService;
+use App\Support\FlashToast;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -72,8 +73,9 @@ class PaymentController extends Controller
 
         $this->paymentService->createManualPayment($request->user(), $request->validated());
 
-        return redirect()->route('payments.index')
-            ->with('success', 'Payment created successfully.');
+        FlashToast::success('Payment created successfully.');
+
+        return redirect()->route('payments.index');
     }
 
     public function markPaid(Request $request, Payment $payment): RedirectResponse
@@ -83,8 +85,9 @@ class PaymentController extends Controller
         try {
             $this->paymentService->markAsPaid($payment, now());
 
-            return redirect()->back()
-                ->with('success', 'Payment marked as paid.');
+            FlashToast::success('Payment marked as paid.');
+
+            return redirect()->back();
         } catch (\Exception $e) {
             return redirect()->back()
                 ->withErrors(['error' => $e->getMessage()]);
@@ -99,8 +102,9 @@ class PaymentController extends Controller
             $deleteTransaction = $request->boolean('delete_transaction', true);
             $this->paymentService->markAsUnpaid($payment, $deleteTransaction);
 
-            return redirect()->back()
-                ->with('success', 'Payment marked as unpaid.');
+            FlashToast::success('Payment marked as unpaid.');
+
+            return redirect()->back();
         } catch (\Exception $e) {
             return redirect()->back()
                 ->withErrors(['error' => $e->getMessage()]);
