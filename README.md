@@ -36,12 +36,15 @@ cd flusso
 
 The `deploy.sh` script will:
 
-- Set up `.env` and prompt for `APP_URL` (and `APP_PORT` when using Docker)
-- Ask you to choose between **Docker** or **Standard** deployment (first time only)
-- Remember your choice for future runs (stored in `.deploy-mode`)
-- Reset the repository to match the remote exactly, then deploy or update
+- Create `.env` from `.env.example` if missing
+- Start Docker containers (when Docker is available) or deploy directly on the host
+- Run `php artisan app:deploy` (git sync, dependencies, migrations, optimization)
 
-Use the same command for both initial deploy and subsequent updates.
+**Docker:** one shared image, dependencies in Docker volumes.
+
+**Standard (cPanel/VPS):** same deploy command on the host, plus cron for scheduler and queue.
+
+To update an existing installation, run `./deploy.sh` or `php artisan app:deploy`.
 
 ## ✨ Features
 
@@ -53,7 +56,7 @@ Use the same command for both initial deploy and subsequent updates.
 - 🔐 **Two-factor authentication** for enhanced security
 - 🌙 **Dark mode** for comfortable use
 - 📱 **Mobile-first responsive design**
-- 🔄 **Automatic updates** – checks for updates every minute via scheduler
+- 🔄 **Automatic updates** - checks every five minutes via scheduler; run `./deploy.sh` for manual updates
 - 🚫 **Bot blocking** – blocks crawlers and adds noindex headers
 - 🛡️ **IP banning** – automatic ban on failed logins and suspicious paths
 
@@ -91,18 +94,12 @@ You can also unban from **Settings → Banned IPs** in the dashboard.
 
 ### 🔄 Automatic Updates
 
-Flusso checks for and applies updates every minute via the Laravel scheduler:
+Flusso checks for and applies updates every five minutes via the Laravel scheduler:
 
-- **Autonomous updates**: The application checks for new commits from the Git repository every minute
-- **Smart skipping**: Updates are skipped if no new commits are available
-- **Docker support**: In Docker, updates reset the repo and run deployment steps inside the container
-- **Update process**: Pulls changes, installs dependencies, builds assets, runs migrations, and optimizes cache
-
-You can also manually trigger an update:
-
-```bash
-php artisan git:update
-```
+- **Lightweight checks**: uses `git ls-remote` (no `git fetch` on every check)
+- **Smart skipping**: updates are skipped when the local commit matches remote
+- **Auto-updates**: `app:deploy --if-outdated` runs every five minutes via the scheduler
+- **Manual update**: run `./deploy.sh` or `php artisan app:deploy`
 
 ---
 
@@ -110,7 +107,8 @@ php artisan git:update
 
 | Command | Description |
 |---------|-------------|
-| `php artisan git:update` | Manually trigger application update from Git repository (runs automatically every minute) |
+| `php artisan app:deploy` | Deploy the application (git sync, dependencies, migrations, optimization) |
+| `php artisan app:deploy --if-outdated` | Deploy only when remote has new commits (runs automatically every five minutes) |
 | `php artisan ip:unban <ip>` | Unban a specific IP address |
 | `php artisan ip:unban --all` | Unban all banned IP addresses |
 
