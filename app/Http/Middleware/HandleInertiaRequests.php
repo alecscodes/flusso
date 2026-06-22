@@ -42,6 +42,7 @@ class HandleInertiaRequests extends Middleware
             ...parent::share($request),
             'name' => config('app.name'),
             'quote' => ['message' => trim($message), 'author' => trim($author)],
+            'commit' => ($commit = config('app.commit')) ? substr($commit, 0, 7) : null,
             'auth' => [
                 'user' => $request->user(),
             ],
