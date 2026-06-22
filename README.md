@@ -36,15 +36,12 @@ cd flusso
 
 The `deploy.sh` script will:
 
+- Pull latest code from `origin/main`
 - Create `.env` from `.env.example` if missing
-- Start Docker containers (when Docker is available) or deploy directly on the host
-- Run `php artisan app:deploy` (git sync, dependencies, migrations, optimization)
+- Start Docker containers (when Docker is available) or deploy directly on the host with cron
+- Run migrations and optimization
 
-**Docker:** one shared image, dependencies in Docker volumes.
-
-**Standard (cPanel/VPS):** same deploy command on the host, plus cron for scheduler and queue.
-
-To update an existing installation, run `./deploy.sh` or `php artisan app:deploy`.
+To update an existing installation, run `./deploy.sh`. Auto-updates run every five minutes via cron (`./deploy.sh --if-outdated`).
 
 ## ✨ Features
 
@@ -56,7 +53,7 @@ To update an existing installation, run `./deploy.sh` or `php artisan app:deploy
 - 🔐 **Two-factor authentication** for enhanced security
 - 🌙 **Dark mode** for comfortable use
 - 📱 **Mobile-first responsive design**
-- 🔄 **Automatic updates** - checks every five minutes via scheduler; run `./deploy.sh` for manual updates
+- 🔄 **Automatic updates** - `./deploy.sh --if-outdated` runs every five minutes via cron
 - 🚫 **Bot blocking** – blocks crawlers and adds noindex headers
 - 🛡️ **IP banning** – automatic ban on failed logins and suspicious paths
 
@@ -94,12 +91,12 @@ You can also unban from **Settings → Banned IPs** in the dashboard.
 
 ### 🔄 Automatic Updates
 
-Flusso checks for and applies updates every five minutes via the Laravel scheduler:
+Flusso checks for and applies updates every five minutes via cron:
 
-- **Lightweight checks**: uses `git ls-remote` (no `git fetch` on every check)
+- **Lightweight checks**: `git fetch` only when the deploy cron runs
 - **Smart skipping**: updates are skipped when the local commit matches remote
-- **Auto-updates**: `app:deploy --if-outdated` runs every five minutes via the scheduler
-- **Manual update**: run `./deploy.sh` or `php artisan app:deploy`
+- **Auto-updates**: `./deploy.sh --if-outdated` runs every five minutes via cron
+- **Manual update**: run `./deploy.sh`
 
 ---
 
@@ -107,8 +104,6 @@ Flusso checks for and applies updates every five minutes via the Laravel schedul
 
 | Command | Description |
 |---------|-------------|
-| `php artisan app:deploy` | Deploy the application (git sync, dependencies, migrations, optimization) |
-| `php artisan app:deploy --if-outdated` | Deploy only when remote has new commits (runs automatically every five minutes) |
 | `php artisan ip:unban <ip>` | Unban a specific IP address |
 | `php artisan ip:unban --all` | Unban all banned IP addresses |
 

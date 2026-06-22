@@ -2,12 +2,15 @@
 .gitignore
 node_modules
 vendor
+database/*.sqlite*
 
-database
+storage/logs/*
+storage/pail/*
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
 
-storage
-
-bootstrap/cache/*.php
+bootstrap/cache
 !bootstrap/cache/.gitignore
 
 public/build
