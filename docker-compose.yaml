@@ -7,8 +7,6 @@ x-app: &app
     DB_DATABASE: /app/storage/app/database.sqlite
   volumes:
     - storage:/app/storage/app
-  healthcheck:
-    disable: true
 
 services:
   app:
@@ -22,6 +20,9 @@ services:
   scheduler:
     <<: *app
     command: php artisan schedule:work
+    healthcheck:
+      test: [CMD, pgrep, -f, schedule:work]
+      interval: 10s
 
 volumes:
   storage:
