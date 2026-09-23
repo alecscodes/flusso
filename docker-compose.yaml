@@ -1,34 +1,27 @@
 x-app: &app
-  build: { context: ., target: app }
-  restart: unless-stopped
-  env_file: .env
+  build: .
+  restart: always
   init: true
-  networks: [app]
+  env_file: .env
+  environment:
+    DB_DATABASE: /app/storage/app/database.sqlite
   volumes:
-    - ./database/database.sqlite:/var/www/database/database.sqlite
+    - storage:/app/storage/app
+  healthcheck:
+    disable: true
 
 services:
-  web:
+  app:
     <<: *app
-    ports: ['${APP_PORT:-80}:80']
+    ports:
+      - ${APP_PORT:-80}:80
     healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1/up']
+      test: curl -fs http://localhost/up
       interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
 
   scheduler:
     <<: *app
-    command: [php, artisan, schedule:work, --no-interaction]
-    depends_on:
-      web: { condition: service_healthy }
+    command: php artisan schedule:work
 
-  queue:
-    <<: *app
-    command: [php, artisan, queue:work, --sleep=3, --tries=3, --timeout=3600, --no-interaction]
-    depends_on:
-      web: { condition: service_healthy }
-
-networks:
-  app:
+volumes:
+  storage:

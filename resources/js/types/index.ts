@@ -167,7 +167,6 @@ export interface CategorySpending {
 export type PageProps<
     T extends Record<string, unknown> = Record<string, unknown>,
 > = T & {
-    commit: string | null;
     auth: {
         user: User;
     };

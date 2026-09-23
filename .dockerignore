@@ -4,6 +4,7 @@ node_modules
 vendor
 database/*.sqlite*
 
+storage/app/*
 storage/logs/*
 storage/pail/*
 storage/framework/cache/*

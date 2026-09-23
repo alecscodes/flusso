@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import AppFooter from '@/components/AppFooter.vue';
 import { Avatar, Dropdown, DropdownItem, Separator } from '@/components/ui';
 import { useAppearance } from '@/composables';
 import { dashboard, logout } from '@/routes';
@@ -162,7 +161,6 @@ const isActive = (href: string) =>
             <div class="flex-1 p-4 pb-20 lg:p-8 lg:pb-8">
                 <slot />
             </div>
-            <AppFooter />
         </main>
 
         <!-- Mobile Bottom Navigation -->
