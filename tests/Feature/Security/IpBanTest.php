@@ -229,6 +229,19 @@ test('artisan command unban all IPs', function () {
     expect(DB::table('banned_ips')->count())->toBe(0);
 });
 
+test('artisan command unbans only expired IPs', function () {
+    DB::table('banned_ips')->insert([
+        ['ip' => '203.0.113.1', 'reason' => 'Test', 'created_at' => now()->subDays(91), 'updated_at' => now()],
+        ['ip' => '203.0.113.2', 'reason' => 'Test', 'created_at' => now()->subDays(89), 'updated_at' => now()],
+    ]);
+
+    $this->artisan('ip:unban', ['--expired' => true])
+        ->expectsOutput('Unbanned 1 expired IP address(es).')
+        ->assertSuccessful();
+
+    expect(DB::table('banned_ips')->pluck('ip')->all())->toBe(['203.0.113.2']);
+});
+
 test('artisan command validates IP address', function () {
     $this->artisan('ip:unban', ['ip' => 'invalid-ip'])
         ->expectsOutput('Invalid IP address: invalid-ip')

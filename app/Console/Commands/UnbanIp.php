@@ -12,7 +12,7 @@ class UnbanIp extends Command
      *
      * @var string
      */
-    protected $signature = 'ip:unban {ip? : The IP address to unban} {--all : Unban all IPs}';
+    protected $signature = 'ip:unban {ip? : The IP address to unban} {--all : Unban all IPs} {--expired : Unban IPs banned more than 90 days ago}';
 
     /**
      * The console command description.
@@ -30,6 +30,14 @@ class UnbanIp extends Command
             $count = $ipBanService->unbanAll();
 
             $this->info("Unbanned {$count} IP address(es).");
+
+            return Command::SUCCESS;
+        }
+
+        if ($this->option('expired')) {
+            $count = $ipBanService->unbanExpired();
+
+            $this->info("Unbanned {$count} expired IP address(es).");
 
             return Command::SUCCESS;
         }

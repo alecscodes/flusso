@@ -127,6 +127,8 @@ Flusso automatically bans IPs for suspicious activity:
 - Accessing non-existent routes (e.g. `/wp-admin`)
 - Automatically detects and bans related IPs (client, forwarded, proxy, server)
 
+Bans expire after 90 days (`ip:unban --expired` runs daily).
+
 **Unban commands:**
 
 ```bash
@@ -147,6 +149,7 @@ You can also unban from **Settings → Banned IPs** in the dashboard.
 |---------|-------------|
 | `php artisan ip:unban <ip>` | Unban a specific IP address |
 | `php artisan ip:unban --all` | Unban all banned IP addresses |
+| `php artisan ip:unban --expired` | Unban IPs banned more than 90 days ago |
 
 ---
 
