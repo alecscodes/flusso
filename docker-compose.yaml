@@ -2,6 +2,7 @@ x-app: &app
   build: .
   restart: always
   init: true
+  mem_limit: ${APP_MEMORY_LIMIT:-0}
   env_file: .env
   environment:
     DB_DATABASE: /app/storage/app/database.sqlite

@@ -40,7 +40,7 @@ docker compose up -d --wait
 docker compose exec app php artisan optimize
 ```
 
-The app runs on port 80. To use another port, set `APP_PORT` in `.env`.
+The app runs on port 80. To use another port, set `APP_PORT` in `.env`. To cap memory per container, set `APP_MEMORY_LIMIT` (e.g. `1g`).
 
 **Update**
 
