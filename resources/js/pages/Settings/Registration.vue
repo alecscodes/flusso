@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Button, Checkbox, Label } from '@/components/ui';
-import { edit } from '@/routes/registration';
+import { edit } from '@/routes/settings/registration';
 import { Form, Head } from '@inertiajs/vue3';
 import { ref, watch } from 'vue';
 

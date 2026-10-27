@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui';
-import { destroy as revokeRoute } from '@/routes/connected-apps';
+import { destroy as revokeRoute } from '@/routes/settings/connected-apps';
 import { Head, router } from '@inertiajs/vue3';
 import { Plug, Unplug } from '@lucide/vue';
 
@@ -66,10 +66,10 @@ function formatDate(dateString: string): string {
                         <span class="truncate">{{ app.name }}</span>
                     </span>
                     <p class="text-sm text-muted-foreground">
-                        Connected {{ formatDate(app.connected_at) }} · last used
-                        {{ formatDate(app.last_used_at) }}
+                        Connected {{ formatDate(app.connected_at) }} · last
+                        authorized {{ formatDate(app.last_used_at) }}
                         <template v-if="app.expires_at">
-                            · expires {{ formatDate(app.expires_at) }}
+                            · access ends {{ formatDate(app.expires_at) }}
                         </template>
                     </p>
                 </div>

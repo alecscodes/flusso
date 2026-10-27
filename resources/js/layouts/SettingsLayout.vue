@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
 import { edit as appearanceEdit } from '@/routes/appearance';
-import { index as bannedIpsIndex } from '@/routes/banned-ips';
-import { index as connectedAppsIndex } from '@/routes/connected-apps';
+import { index as bannedIpsIndex } from '@/routes/settings/banned-ips';
+import { index as connectedAppsIndex } from '@/routes/settings/connected-apps';
 import { edit as profileEdit } from '@/routes/profile';
-import { edit as registrationEdit } from '@/routes/registration';
+import { edit as registrationEdit } from '@/routes/settings/registration';
 import { edit as financeEdit } from '@/routes/settings/finance';
 import { show as twoFactorShow } from '@/routes/two-factor';
 import { edit as passwordEdit } from '@/routes/user-password';
@@ -68,7 +68,7 @@ watch(() => page.url, scrollActiveTabIntoView);
             </div>
 
             <div class="flex flex-col gap-8 lg:flex-row">
-                <nav class="w-full shrink-0 lg:w-56">
+                <nav aria-label="Settings" class="w-full shrink-0 lg:w-56">
                     <div
                         ref="tabBar"
                         class="relative flex [scrollbar-width:none] gap-1 overflow-x-auto lg:flex-col lg:overflow-visible [&::-webkit-scrollbar]:hidden"

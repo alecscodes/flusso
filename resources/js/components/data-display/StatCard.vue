@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { cn } from '@/lib/utils';
-import { computed } from 'vue';
+import { TrendingDown, TrendingUp } from '@lucide/vue';
+import { computed, type Component } from 'vue';
 
 interface Props {
     title: string;
@@ -8,7 +9,9 @@ interface Props {
     subtitle?: string;
     trend?: 'up' | 'down' | 'neutral';
     trendValue?: string;
-    icon?: any;
+    icon?: Component;
+    /** Overrides the default primary tint of the icon. */
+    iconClass?: string;
     class?: string;
 }
 
@@ -30,7 +33,7 @@ const trendBgColors = {
 
 const cardClasses = computed(() =>
     cn(
-        'relative min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-4 sm:p-6',
+        '@container relative min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-4 sm:p-6',
         'transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:shadow-primary/5',
         props.class,
     ),
@@ -41,11 +44,14 @@ const cardClasses = computed(() =>
     <div :class="cardClasses">
         <div class="flex items-start justify-between gap-3">
             <div class="min-w-0 space-y-1">
-                <p class="text-sm font-medium text-muted-foreground">
+                <p
+                    class="text-xs font-medium text-muted-foreground @[10rem]:text-sm"
+                >
                     {{ title }}
                 </p>
+                <!-- Money is never cut off: the size follows the card's width and, at worst, the value wraps. -->
                 <p
-                    class="truncate text-2xl font-bold tracking-tight text-foreground tabular-nums sm:text-3xl xl:text-2xl 2xl:text-3xl"
+                    class="text-base font-bold tracking-tight break-words text-foreground tabular-nums @[10rem]:text-lg @[14rem]:text-xl @[20rem]:text-2xl @[24rem]:text-3xl"
                 >
                     {{ value }}
                 </p>
@@ -55,9 +61,14 @@ const cardClasses = computed(() =>
             </div>
             <div
                 v-if="icon"
-                class="shrink-0 rounded-xl bg-primary/10 p-2.5 sm:p-3"
+                :class="
+                    cn(
+                        'hidden shrink-0 rounded-xl bg-primary/10 p-2.5 text-primary sm:p-3 @[14rem]:block',
+                        iconClass,
+                    )
+                "
             >
-                <component :is="icon" class="h-6 w-6 text-primary" />
+                <component :is="icon" class="h-6 w-6" />
             </div>
         </div>
         <div v-if="trendValue" class="mt-4 flex items-center gap-2">
@@ -68,34 +79,11 @@ const cardClasses = computed(() =>
                     trendColors[trend],
                 ]"
             >
-                <svg
-                    v-if="trend === 'up'"
-                    class="mr-1 h-3 w-3"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                >
-                    <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M7 17l9.2-9.2M17 17V7H7"
-                    />
-                </svg>
-                <svg
+                <TrendingUp v-if="trend === 'up'" class="mr-1 h-3 w-3" />
+                <TrendingDown
                     v-else-if="trend === 'down'"
                     class="mr-1 h-3 w-3"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                >
-                    <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M17 7l-9.2 9.2M7 7v10h10"
-                    />
-                </svg>
+                />
                 {{ trendValue }}
             </span>
             <span class="text-xs text-muted-foreground">vs last period</span>

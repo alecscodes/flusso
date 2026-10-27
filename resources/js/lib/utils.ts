@@ -5,6 +5,37 @@ export function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
 }
 
+/** Touch devices: focusing a text field there raises a keyboard that covers half the screen. */
+export function isCoarsePointer(): boolean {
+    return window.matchMedia('(pointer: coarse)').matches;
+}
+
+let scrollLocks = 0;
+
+/**
+ * Stops the page behind a dialog from scrolling until the returned function is
+ * called. Locks stack, so the page scrolls again only after the last one is released.
+ */
+export function lockPageScroll(): () => void {
+    let released = false;
+
+    if (scrollLocks++ === 0) {
+        document.body.style.overflow = 'hidden';
+    }
+
+    return () => {
+        if (released) {
+            return;
+        }
+
+        released = true;
+
+        if (--scrollLocks === 0) {
+            document.body.style.overflow = '';
+        }
+    };
+}
+
 export function getInitials(name: string): string {
     return name
         .split(' ')

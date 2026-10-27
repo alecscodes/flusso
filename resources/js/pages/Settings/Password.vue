@@ -2,10 +2,6 @@
 import PasswordController from '@/actions/App/Http/Controllers/Settings/PasswordController';
 import { Button, Input, Label } from '@/components/ui';
 import { Form, Head } from '@inertiajs/vue3';
-
-defineProps<{
-    passwordRules: string;
-}>();
 </script>
 
 <template>
@@ -53,7 +49,7 @@ defineProps<{
                     name="password"
                     type="password"
                     autocomplete="new-password"
-                    :passwordrules="passwordRules"
+                    :passwordrules="$page.props.passwordRules"
                     :error="errors.password"
                     required
                 />
@@ -68,7 +64,7 @@ defineProps<{
                     name="password_confirmation"
                     type="password"
                     autocomplete="new-password"
-                    :passwordrules="passwordRules"
+                    :passwordrules="$page.props.passwordRules"
                     :error="errors.password_confirmation"
                     required
                 />

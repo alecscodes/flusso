@@ -6,7 +6,8 @@ declare module '@inertiajs/core' {
             name: string;
             auth: { user: User | null };
             sidebarOpen: boolean;
-            [key: string]: unknown;
+            /** The HTML `passwordrules` attribute for password inputs. */
+            passwordRules: string;
         };
     }
 }

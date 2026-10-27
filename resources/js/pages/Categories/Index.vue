@@ -10,6 +10,7 @@ import {
     EmptyState,
     Modal,
 } from '@/components/ui';
+import { useLastValue } from '@/composables';
 import {
     store as categoryStore,
     update as categoryUpdate,
@@ -29,6 +30,8 @@ const props = defineProps<Props>();
 const showCreateModal = ref(false);
 const showEditModal = ref(false);
 const editingCategory = ref<Category | null>(null);
+// A closing dialog keeps its content until it has faded out.
+const lastEditingCategory = useLastValue(editingCategory);
 const createType = ref<'income' | 'expense'>('expense');
 
 const incomeCategories = computed(() =>
@@ -198,37 +201,38 @@ function deleteCategory(category: Category) {
                 </CardContent>
             </Card>
         </div>
+
+        <Modal
+            :open="showCreateModal"
+            title="Create Category"
+            :description="`Add a new ${createType} category`"
+            @close="showCreateModal = false"
+        >
+            <CategoryForm
+                :type="createType"
+                :action="categoryStore.url()"
+                method="post"
+                @success="showCreateModal = false"
+                @cancel="showCreateModal = false"
+            />
+        </Modal>
+
+        <Modal
+            :open="showEditModal"
+            title="Edit Category"
+            description="Update category details"
+            @close="closeEditModal"
+        >
+            <CategoryForm
+                v-if="lastEditingCategory"
+                :key="lastEditingCategory.id"
+                :category="lastEditingCategory"
+                :type="lastEditingCategory.type"
+                :action="categoryUpdate.url(lastEditingCategory)"
+                method="patch"
+                @success="closeEditModal"
+                @cancel="closeEditModal"
+            />
+        </Modal>
     </div>
-
-    <Modal
-        :open="showCreateModal"
-        title="Create Category"
-        :description="`Add a new ${createType} category`"
-        @close="showCreateModal = false"
-    >
-        <CategoryForm
-            :type="createType"
-            :action="categoryStore.url()"
-            method="post"
-            @success="showCreateModal = false"
-            @cancel="showCreateModal = false"
-        />
-    </Modal>
-
-    <Modal
-        :open="showEditModal"
-        title="Edit Category"
-        description="Update category details"
-        @close="closeEditModal"
-    >
-        <CategoryForm
-            v-if="editingCategory"
-            :category="editingCategory"
-            :type="editingCategory.type"
-            :action="categoryUpdate.url(editingCategory)"
-            method="patch"
-            @success="closeEditModal"
-            @cancel="closeEditModal"
-        />
-    </Modal>
 </template>

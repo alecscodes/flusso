@@ -8,7 +8,12 @@ import {
     SearchableSelect,
     Textarea,
 } from '@/components/ui';
-import { paymentName, useDate, usePaymentActions } from '@/composables';
+import {
+    paymentName,
+    useDate,
+    useLastValue,
+    usePaymentActions,
+} from '@/composables';
 import { markPaid, update } from '@/routes/payments';
 import type { Account } from '@/types';
 import { useForm } from '@inertiajs/vue3';
@@ -22,6 +27,10 @@ import { computed, useId, watch } from 'vue';
 const props = defineProps<{ accounts: Account[] }>();
 
 const { paying, editing } = usePaymentActions();
+
+// A closing dialog keeps its content until it has faded out.
+const lastPaying = useLastValue(paying);
+const lastEditing = useLastValue(editing);
 const { toInputFormat } = useDate();
 const payFormId = useId();
 const editFormId = useId();
@@ -88,16 +97,16 @@ function save() {
 </script>
 
 <template>
-    <div>
+    <div class="hidden">
         <Modal
             :open="!!paying"
             title="Mark as paid"
-            :description="paying ? paymentName(paying) : undefined"
+            :description="lastPaying ? paymentName(lastPaying) : undefined"
             size="sm"
             @close="paying = null"
         >
             <form
-                v-if="paying"
+                v-if="lastPaying"
                 :id="payFormId"
                 class="space-y-4"
                 @submit.prevent="pay"
@@ -194,7 +203,7 @@ function save() {
             @close="editing = null"
         >
             <form
-                v-if="editing"
+                v-if="lastEditing"
                 :id="editFormId"
                 class="space-y-4"
                 @submit.prevent="save"

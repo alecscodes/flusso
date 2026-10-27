@@ -1,18 +1,16 @@
 <script setup lang="ts">
-import { cn } from '@/lib/utils';
+import { cn, isCoarsePointer, lockPageScroll } from '@/lib/utils';
 import { X } from '@lucide/vue';
 import {
     computed,
     nextTick,
-    onMounted,
     onUnmounted,
     provide,
     ref,
-    shallowRef,
     useId,
     watch,
 } from 'vue';
-import { modalFooterKey } from './modalFooter';
+import { modalFooterId } from './modalFooter';
 
 interface Props {
     open: boolean;
@@ -30,17 +28,20 @@ const emit = defineEmits<{
     close: [];
 }>();
 
+const FOCUSABLE =
+    'a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), [tabindex]';
+const NOT_SKIPPED = ':not([tabindex="-1"])';
+
 const titleId = useId();
+const footerId = useId();
 const panelRef = ref<HTMLElement | null>(null);
 const bodyRef = ref<HTMLElement | null>(null);
-const footerEl = shallowRef<HTMLElement | null>(null);
-const hasTeleportedFooter = ref(false);
+// Stays mounted until the leave transition ends, so the content does not vanish mid-fade.
+const rendered = ref(props.open);
 let previouslyFocused: HTMLElement | null = null;
+let releaseScroll: (() => void) | null = null;
 
-provide(modalFooterKey, {
-    target: footerEl,
-    claim: (claimed: boolean) => (hasTeleportedFooter.value = claimed),
-});
+provide(modalFooterId, footerId);
 
 const sizeClasses = {
     sm: 'sm:max-w-sm',
@@ -60,72 +61,95 @@ const contentClasses = computed(() =>
     ),
 );
 
-function handleEscape(e: KeyboardEvent) {
-    if (e.key === 'Escape' && props.open) {
-        emit('close');
-    }
+function focusables(root: HTMLElement | null): HTMLElement[] {
+    return Array.from(
+        root?.querySelectorAll<HTMLElement>(
+            FOCUSABLE.split(', ')
+                .map((selector) => selector + NOT_SKIPPED)
+                .join(', '),
+        ) ?? [],
+    ).filter((el) => el.getClientRects().length > 0);
 }
 
-function handleBackdropClick(e: MouseEvent) {
-    if (e.target === e.currentTarget) {
-        emit('close');
+/** Keeps Tab and Shift+Tab inside the dialog. */
+function trapFocus(event: KeyboardEvent) {
+    const panel = panelRef.value;
+    const items = focusables(panel);
+    const first = items[0];
+    const last = items[items.length - 1];
+
+    if (!panel || !first || !last) {
+        event.preventDefault();
+        panel?.focus();
+    } else if (
+        event.shiftKey &&
+        (document.activeElement === first || document.activeElement === panel)
+    ) {
+        event.preventDefault();
+        last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
     }
 }
 
 watch(
     () => props.open,
     async (open) => {
-        document.body.style.overflow = open ? 'hidden' : '';
-
         if (open) {
+            rendered.value = true;
+            releaseScroll ??= lockPageScroll();
             previouslyFocused = document.activeElement as HTMLElement | null;
             await nextTick();
-            const firstField = bodyRef.value?.querySelector<HTMLElement>(
-                'input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled])',
-            );
+            // On touch devices a focused field raises the keyboard over the sheet: focus the dialog and let the user tap a field.
+            const firstField = isCoarsePointer()
+                ? undefined
+                : focusables(bodyRef.value)[0];
             (firstField ?? panelRef.value)?.focus({ preventScroll: true });
         } else {
+            releaseScroll?.();
+            releaseScroll = null;
             previouslyFocused?.focus({ preventScroll: true });
             previouslyFocused = null;
         }
     },
+    { immediate: true },
 );
 
-onMounted(() => {
-    document.addEventListener('keydown', handleEscape);
-});
-
-onUnmounted(() => {
-    document.removeEventListener('keydown', handleEscape);
-    document.body.style.overflow = '';
-});
+onUnmounted(() => releaseScroll?.());
 </script>
 
 <template>
     <Teleport to="body">
         <Transition
+            appear
             enter-active-class="duration-200 ease-out"
             enter-from-class="opacity-0"
             enter-to-class="opacity-100"
             leave-active-class="duration-150 ease-in"
             leave-from-class="opacity-100"
             leave-to-class="opacity-0"
+            @after-leave="rendered = false"
         >
             <div
-                v-if="open"
+                v-if="rendered"
+                v-show="open"
                 class="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4"
             >
                 <div
                     class="fixed inset-0 bg-black/50 backdrop-blur-sm"
-                    @click="handleBackdropClick"
+                    @click="emit('close')"
                 />
                 <div
                     ref="panelRef"
                     role="dialog"
                     aria-modal="true"
                     :aria-labelledby="title ? titleId : undefined"
+                    :aria-label="title ? undefined : 'Dialog'"
                     tabindex="-1"
                     :class="contentClasses"
+                    @keydown.esc.stop="emit('close')"
+                    @keydown.tab="trapFocus"
                 >
                     <div
                         v-if="title || $slots.header"
@@ -163,9 +187,8 @@ onUnmounted(() => {
                         <slot />
                     </div>
                     <div
-                        v-show="$slots.footer || hasTeleportedFooter"
-                        ref="footerEl"
-                        class="sticky bottom-0 flex shrink-0 justify-end gap-3 border-t border-border bg-card px-6 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
+                        :id="footerId"
+                        class="flex shrink-0 justify-end gap-3 border-t border-border bg-card px-6 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] empty:hidden"
                     >
                         <slot name="footer" />
                     </div>

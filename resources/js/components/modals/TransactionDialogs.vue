@@ -2,7 +2,7 @@
 import { TransactionForm } from '@/components/forms';
 import TransactionModal from '@/components/modals/TransactionModal.vue';
 import { Modal } from '@/components/ui';
-import { useTransactionActions } from '@/composables';
+import { useLastValue, useTransactionActions } from '@/composables';
 import {
     store as transactionStore,
     update as transactionUpdate,
@@ -23,6 +23,11 @@ defineProps<{
 
 const { creating, editing, viewing } = useTransactionActions();
 
+// A closing dialog keeps its content until it has faded out.
+const lastCreating = useLastValue(creating);
+const lastEditing = useLastValue(editing);
+const lastViewing = useLastValue(viewing);
+
 // The state is shared, so a page change (saving redirects) must not leave a dialog open on the next page.
 onBeforeUnmount(() => {
     creating.value = editing.value = viewing.value = null;
@@ -30,7 +35,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div>
+    <div class="hidden">
         <Modal
             :open="creating !== null"
             title="Add Transaction"
@@ -39,8 +44,9 @@ onBeforeUnmount(() => {
             @close="creating = null"
         >
             <TransactionForm
-                v-if="creating"
-                :initial-type="creating"
+                v-if="lastCreating"
+                :key="lastCreating"
+                :initial-type="lastCreating"
                 :account-id="accountId"
                 :accounts="accounts"
                 :categories="categories"
@@ -58,20 +64,21 @@ onBeforeUnmount(() => {
             @close="editing = null"
         >
             <TransactionForm
-                v-if="editing"
-                :transaction="editing"
+                v-if="lastEditing"
+                :key="lastEditing.id"
+                :transaction="lastEditing"
                 :accounts="accounts"
                 :categories="categories"
-                :action="transactionUpdate.url(editing)"
+                :action="transactionUpdate.url(lastEditing)"
                 @success="editing = null"
                 @cancel="editing = null"
             />
         </Modal>
 
         <TransactionModal
-            v-if="viewing"
-            :transaction="viewing"
-            :open="true"
+            v-if="lastViewing"
+            :transaction="lastViewing"
+            :open="viewing !== null"
             @close="viewing = null"
         />
     </div>

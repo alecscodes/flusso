@@ -85,6 +85,35 @@ const form = useForm({
 
 const isTransfer = computed(() => form.type === 'transfer');
 
+const fieldErrorKeys = [
+    'type',
+    'account_id',
+    'to_account_id',
+    'category_id',
+    'amount',
+    'to_amount',
+    'description',
+    'date',
+];
+
+const fileErrors = computed(() =>
+    Object.entries(form.errors)
+        .filter(([key]) => key === 'files' || key.startsWith('files.'))
+        .map(([, message]) => message),
+);
+
+// Anything the server rejects that no field shows (e.g. a rule about the ledger).
+const otherErrors = computed(() =>
+    Object.entries(form.errors)
+        .filter(
+            ([key]) =>
+                !fieldErrorKeys.includes(key) &&
+                key !== 'files' &&
+                !key.startsWith('files.'),
+        )
+        .map(([, message]) => message),
+);
+
 // An edited transaction keeps its accounts even if one was archived since.
 const accounts = computed(() => [
     ...props.accounts,
@@ -109,7 +138,7 @@ const filteredCategories = computed(() =>
 const accountOptions = computed(() =>
     accounts.value.map((a) => ({
         value: a.id.toString(),
-        label: `${a.name} (${a.currency})`,
+        label: `${a.name} (${a.currency})${a.deleted_at ? ' · archived' : ''}`,
     })),
 );
 
@@ -136,6 +165,8 @@ const needsReceivedAmount = computed(
 );
 
 const rate = ref<number | null>(null);
+// Only the newest rate request may set the rate; older ones are ignored, even when they fail.
+let rateRequest = 0;
 const rateUnavailable = ref(false);
 // Once the owner types the received amount, it is never overwritten.
 const receivedAmountEdited = ref(false);
@@ -161,6 +192,7 @@ watch(
         destinationAccount.value?.currency,
     ],
     async () => {
+        const request = ++rateRequest;
         rate.value = null;
         rateUnavailable.value = false;
 
@@ -182,25 +214,34 @@ watch(
                 }),
             )) as { rate: number };
 
-            rate.value = response.rate;
+            if (request === rateRequest) {
+                rate.value = response.rate;
+            }
         } catch {
-            rateUnavailable.value = true;
+            if (request === rateRequest) {
+                rateUnavailable.value = true;
+            }
         }
     },
     { immediate: true },
 );
 
+function convertedAmount(): string {
+    return needsReceivedAmount.value && effectiveRate.value && form.amount
+        ? (parseFloat(form.amount) * effectiveRate.value).toFixed(2)
+        : '';
+}
+
 watch([() => form.amount, effectiveRate], () => {
-    if (
-        needsReceivedAmount.value &&
-        effectiveRate.value &&
-        form.amount &&
-        !receivedAmountEdited.value
-    ) {
-        form.to_amount = (
-            parseFloat(form.amount) * effectiveRate.value
-        ).toFixed(2);
+    if (needsReceivedAmount.value && !receivedAmountEdited.value) {
+        form.to_amount = convertedAmount() || form.to_amount;
     }
+});
+
+// Another pair of accounts makes an earlier typed or converted amount meaningless.
+watch([() => form.account_id, () => form.to_account_id], () => {
+    receivedAmountEdited.value = false;
+    form.to_amount = convertedAmount();
 });
 
 // --- Field resets -----------------------------------------------------------
@@ -271,6 +312,9 @@ function submit() {
                         {{ type.label }}
                     </button>
                 </div>
+                <p v-if="form.errors.type" class="text-sm text-destructive">
+                    {{ form.errors.type }}
+                </p>
             </div>
 
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -368,7 +412,7 @@ function submit() {
                         class="text-xs text-muted-foreground"
                     >
                         1 {{ selectedAccount?.currency }} ≈
-                        {{ Number(effectiveRate.toFixed(4)) }}
+                        {{ Number(effectiveRate.toPrecision(4)) }}
                         {{ destinationAccount?.currency }}
                         ({{
                             savedRate ? "this transfer's rate" : "today's rate"
@@ -410,6 +454,9 @@ function submit() {
             <div class="space-y-2">
                 <Label for="date">Date</Label>
                 <Input id="date" v-model="form.date" name="date" type="date" />
+                <p v-if="form.errors.date" class="text-sm text-destructive">
+                    {{ form.errors.date }}
+                </p>
             </div>
 
             <div class="space-y-2">
@@ -440,8 +487,12 @@ function submit() {
                         </button>
                     </div>
                 </div>
-                <p v-if="form.errors.files" class="text-sm text-destructive">
-                    {{ form.errors.files }}
+                <p
+                    v-for="message in fileErrors"
+                    :key="message"
+                    class="text-sm text-destructive"
+                >
+                    {{ message }}
                 </p>
             </div>
 
@@ -458,7 +509,21 @@ function submit() {
                     "
                     rows="2"
                 />
+                <p
+                    v-if="form.errors.description"
+                    class="text-sm text-destructive"
+                >
+                    {{ form.errors.description }}
+                </p>
             </div>
+
+            <p
+                v-for="message in otherErrors"
+                :key="message"
+                class="text-sm text-destructive"
+            >
+                {{ message }}
+            </p>
         </div>
 
         <ModalFooter>

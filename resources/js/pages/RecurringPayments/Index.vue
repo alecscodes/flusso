@@ -9,7 +9,7 @@ import {
     EmptyState,
     Modal,
 } from '@/components/ui';
-import { useDate } from '@/composables';
+import { useDate, useLastValue } from '@/composables';
 import { intervalLabel } from '@/lib/utils';
 import {
     destroy as destroyRecurringPayment,
@@ -34,6 +34,8 @@ const { formatDate } = useDate();
 
 const showCreateModal = ref(false);
 const editingRule = ref<RecurringPayment | null>(null);
+// A closing dialog keeps its content until it has faded out.
+const lastEditingRule = useLastValue(editingRule);
 const showFinished = ref(false);
 
 const current = computed(() =>
@@ -287,38 +289,39 @@ function deleteRule(rule: RecurringPayment) {
                 </Card>
             </div>
         </div>
+
+        <Modal
+            :open="showCreateModal"
+            title="Add planned payment"
+            description="A bill, a subscription or a one-off you want to remember"
+            size="lg"
+            @close="showCreateModal = false"
+        >
+            <RecurringPaymentForm
+                :accounts="accounts"
+                :categories="categories"
+                :action="recurringPaymentStore.url()"
+                @success="showCreateModal = false"
+                @cancel="showCreateModal = false"
+            />
+        </Modal>
+
+        <Modal
+            :open="!!editingRule"
+            title="Edit planned payment"
+            size="lg"
+            @close="editingRule = null"
+        >
+            <RecurringPaymentForm
+                v-if="lastEditingRule"
+                :key="lastEditingRule.id"
+                :recurring-payment="lastEditingRule"
+                :accounts="accounts"
+                :categories="categories"
+                :action="recurringPaymentUpdate.url(lastEditingRule)"
+                @success="editingRule = null"
+                @cancel="editingRule = null"
+            />
+        </Modal>
     </div>
-
-    <Modal
-        :open="showCreateModal"
-        title="Add planned payment"
-        description="A bill, a subscription or a one-off you want to remember"
-        size="lg"
-        @close="showCreateModal = false"
-    >
-        <RecurringPaymentForm
-            :accounts="accounts"
-            :categories="categories"
-            :action="recurringPaymentStore.url()"
-            @success="showCreateModal = false"
-            @cancel="showCreateModal = false"
-        />
-    </Modal>
-
-    <Modal
-        :open="!!editingRule"
-        title="Edit planned payment"
-        size="lg"
-        @close="editingRule = null"
-    >
-        <RecurringPaymentForm
-            v-if="editingRule"
-            :recurring-payment="editingRule"
-            :accounts="accounts"
-            :categories="categories"
-            :action="recurringPaymentUpdate.url(editingRule)"
-            @success="editingRule = null"
-            @cancel="editingRule = null"
-        />
-    </Modal>
 </template>

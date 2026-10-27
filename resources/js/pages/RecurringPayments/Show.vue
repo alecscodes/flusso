@@ -96,6 +96,8 @@ function deleteRule() {
     <Head :title="recurringPayment.name" />
 
     <div class="space-y-8">
+        <PaymentDialogs :accounts="accounts" />
+
         <div class="flex items-center gap-4">
             <Link :href="recurringPaymentsIndex().url">
                 <Button variant="ghost" size="icon">
@@ -336,23 +338,21 @@ function deleteRule() {
                 </Card>
             </div>
         </div>
+
+        <Modal
+            :open="showEditModal"
+            title="Edit planned payment"
+            size="lg"
+            @close="showEditModal = false"
+        >
+            <RecurringPaymentForm
+                :recurring-payment="recurringPayment"
+                :accounts="accounts"
+                :categories="categories"
+                :action="recurringPaymentUpdate.url(recurringPayment)"
+                @success="showEditModal = false"
+                @cancel="showEditModal = false"
+            />
+        </Modal>
     </div>
-
-    <Modal
-        :open="showEditModal"
-        title="Edit planned payment"
-        size="lg"
-        @close="showEditModal = false"
-    >
-        <RecurringPaymentForm
-            :recurring-payment="recurringPayment"
-            :accounts="accounts"
-            :categories="categories"
-            :action="recurringPaymentUpdate.url(recurringPayment)"
-            @success="showEditModal = false"
-            @cancel="showEditModal = false"
-        />
-    </Modal>
-
-    <PaymentDialogs :accounts="accounts" />
 </template>

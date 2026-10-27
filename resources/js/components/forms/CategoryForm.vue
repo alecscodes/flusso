@@ -36,10 +36,13 @@ const iconSearch = ref('');
 
 const categoryIcons = useCategoryIcons();
 
+// The full set is ~1600 buttons: show a first page until the user searches.
+const ICONS_WITHOUT_SEARCH = 120;
+
 const filteredIcons = computed(() => {
     const list = categoryIcons.value?.categoryIconsList ?? [];
     const q = iconSearch.value.trim().toLowerCase();
-    if (!q) return list;
+    if (!q) return list.slice(0, ICONS_WITHOUT_SEARCH);
     return list.filter(({ name }) => name.includes(q));
 });
 
@@ -94,6 +97,7 @@ const colors = [
                     type="search"
                     placeholder="Search icons..."
                     class="mb-2"
+                    @keydown.enter.prevent
                 />
                 <div
                     class="grid max-h-50 grid-cols-7 gap-2 overflow-y-auto rounded-xl border border-border p-2"
@@ -109,6 +113,8 @@ const colors = [
                                 : 'border-border hover:border-primary/50',
                         ]"
                         :title="icon.name"
+                        :aria-label="icon.name"
+                        :aria-pressed="formData.icon === icon.name"
                         @click="formData.icon = icon.name"
                     >
                         <component
@@ -128,6 +134,12 @@ const colors = [
                         class="col-span-full text-center text-sm text-muted-foreground"
                     >
                         No icons match "{{ iconSearch }}".
+                    </p>
+                    <p
+                        v-else-if="!iconSearch.trim()"
+                        class="col-span-full text-center text-xs text-muted-foreground"
+                    >
+                        Search to find more icons.
                     </p>
                 </div>
                 <input type="hidden" name="icon" :value="formData.icon" />

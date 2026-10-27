@@ -31,6 +31,7 @@ const classes = computed(() =>
 <template>
     <component
         :is="as"
+        role="menuitem"
         :class="classes"
         :disabled="disabled"
     >

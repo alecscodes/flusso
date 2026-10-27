@@ -8,10 +8,6 @@ setLayoutProps({
     title: 'Create your account',
     description: 'Start managing your finances today',
 });
-
-defineProps<{
-    passwordRules: string;
-}>();
 </script>
 
 <template>
@@ -58,7 +54,7 @@ defineProps<{
                 type="password"
                 placeholder="••••••••"
                 autocomplete="new-password"
-                :passwordrules="passwordRules"
+                :passwordrules="$page.props.passwordRules"
                 :error="errors.password"
                 required
             />
@@ -72,7 +68,7 @@ defineProps<{
                 type="password"
                 placeholder="••••••••"
                 autocomplete="new-password"
-                :passwordrules="passwordRules"
+                :passwordrules="$page.props.passwordRules"
                 :error="errors.password_confirmation"
                 required
             />

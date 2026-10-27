@@ -2,7 +2,7 @@
 import { AccountCard } from '@/components/data-display';
 import { AccountForm } from '@/components/forms';
 import { Button, EmptyState, Modal } from '@/components/ui';
-import { useCurrency } from '@/composables';
+import { useCurrency, useLastValue } from '@/composables';
 import {
     show as accountShow,
     store as accountStore,
@@ -29,6 +29,8 @@ const { formatCurrency } = useCurrency();
 const showCreateModal = ref(false);
 const showEditModal = ref(false);
 const editingAccount = ref<Account | null>(null);
+// A closing dialog keeps its content until it has faded out.
+const lastEditingAccount = useLastValue(editingAccount);
 
 function openEditModal(account: Account) {
     editingAccount.value = account;
@@ -161,35 +163,36 @@ function deleteAccount(account: Account) {
                 </Button>
             </template>
         </EmptyState>
+
+        <Modal
+            :open="showCreateModal"
+            title="Create Account"
+            description="Add a new bank account, wallet, or credit card"
+            @close="showCreateModal = false"
+        >
+            <AccountForm
+                :action="accountStore.url()"
+                method="post"
+                @success="showCreateModal = false"
+                @cancel="showCreateModal = false"
+            />
+        </Modal>
+
+        <Modal
+            :open="showEditModal"
+            title="Edit Account"
+            description="Update your account details"
+            @close="closeEditModal"
+        >
+            <AccountForm
+                v-if="lastEditingAccount"
+                :key="lastEditingAccount.id"
+                :account="lastEditingAccount"
+                :action="accountUpdate.url(lastEditingAccount)"
+                method="patch"
+                @success="closeEditModal"
+                @cancel="closeEditModal"
+            />
+        </Modal>
     </div>
-
-    <Modal
-        :open="showCreateModal"
-        title="Create Account"
-        description="Add a new bank account, wallet, or credit card"
-        @close="showCreateModal = false"
-    >
-        <AccountForm
-            :action="accountStore.url()"
-            method="post"
-            @success="showCreateModal = false"
-            @cancel="showCreateModal = false"
-        />
-    </Modal>
-
-    <Modal
-        :open="showEditModal"
-        title="Edit Account"
-        description="Update your account details"
-        @close="closeEditModal"
-    >
-        <AccountForm
-            v-if="editingAccount"
-            :account="editingAccount"
-            :action="accountUpdate.url(editingAccount)"
-            method="patch"
-            @success="closeEditModal"
-            @cancel="closeEditModal"
-        />
-    </Modal>
 </template>

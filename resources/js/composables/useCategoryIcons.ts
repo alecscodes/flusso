@@ -11,9 +11,14 @@ let loading: Promise<void> | null = null;
  * loaded; the module is fetched once and shared.
  */
 export function useCategoryIcons() {
-    loading ??= import('@/lib/categoryIcons').then((module) => {
-        icons.value = module;
-    });
+    loading ??= import('@/lib/categoryIcons')
+        .then((module) => {
+            icons.value = module;
+        })
+        .catch(() => {
+            // Offline or a stale chunk after a deploy: the next call tries again.
+            loading = null;
+        });
 
     return icons;
 }

@@ -6,7 +6,10 @@ use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Log;
 use Laravel\Passport\Client;
+use Laravel\Passport\RefreshToken;
 use Laravel\Passport\Token;
+
+use function Pest\Laravel\actingAs;
 
 function scheduled(string $command): ?Event
 {
@@ -55,4 +58,17 @@ test('a clean ledger logs nothing', function () {
     $event->callAfterCallbacks(app());
 
     Log::shouldNotHaveReceived('error');
+});
+
+test('the daily clean-up keeps an idle connection whose refresh token is still good', function () {
+    $user = User::factory()->create();
+    $client = Client::factory()->create(['created_at' => now()->subDays(60)]);
+    Token::forceCreate(['id' => 'idle', 'user_id' => $user->id, 'client_id' => $client->id, 'scopes' => '["mcp:use"]', 'revoked' => false, 'expires_at' => now()->subDays(40)]);
+    RefreshToken::forceCreate(['id' => 'r-idle', 'access_token_id' => 'idle', 'revoked' => false, 'expires_at' => now()->addMonths(10)]);
+
+    $this->artisan('passport:purge')->assertSuccessful();
+    collect(app(Schedule::class)->events())->first(fn (Event $event) => $event->description === 'prune unused oauth clients')->run(app());
+
+    expect(Token::find('idle'))->not->toBeNull()->and(Client::find($client->id))->not->toBeNull();
+    actingAs($user)->get(route('settings.connected-apps.index'))->assertInertia(fn ($page) => $page->has('apps', 1));
 });

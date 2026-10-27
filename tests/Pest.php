@@ -23,7 +23,7 @@ use Tests\TestCase;
 pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
     ->beforeEach(fn () => Http::preventStrayRequests())
-    ->in('Feature', 'Unit');
+    ->in('Feature');
 
 /**
  * A planned payment (rule) with its occurrences generated, on a fresh EUR account unless given one.

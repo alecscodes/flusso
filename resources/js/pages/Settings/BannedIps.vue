@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Badge, Button } from '@/components/ui';
-import { destroy as unbanIpRoute } from '@/routes/banned-ips';
+import { destroy as unbanIpRoute } from '@/routes/settings/banned-ips';
 import { Head, router } from '@inertiajs/vue3';
 import { ShieldOff, Trash2 } from '@lucide/vue';
 

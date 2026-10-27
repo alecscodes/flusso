@@ -102,8 +102,11 @@ const isActive = (href: string) =>
 
             <div class="border-t border-border p-4">
                 <Dropdown align="right" width="md" wrapper-class="w-full">
-                    <template #trigger>
+                    <template #trigger="{ open }">
                         <button
+                            type="button"
+                            aria-haspopup="menu"
+                            :aria-expanded="open"
                             class="flex w-full items-center justify-between rounded-xl bg-muted/50 p-3 transition-colors hover:bg-muted"
                         >
                             <div class="flex items-center gap-3">

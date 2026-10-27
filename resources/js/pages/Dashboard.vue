@@ -81,6 +81,8 @@ const totalCategorySpending = computed(() => {
     <Head title="Dashboard" />
 
     <div class="space-y-8">
+        <PaymentDialogs :accounts="accounts" />
+
         <div
             class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
         >
@@ -337,6 +339,4 @@ const totalCategorySpending = computed(() => {
             </div>
         </div>
     </div>
-
-    <PaymentDialogs :accounts="accounts" />
 </template>

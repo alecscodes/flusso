@@ -81,6 +81,12 @@ function deleteAccount() {
     <Head :title="account.name" />
 
     <div class="space-y-8">
+        <TransactionDialogs
+            :accounts="accounts"
+            :categories="categories"
+            :account-id="account.id"
+        />
+
         <div class="flex items-center gap-4">
             <Link :href="accountsIndex().url" class="shrink-0">
                 <Button variant="ghost" size="icon">
@@ -125,7 +131,7 @@ function deleteAccount() {
                                     Current Balance
                                 </p>
                                 <p
-                                    class="mt-1 text-3xl font-bold text-foreground tabular-nums"
+                                    class="mt-1 text-2xl font-bold break-words text-foreground tabular-nums sm:text-3xl"
                                 >
                                     {{
                                         formatCurrency(
@@ -259,10 +265,4 @@ function deleteAccount() {
             </Card>
         </div>
     </div>
-
-    <TransactionDialogs
-        :accounts="accounts"
-        :categories="categories"
-        :account-id="account.id"
-    />
 </template>

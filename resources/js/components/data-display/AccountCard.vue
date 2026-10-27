@@ -105,10 +105,13 @@ const gradientClass = computed(() => {
                 </div>
             </div>
             <Dropdown v-if="showActions" align="right" placement="below">
-                <template #trigger>
+                <template #trigger="{ open }">
                     <button
                         type="button"
-                        class="rounded-lg p-1.5 text-muted-foreground opacity-100 transition-all hover:bg-muted hover:text-foreground md:opacity-0 md:group-hover:opacity-100"
+                        :aria-label="`Actions for ${account.name}`"
+                        aria-haspopup="menu"
+                        :aria-expanded="open"
+                        class="rounded-lg p-1.5 text-muted-foreground transition-all hover:bg-muted hover:text-foreground focus-visible:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:opacity-100"
                     >
                         <MoreHorizontal class="h-5 w-5" />
                     </button>
@@ -139,7 +142,9 @@ const gradientClass = computed(() => {
 
         <div class="mt-6">
             <p class="text-sm text-muted-foreground">Current Balance</p>
-            <p class="mt-1 text-3xl font-bold tracking-tight text-foreground">
+            <p
+                class="mt-1 text-2xl font-bold tracking-tight break-words text-foreground sm:text-3xl"
+            >
                 {{ formatCurrency(balance, account.currency) }}
             </p>
         </div>

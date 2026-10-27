@@ -32,6 +32,7 @@ const open = computed({
     },
 });
 const dropdownRef = ref<HTMLElement | null>(null);
+const triggerRef = ref<HTMLElement | null>(null);
 
 const widthClasses = {
     auto: 'w-auto',
@@ -64,15 +65,25 @@ function toggle() {
 function close() {
     open.value = false;
 }
+
+/** Escape closes only an open menu (otherwise it belongs to whatever contains this) and returns focus to the trigger. */
+function closeOnEscape(event: KeyboardEvent) {
+    if (!open.value) return;
+
+    event.stopPropagation();
+    close();
+    triggerRef.value?.querySelector<HTMLElement>('button, a[href]')?.focus();
+}
 </script>
 
 <template>
     <div
         ref="dropdownRef"
         :class="cn('relative inline-block', props.wrapperClass)"
+        @keydown.esc="closeOnEscape"
     >
-        <div @click.stop="toggle">
-            <slot name="trigger" />
+        <div ref="triggerRef" @click.stop="toggle">
+            <slot name="trigger" :open="open" />
         </div>
         <Transition
             enter-active-class="duration-150 ease-out"
@@ -84,6 +95,7 @@ function close() {
         >
             <div
                 v-if="open"
+                role="menu"
                 :class="contentClasses"
             >
                 <slot :close="close" />

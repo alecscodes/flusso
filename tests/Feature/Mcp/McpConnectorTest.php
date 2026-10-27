@@ -72,7 +72,7 @@ function assertRedirectsBackTo(TestResponse $response, string $url): void
 /**
  * @return array{url: string, verifier: string}
  */
-function authorizeUrl(Client $client, string $state = 'xyz'): array
+function authorizeUrl(Client $client, string $state = 'xyz', ?string $scope = 'mcp:use'): array
 {
     $verifier = str_repeat('a1b2c3d4', 8);
     $challenge = rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'), '=');
@@ -81,7 +81,7 @@ function authorizeUrl(Client $client, string $state = 'xyz'): array
         'response_type' => 'code',
         'client_id' => $client->getKey(),
         'redirect_uri' => CLAUDE_CALLBACK,
-        'scope' => 'mcp:use',
+        ...($scope === null ? [] : ['scope' => $scope]),
         'state' => $state,
         'code_challenge' => $challenge,
         'code_challenge_method' => 'S256',
@@ -187,11 +187,11 @@ test('with two-factor on, the challenge also leads back to the consent page', fu
     assertRedirectsBackTo($this->post(route('two-factor.login.store'), ['recovery_code' => 'recovery-code-1'], $browser), $url);
 });
 
-test('the full OAuth flow ends with a token that can call the MCP server', function () {
+test('the full OAuth flow ends with a token that can call the MCP server', function (?string $scope) {
     $user = User::factory()->create();
     Account::factory()->create(['user_id' => $user->id, 'name' => 'Revolut', 'currency' => 'EUR', 'balance' => 10]);
     $client = registerClaude();
-    ['url' => $url, 'verifier' => $verifier] = authorizeUrl($client);
+    ['url' => $url, 'verifier' => $verifier] = authorizeUrl($client, scope: $scope);
     $browser = ['User-Agent' => 'Mozilla/5.0'];
 
     actingAs($user);
@@ -229,7 +229,7 @@ test('the full OAuth flow ends with a token that can call the MCP server', funct
     ], ['User-Agent' => 'python-httpx/0.27'])->assertOk();
 
     expect($refreshed->json('access_token'))->not->toBe($token->json('access_token'));
-});
+})->with(['scope asked for' => 'mcp:use', 'no scope asked for' => null]);
 
 test('denying the consent redirects back with access_denied', function () {
     $user = User::factory()->create();

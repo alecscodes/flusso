@@ -1,10 +1,23 @@
-const DATE_ONLY =
-    /^(\d{4})-(\d{2})-(\d{2})(?:[T ]00:00:00(?:\.0+)?(?:Z|[+-]00:00)?)?$/;
+const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+const formatters = new Map<string, Intl.DateTimeFormat>();
+
+function formatter(options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+    const key = JSON.stringify(options);
+    let format = formatters.get(key);
+
+    if (!format) {
+        format = new Intl.DateTimeFormat('en-US', options);
+        formatters.set(key, format);
+    }
+
+    return format;
+}
 
 /**
- * Date-only values ("2026-10-27", or the backend's midnight timestamps) are
- * parsed as local dates so they never shift a day. Date arguments are copied,
- * never mutated.
+ * Date-only values ("2026-10-27", how the backend serializes every calendar
+ * date) are parsed as local dates so they never shift a day. Date arguments
+ * are copied, never mutated.
  */
 function toDate(date: string | Date): Date {
     if (date instanceof Date) {
@@ -30,7 +43,7 @@ export function useDate() {
         date: string | Date,
         options?: Intl.DateTimeFormatOptions,
     ) =>
-        new Intl.DateTimeFormat('en-US', {
+        formatter({
             year: 'numeric',
             month: 'short',
             day: 'numeric',
@@ -57,10 +70,7 @@ export function useDate() {
     };
 
     const formatMonthYear = (date: string | Date) =>
-        new Intl.DateTimeFormat('en-US', {
-            month: 'long',
-            year: 'numeric',
-        }).format(toDate(date));
+        formatter({ month: 'long', year: 'numeric' }).format(toDate(date));
 
     const isOverdue = (date: string | Date) => {
         const d = toDate(date);

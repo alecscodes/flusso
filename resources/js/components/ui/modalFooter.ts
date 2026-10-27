@@ -1,9 +1,4 @@
-import type { InjectionKey, ShallowRef } from 'vue';
+import type { InjectionKey } from 'vue';
 
-export interface ModalFooterContext {
-    target: ShallowRef<HTMLElement | null>;
-    claim: (claimed: boolean) => void;
-}
-
-export const modalFooterKey: InjectionKey<ModalFooterContext> =
-    Symbol('modalFooter');
+/** The id of the Modal's footer element, where <ModalFooter> teleports its buttons. */
+export const modalFooterId: InjectionKey<string> = Symbol('modalFooterId');

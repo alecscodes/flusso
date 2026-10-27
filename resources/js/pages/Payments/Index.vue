@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PaymentCard } from '@/components/data-display';
+import { PaymentCard, StatCard } from '@/components/data-display';
 import { RecurringPaymentForm } from '@/components/forms';
 import PaymentDialogs from '@/components/modals/PaymentDialogs.vue';
 import {
@@ -54,6 +54,35 @@ const { formatMonthYear } = useDate();
 
 const showCreateModal = ref(false);
 
+const stats = computed(() => [
+    {
+        title: 'Available balance',
+        amount: props.totals.available_balance,
+        icon: Wallet,
+    },
+    {
+        title: `Overdue (${props.totals.overdue_count})`,
+        amount: props.totals.overdue_amount,
+        icon: AlertCircle,
+        iconClass: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
+        class: 'border-rose-200 dark:border-rose-900/50',
+    },
+    {
+        title: `Upcoming (${props.totals.upcoming_count})`,
+        amount: props.totals.upcoming_amount,
+        icon: Calendar,
+        iconClass: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+        class: 'border-amber-200 dark:border-amber-900/50',
+    },
+    {
+        title: 'Balance after planned',
+        amount: props.totals.balance_after_planned,
+        icon: CircleDollarSign,
+        iconClass: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+        class: 'border-emerald-200 dark:border-emerald-900/50',
+    },
+]);
+
 const laterByMonth = computed(() => {
     const months: Record<string, Payment[]> = {};
 
@@ -77,6 +106,8 @@ const isEmpty = computed(
     <Head title="Payments" />
 
     <div class="space-y-8">
+        <PaymentDialogs :accounts="accounts" />
+
         <div
             class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
         >
@@ -95,127 +126,15 @@ const isEmpty = computed(
         </div>
 
         <div class="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-            <Card>
-                <CardContent class="p-4 pt-4 sm:p-6 sm:pt-6">
-                    <div class="flex items-center gap-4">
-                        <div
-                            class="hidden h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 sm:flex"
-                        >
-                            <Wallet class="h-6 w-6 text-primary" />
-                        </div>
-                        <div class="min-w-0">
-                            <p
-                                class="truncate text-xs text-muted-foreground sm:text-sm"
-                            >
-                                Available balance
-                            </p>
-                            <p
-                                class="truncate text-lg font-bold text-foreground tabular-nums sm:text-2xl"
-                            >
-                                {{
-                                    formatCurrency(
-                                        totals.available_balance,
-                                        totals.primary_currency,
-                                    )
-                                }}
-                            </p>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
-
-            <Card class="border-rose-200 dark:border-rose-900/50">
-                <CardContent class="p-4 pt-4 sm:p-6 sm:pt-6">
-                    <div class="flex items-center gap-4">
-                        <div
-                            class="hidden h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-rose-500/10 sm:flex"
-                        >
-                            <AlertCircle
-                                class="h-6 w-6 text-rose-600 dark:text-rose-400"
-                            />
-                        </div>
-                        <div class="min-w-0">
-                            <p
-                                class="truncate text-xs text-muted-foreground sm:text-sm"
-                            >
-                                Overdue ({{ totals.overdue_count }})
-                            </p>
-                            <p
-                                class="truncate text-lg font-bold text-foreground tabular-nums sm:text-2xl"
-                            >
-                                {{
-                                    formatCurrency(
-                                        totals.overdue_amount,
-                                        totals.primary_currency,
-                                    )
-                                }}
-                            </p>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
-
-            <Card class="border-amber-200 dark:border-amber-900/50">
-                <CardContent class="p-4 pt-4 sm:p-6 sm:pt-6">
-                    <div class="flex items-center gap-4">
-                        <div
-                            class="hidden h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 sm:flex"
-                        >
-                            <Calendar
-                                class="h-6 w-6 text-amber-600 dark:text-amber-400"
-                            />
-                        </div>
-                        <div class="min-w-0">
-                            <p
-                                class="truncate text-xs text-muted-foreground sm:text-sm"
-                            >
-                                Upcoming ({{ totals.upcoming_count }})
-                            </p>
-                            <p
-                                class="truncate text-lg font-bold text-foreground tabular-nums sm:text-2xl"
-                            >
-                                {{
-                                    formatCurrency(
-                                        totals.upcoming_amount,
-                                        totals.primary_currency,
-                                    )
-                                }}
-                            </p>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
-
-            <Card class="border-emerald-200 dark:border-emerald-900/50">
-                <CardContent class="p-4 pt-4 sm:p-6 sm:pt-6">
-                    <div class="flex items-center gap-4">
-                        <div
-                            class="hidden h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 sm:flex"
-                        >
-                            <CircleDollarSign
-                                class="h-6 w-6 text-emerald-600 dark:text-emerald-400"
-                            />
-                        </div>
-                        <div class="min-w-0">
-                            <p
-                                class="truncate text-xs text-muted-foreground sm:text-sm"
-                            >
-                                Balance after planned
-                            </p>
-                            <p
-                                class="truncate text-lg font-bold text-foreground tabular-nums sm:text-2xl"
-                            >
-                                {{
-                                    formatCurrency(
-                                        totals.balance_after_planned,
-                                        totals.primary_currency,
-                                    )
-                                }}
-                            </p>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
+            <StatCard
+                v-for="stat in stats"
+                :key="stat.title"
+                :title="stat.title"
+                :value="formatCurrency(stat.amount, totals.primary_currency)"
+                :icon="stat.icon"
+                :icon-class="stat.iconClass"
+                :class="stat.class"
+            />
         </div>
 
         <Card v-if="overduePayments.length > 0">
@@ -335,23 +254,21 @@ const isEmpty = computed(
                 </Button>
             </template>
         </EmptyState>
+
+        <Modal
+            :open="showCreateModal"
+            title="Add planned payment"
+            description="A bill, a subscription or a one-off you want to remember"
+            size="lg"
+            @close="showCreateModal = false"
+        >
+            <RecurringPaymentForm
+                :accounts="accounts"
+                :categories="categories"
+                :action="recurringPaymentStore.url()"
+                @success="showCreateModal = false"
+                @cancel="showCreateModal = false"
+            />
+        </Modal>
     </div>
-
-    <Modal
-        :open="showCreateModal"
-        title="Add planned payment"
-        description="A bill, a subscription or a one-off you want to remember"
-        size="lg"
-        @close="showCreateModal = false"
-    >
-        <RecurringPaymentForm
-            :accounts="accounts"
-            :categories="categories"
-            :action="recurringPaymentStore.url()"
-            @success="showCreateModal = false"
-            @cancel="showCreateModal = false"
-        />
-    </Modal>
-
-    <PaymentDialogs :accounts="accounts" />
 </template>

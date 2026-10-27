@@ -33,17 +33,13 @@ interface Props {
 const props = defineProps<Props>();
 const page = usePage();
 
-// Constants
 const DEBOUNCE_MS = 350;
 
-// State
 const showFilters = ref(false);
 const { create, edit, view, remove } = useTransactionActions();
 
-// Filters
 const filters = ref(getFiltersFromUrl());
 
-// Computed
 const hasActiveFilters = computed(() =>
     Object.values(filters.value).some((v) => v !== ''),
 );
@@ -69,7 +65,6 @@ const typeFilterOptions = [
     { value: 'transfer', label: 'Transfer' },
 ];
 
-// Functions
 function getFiltersFromUrl() {
     const url = new URL(page.url, window.location.origin);
     const q = url.searchParams;
@@ -102,16 +97,13 @@ function clearFilters() {
     applyFilters();
 }
 
-// Watchers
 watch(
     () => page.url,
     () => {
         filters.value = getFiltersFromUrl();
     },
-    { immediate: false },
 );
 
-// Debounced filter application
 const debouncedApplyFilters = debounce(applyFilters, DEBOUNCE_MS);
 </script>
 
@@ -119,6 +111,8 @@ const debouncedApplyFilters = debounce(applyFilters, DEBOUNCE_MS);
     <Head title="Transactions" />
 
     <div class="space-y-6">
+        <TransactionDialogs :accounts="accounts" :categories="categories" />
+
         <div
             class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
         >
@@ -151,6 +145,7 @@ const debouncedApplyFilters = debounce(applyFilters, DEBOUNCE_MS);
                         />
                         <Input
                             v-model="filters.search"
+                            aria-label="Search transactions"
                             placeholder="Search transactions..."
                             class="pl-10"
                             @update:model-value="debouncedApplyFilters"
@@ -159,6 +154,7 @@ const debouncedApplyFilters = debounce(applyFilters, DEBOUNCE_MS);
                     <div class="flex gap-2">
                         <Button
                             variant="outline"
+                            :aria-expanded="showFilters"
                             @click="showFilters = !showFilters"
                         >
                             <Filter class="h-4 w-4" />
@@ -168,12 +164,14 @@ const debouncedApplyFilters = debounce(applyFilters, DEBOUNCE_MS);
                                 class="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground"
                             >
                                 !
+                                <span class="sr-only">(active)</span>
                             </span>
                         </Button>
                         <Button
                             v-if="hasActiveFilters"
                             variant="ghost"
                             size="icon"
+                            aria-label="Clear filters"
                             @click="clearFilters"
                         >
                             <X class="h-4 w-4" />
@@ -186,10 +184,13 @@ const debouncedApplyFilters = debounce(applyFilters, DEBOUNCE_MS);
                     class="mt-4 grid gap-4 rounded-xl border border-border bg-muted/30 p-4 sm:grid-cols-2 2xl:grid-cols-4"
                 >
                     <div class="space-y-2">
-                        <label class="text-sm font-medium text-foreground"
+                        <label
+                            for="filter_account"
+                            class="text-sm font-medium text-foreground"
                             >Account</label
                         >
                         <SearchableSelect
+                            id="filter_account"
                             :model-value="filters.account_id"
                             placeholder="All accounts"
                             search-placeholder="Search account..."
@@ -203,10 +204,13 @@ const debouncedApplyFilters = debounce(applyFilters, DEBOUNCE_MS);
                         />
                     </div>
                     <div class="space-y-2">
-                        <label class="text-sm font-medium text-foreground"
+                        <label
+                            for="filter_category"
+                            class="text-sm font-medium text-foreground"
                             >Category</label
                         >
                         <SearchableSelect
+                            id="filter_category"
                             :model-value="filters.category_id"
                             placeholder="All categories"
                             search-placeholder="Search category..."
@@ -220,10 +224,13 @@ const debouncedApplyFilters = debounce(applyFilters, DEBOUNCE_MS);
                         />
                     </div>
                     <div class="space-y-2">
-                        <label class="text-sm font-medium text-foreground"
+                        <label
+                            for="filter_type"
+                            class="text-sm font-medium text-foreground"
                             >Type</label
                         >
                         <SearchableSelect
+                            id="filter_type"
                             :model-value="filters.type"
                             placeholder="All types"
                             search-placeholder="Search..."
@@ -237,12 +244,13 @@ const debouncedApplyFilters = debounce(applyFilters, DEBOUNCE_MS);
                         />
                     </div>
                     <div class="space-y-2">
-                        <label class="text-sm font-medium text-foreground"
-                            >Date Range</label
+                        <span class="text-sm font-medium text-foreground"
+                            >Date Range</span
                         >
                         <div class="flex gap-2">
                             <Input
                                 type="date"
+                                aria-label="From date"
                                 :model-value="filters.date_start"
                                 placeholder="From"
                                 @update:model-value="
@@ -254,6 +262,7 @@ const debouncedApplyFilters = debounce(applyFilters, DEBOUNCE_MS);
                             />
                             <Input
                                 type="date"
+                                aria-label="To date"
                                 :model-value="filters.date_end"
                                 placeholder="To"
                                 @update:model-value="
@@ -406,6 +415,4 @@ const debouncedApplyFilters = debounce(applyFilters, DEBOUNCE_MS);
             </CardContent>
         </Card>
     </div>
-
-    <TransactionDialogs :accounts="accounts" :categories="categories" />
 </template>

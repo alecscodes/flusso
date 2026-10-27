@@ -79,6 +79,8 @@ class AppServiceProvider extends ServiceProvider
         Passport::tokensExpireIn(new DateInterval('P30D'));
         Passport::refreshTokensExpireIn(new DateInterval('P1Y'));
         Passport::tokensCan(['mcp:use' => 'View and change your accounts, transactions and planned payments']);
+        // A client that asks for no scope still gets the one scope /mcp requires.
+        Passport::defaultScopes(['mcp:use']);
 
         Passport::authorizationView(fn (array $parameters) => Inertia::render('Auth/OAuthAuthorize', [
             'clientName' => $parameters['client']->name,
