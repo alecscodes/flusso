@@ -158,3 +158,21 @@ test('the migration copes with legs that are missing their partner', function ()
         ->and($incoming)->type->toBe('transfer')->account_id->toBe(1)->to_account_id->toBe(2)->to_amount->toEqual(10);
     $this->artisan('accounts:verify-balances')->assertSuccessful();
 });
+
+test('the migration pairs transfer halves that were never linked instead of counting both', function () {
+    seedLegacyLedger(popsoBalance: 840);
+    $at = ['created_at' => '2026-05-01 10:00:00', 'updated_at' => '2026-05-01 10:00:00'];
+    $half = fn (int $id, int $account) => DB::table('transactions')->insert([
+        'id' => $id, 'user_id' => 1, 'account_id' => $account, 'type' => 'transfer', 'amount' => 20, 'currency' => 'EUR', 'date' => '2026-05-14',
+        'from_account_id' => 1, 'to_account_id' => 3, 'category_id' => 1, 'linked_transaction_id' => null,
+    ] + $at);
+    $half(12, 1);
+    $half(13, 3);
+
+    $this->migration->up();
+
+    expect(DB::table('transactions')->whereIn('id', [12, 13])->count())->toBe(1)
+        ->and(DB::table('transactions')->find(12))->to_account_id->toBe(3)->to_amount->toEqual(20)
+        ->and(balances())->toEqual([1 => 820, 2 => -9.93, 3 => 70, 4 => 100]);
+    $this->artisan('accounts:verify-balances')->assertSuccessful();
+});

@@ -35,7 +35,7 @@ class RecurringPaymentService
         return DB::transaction(function () use ($user, $data) {
             $rule = $user->recurringPayments()->create($data + ['is_active' => true]);
 
-            $this->sync($rule);
+            $this->sync($rule, backfill: true);
 
             return $rule;
         });
@@ -61,11 +61,12 @@ class RecurringPaymentService
      * Paid and skipped occurrences are history and never change. Unpaid ones due
      * today or later follow the rule (an occurrence edited by hand keeps its own
      * amount, date, account and description); past-due unpaid ones keep their
-     * values; unpaid ones outside the schedule are removed; missing ones are created.
+     * values; unpaid ones outside the schedule are removed; missing ones are created
+     * from today on (only a new rule backfills past ones, so they can be marked paid).
      */
-    public function sync(RecurringPayment $rule): void
+    public function sync(RecurringPayment $rule, bool $backfill = false): void
     {
-        DB::transaction(function () use ($rule) {
+        DB::transaction(function () use ($rule, $backfill) {
             $rule->load(['account', 'category']);
             $today = now()->toDateString();
             $occurrences = $rule->payments()->get()->keyBy('occurrence');
@@ -104,7 +105,7 @@ class RecurringPaymentService
             });
 
             foreach ($targets as $n => $date) {
-                if (! $occurrences->has($n)) {
+                if (! $occurrences->has($n) && ($backfill || $date->toDateString() >= $today)) {
                     $rule->payments()->create([
                         ...$fromRule,
                         'user_id' => $rule->user_id,

@@ -16,10 +16,10 @@ class DeletePlannedPayment extends FlussoTool
 {
     public function handle(Request $request): Response
     {
-        $rule = $this->user($request)->recurringPayments()->find($request->integer('id'));
+        $rule = $this->owned($request, $this->user($request)->recurringPayments(), 'Planned payment');
 
-        if ($rule === null) {
-            return $this->notFound('Planned payment');
+        if ($rule instanceof Response) {
+            return $rule;
         }
 
         $rule->delete();

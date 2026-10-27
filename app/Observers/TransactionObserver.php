@@ -28,19 +28,20 @@ class TransactionObserver
 
         $transaction->category_id = null;
 
-        if ($transaction->to_amount !== null) {
+        $toAccount = Account::withTrashed()->findOrFail($transaction->to_account_id);
+
+        // Between accounts of one currency exactly what left arrives.
+        if ($toAccount->currency === $account->currency) {
+            $transaction->to_amount = $transaction->amount;
+
             return;
         }
 
-        $toAccount = Account::withTrashed()->findOrFail($transaction->to_account_id);
-
         throw_if(
-            $toAccount->currency !== $account->currency,
+            $transaction->to_amount === null,
             RuntimeException::class,
             'A cross-currency transfer needs the amount received.',
         );
-
-        $transaction->to_amount = $transaction->amount;
     }
 
     public function saved(Transaction $transaction): void

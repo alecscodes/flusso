@@ -124,3 +124,47 @@ test('running the migration twice changes nothing', function () {
 
     expect(DB::table('payments')->orderBy('id')->get()->toJson())->toBe($snapshot);
 });
+
+test('a payment off the schedule never takes the number of a scheduled one', function () {
+    $this->travelTo('2026-10-27 12:00:00');
+    $at = ['created_at' => '2026-03-01 10:00:00', 'updated_at' => '2026-03-01 10:00:00'];
+    DB::table('users')->insert(['id' => 1, 'name' => 'Owner', 'email' => 'owner@example.com', 'password' => 'x'] + $at);
+    DB::table('categories')->insert(['id' => 1, 'user_id' => 1, 'name' => 'Bills', 'type' => 'expense'] + $at);
+    DB::table('accounts')->insert(['id' => 1, 'user_id' => 1, 'name' => 'Popso', 'currency' => 'EUR', 'balance' => 0, 'initial_balance' => 0] + $at);
+    DB::table('recurring_payments')->insert([
+        'id' => 1, 'user_id' => 1, 'account_id' => 1, 'category_id' => 1, 'name' => 'Rent', 'amount' => 10, 'currency' => 'EUR',
+        'interval_type' => 'months', 'interval_value' => 1, 'start_date' => '2026-01-01', 'installments' => 4, 'is_active' => true,
+    ] + $at);
+
+    foreach ([1 => '2026-01-01', 2 => '2026-02-01', 3 => '2026-02-03', 4 => '2026-03-01'] as $id => $due) {
+        DB::table('payments')->insert([
+            'id' => $id, 'user_id' => 1, 'account_id' => 1, 'category_id' => 1, 'recurring_payment_id' => 1, 'type' => 'expense',
+            'amount' => 10, 'currency' => 'EUR', 'due_date' => $due, 'is_paid' => false,
+        ] + $at);
+    }
+
+    $this->migration->up();
+
+    $payments = DB::table('payments')->orderBy('id')->get()->keyBy('id');
+
+    expect($payments->pluck('occurrence', 'id')->all())->toBe([1 => 0, 2 => 1, 3 => 4, 4 => 2])
+        ->and($payments->pluck('is_overridden', 'id')->all())->toBe([1 => 0, 2 => 0, 3 => 1, 4 => 0]);
+});
+
+test('a failure part way leaves the table as it was and the migration can run again', function () {
+    seedLegacyPlans();
+    DB::statement('create index payments_user_id_due_date_index on payments (user_id, due_date)'); // collides with the last step
+
+    expect(fn () => $this->migration->up())->toThrow(Exception::class);
+
+    expect(Schema::hasColumn('payments', 'is_paid'))->toBeTrue()
+        ->and(Schema::hasColumn('payments', 'occurrence'))->toBeFalse()
+        ->and(DB::table('payments')->whereNotNull('deleted_at')->count())->toBe(3)
+        ->and(DB::scalar('pragma foreign_keys'))->toBe(1);
+
+    DB::statement('drop index payments_user_id_due_date_index');
+    $this->migration->up();
+
+    expect(Schema::hasColumn('payments', 'is_paid'))->toBeFalse()
+        ->and(DB::table('payments')->whereNotNull('occurrence')->count())->toBe(8);
+});

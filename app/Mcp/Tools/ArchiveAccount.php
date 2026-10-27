@@ -19,10 +19,10 @@ class ArchiveAccount extends FlussoTool
 
     public function handle(Request $request): Response
     {
-        $account = $this->user($request)->accounts()->find($request->integer('id'));
+        $account = $this->owned($request, $this->user($request)->accounts(), 'Account');
 
-        if ($account === null) {
-            return $this->notFound('Account');
+        if ($account instanceof Response) {
+            return $account;
         }
 
         $this->accounts->deleteAccount($account);

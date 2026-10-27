@@ -21,10 +21,10 @@ class UnskipPayment extends FlussoTool
 
     public function handle(Request $request): Response
     {
-        $payment = $this->user($request)->payments()->find($request->integer('id'));
+        $payment = $this->owned($request, $this->user($request)->payments(), 'Payment');
 
-        if ($payment === null) {
-            return $this->notFound('Payment');
+        if ($payment instanceof Response) {
+            return $payment;
         }
 
         $this->payments->unskip($payment);

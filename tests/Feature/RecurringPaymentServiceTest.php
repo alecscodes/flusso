@@ -285,3 +285,28 @@ test('the daily sync keeps working after the rule category is deleted', function
     $this->artisan('payments:sync')->assertSuccessful();
     expect(dueDates($rule->fresh()))->toContain('2027-06-10');
 });
+
+test('resuming a paused rule does not resurrect the paused months as overdue', function () {
+    $this->travelTo('2026-01-15 12:00:00');
+    $user = User::factory()->create();
+    $rule = plannedPayment($user, ['start_date' => '2026-01-20']);
+    $payload = fn (bool $active) => [
+        'name' => 'Rent', 'account_id' => $rule->account_id, 'category_id' => $rule->category_id, 'amount' => 10,
+        'interval_type' => 'months', 'interval_value' => 1, 'start_date' => '2026-01-20', 'is_active' => $active,
+    ];
+
+    app(RecurringPaymentService::class)->updateRecurringPayment($rule, $payload(false));
+    expect($rule->payments()->count())->toBe(0);
+
+    $this->travelTo('2026-05-15 12:00:00');
+    app(RecurringPaymentService::class)->updateRecurringPayment($rule, $payload(true));
+
+    expect(dueDates($rule)[0])->toBe('2026-05-20');
+});
+
+test('a new rule backfills past occurrences so they can be marked paid', function () {
+    $this->travelTo('2026-04-15 12:00:00');
+    $rule = plannedPayment(User::factory()->create(), ['start_date' => '2026-02-10', 'installments' => 4]);
+
+    expect(dueDates($rule))->toBe(['2026-02-10', '2026-03-10', '2026-04-10', '2026-05-10']);
+});

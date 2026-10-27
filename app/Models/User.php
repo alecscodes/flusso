@@ -68,11 +68,13 @@ class User extends Authenticatable implements OAuthenticatable
     }
 
     /**
-     * Validation: the value is the id of one of this user's live accounts.
+     * Validation: the value is the id of one of this user's live accounts,
+     * or of `$keepArchived` (the account an edited row already uses).
      */
-    public function ownedAccountRule(): Exists
+    public function ownedAccountRule(?int $keepArchived = null): Exists
     {
-        return Rule::exists('accounts', 'id')->where('user_id', $this->id)->whereNull('deleted_at');
+        return Rule::exists('accounts', 'id')->where('user_id', $this->id)
+            ->using(fn ($query) => $query->where(fn ($query) => $query->whereNull('deleted_at')->when($keepArchived, fn ($query) => $query->orWhere('id', $keepArchived))));
     }
 
     /**

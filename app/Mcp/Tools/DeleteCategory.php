@@ -16,10 +16,10 @@ class DeleteCategory extends FlussoTool
 {
     public function handle(Request $request): Response
     {
-        $category = $this->user($request)->categories()->find($request->integer('id'));
+        $category = $this->owned($request, $this->user($request)->categories(), 'Category');
 
-        if ($category === null) {
-            return $this->notFound('Category');
+        if ($category instanceof Response) {
+            return $category;
         }
 
         $category->delete();

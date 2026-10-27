@@ -99,9 +99,8 @@ class PaymentService
      */
     public function markAsPaid(Payment $payment, array $data = []): Transaction
     {
-        $this->ensurePending($payment);
-
         return DB::transaction(function () use ($payment, $data) {
+            $payment = $this->lockPending($payment);
             $transaction = $this->transactionService->createTransaction($payment->user, [
                 'account_id' => $data['account_id'] ?? $payment->account_id,
                 'category_id' => $payment->category_id,
@@ -112,7 +111,7 @@ class PaymentService
                 'description' => $payment->description,
             ]);
 
-            $payment->update(['transaction_id' => $transaction->id]);
+            $this->claim($payment, ['transaction_id' => $transaction->id]);
 
             return $transaction;
         });
@@ -144,17 +143,19 @@ class PaymentService
 
     public function skip(Payment $payment): void
     {
-        $this->ensurePending($payment);
-
-        $payment->update(['skipped_at' => now()]);
+        DB::transaction(fn () => $this->claim($this->lockPending($payment), ['skipped_at' => now()]));
     }
 
     public function unskip(Payment $payment): void
     {
-        throw_if($payment->skipped_at === null, ValidationException::withMessages(['payment' => 'This payment is not skipped.']));
+        DB::transaction(function () use ($payment) {
+            $payment = Payment::lockForUpdate()->findOrFail($payment->id);
 
-        $payment->update(['skipped_at' => null]);
-        $this->recurringPaymentService->sync($payment->recurringPayment);
+            $unskipped = Payment::whereKey($payment->id)->whereNotNull('skipped_at')->update(['skipped_at' => null]);
+            throw_if($unskipped === 0, ValidationException::withMessages(['payment' => 'This payment is not skipped.']));
+
+            $this->recurringPaymentService->sync($payment->recurringPayment);
+        });
     }
 
     /**
@@ -180,6 +181,34 @@ class PaymentService
     private function inDueOrder(HasMany $query): Collection
     {
         return $query->with(self::RELATIONS)->orderBy('due_date')->orderBy('id')->get();
+    }
+
+    /**
+     * Re-read the payment under a row lock (a no-op on SQLite, where writers queue
+     * anyway) so a repeated or concurrent request sees what the first one did.
+     * Call inside a transaction.
+     */
+    private function lockPending(Payment $payment): Payment
+    {
+        $payment = Payment::lockForUpdate()->findOrFail($payment->id);
+        $this->ensurePending($payment);
+
+        return $payment;
+    }
+
+    /**
+     * Move a pending payment to paid or skipped. The update itself only matches a
+     * payment that is still pending, so whichever request lost the race aborts.
+     *
+     * @param  array<string, mixed>  $values
+     */
+    private function claim(Payment $payment, array $values): void
+    {
+        $claimed = Payment::whereKey($payment->id)->pending()->update($values);
+
+        throw_if($claimed === 0, ValidationException::withMessages(['payment' => 'This payment is already paid or skipped.']));
+
+        $payment->refresh();
     }
 
     private function ensurePending(Payment $payment): void

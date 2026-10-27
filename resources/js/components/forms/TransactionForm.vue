@@ -85,12 +85,21 @@ const form = useForm({
 
 const isTransfer = computed(() => form.type === 'transfer');
 
+// An edited transaction keeps its accounts even if one was archived since.
+const accounts = computed(() => [
+    ...props.accounts,
+    ...[props.transaction?.account, props.transaction?.to_account].filter(
+        (a): a is Account =>
+            !!a && !props.accounts.some((known) => known.id === a.id),
+    ),
+]);
+
 const selectedAccount = computed(() =>
-    props.accounts.find((a) => a.id.toString() === form.account_id),
+    accounts.value.find((a) => a.id.toString() === form.account_id),
 );
 
 const destinationAccount = computed(() =>
-    props.accounts.find((a) => a.id.toString() === form.to_account_id),
+    accounts.value.find((a) => a.id.toString() === form.to_account_id),
 );
 
 const filteredCategories = computed(() =>
@@ -98,7 +107,7 @@ const filteredCategories = computed(() =>
 );
 
 const accountOptions = computed(() =>
-    props.accounts.map((a) => ({
+    accounts.value.map((a) => ({
         value: a.id.toString(),
         label: `${a.name} (${a.currency})`,
     })),
@@ -128,8 +137,22 @@ const needsReceivedAmount = computed(
 
 const rate = ref<number | null>(null);
 const rateUnavailable = ref(false);
-// Once the owner types the received amount (or edits a saved transfer), it is never overwritten.
-const receivedAmountEdited = ref(isEditing.value);
+// Once the owner types the received amount, it is never overwritten.
+const receivedAmountEdited = ref(false);
+
+// A saved transfer keeps the rate it was booked at while its accounts stay the same.
+const savedRate = computed(() => {
+    const saved = props.transaction;
+
+    return saved?.to_amount &&
+        parseFloat(saved.amount) > 0 &&
+        form.account_id === saved.account_id.toString() &&
+        form.to_account_id === saved.to_account_id?.toString()
+        ? parseFloat(saved.to_amount) / parseFloat(saved.amount)
+        : null;
+});
+
+const effectiveRate = computed(() => savedRate.value ?? rate.value);
 
 watch(
     () => [
@@ -167,14 +190,16 @@ watch(
     { immediate: true },
 );
 
-watch([() => form.amount, rate], () => {
+watch([() => form.amount, effectiveRate], () => {
     if (
         needsReceivedAmount.value &&
-        rate.value &&
+        effectiveRate.value &&
         form.amount &&
         !receivedAmountEdited.value
     ) {
-        form.to_amount = (parseFloat(form.amount) * rate.value).toFixed(2);
+        form.to_amount = (
+            parseFloat(form.amount) * effectiveRate.value
+        ).toFixed(2);
     }
 });
 
@@ -339,12 +364,15 @@ function submit() {
                         </span>
                     </div>
                     <p
-                        v-if="rate && !receivedAmountEdited"
+                        v-if="effectiveRate && !receivedAmountEdited"
                         class="text-xs text-muted-foreground"
                     >
-                        1 {{ selectedAccount?.currency }} ≈ {{ rate }}
-                        {{ destinationAccount?.currency }} (today's rate), edit
-                        it to what actually arrived.
+                        1 {{ selectedAccount?.currency }} ≈
+                        {{ Number(effectiveRate.toFixed(4)) }}
+                        {{ destinationAccount?.currency }}
+                        ({{
+                            savedRate ? "this transfer's rate" : "today's rate"
+                        }}), edit it to what actually arrived.
                     </p>
                     <p
                         v-else-if="rateUnavailable"

@@ -3,6 +3,7 @@
 use Illuminate\Database\Connection;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
@@ -127,6 +128,7 @@ return new class extends Migration
     {
         $legs = $db->table('transactions')->where('type', 'transfer')->whereNull('to_amount')->orderBy('id')->get()->keyBy('id');
         $accounts = $db->table('accounts')->pluck('id')->flip();
+        $this->linkUnlinkedLegs($db, $legs);
         $handled = [];
         $merged = 0;
         $orphans = [];
@@ -190,6 +192,36 @@ return new class extends Migration
         }
 
         Log::info("Ledger migration: merged {$merged} transfer pairs, ".count($orphans).' orphan legs.', $orphans);
+    }
+
+    /**
+     * Legs that were never linked (both sides NULL) would each be promoted on their
+     * own and count twice. Pair a live outgoing leg with the live incoming leg of the
+     * same route and date (same amount too when both are in one currency) first.
+     *
+     * @param  Collection<array-key, stdClass>  $legs
+     */
+    private function linkUnlinkedLegs(Connection $db, Collection $legs): void
+    {
+        $unlinked = $legs->filter(fn ($leg) => $leg->linked_transaction_id === null && $leg->deleted_at === null && $leg->from_account_id !== null);
+        $incoming = $unlinked->filter(fn ($leg) => (int) $leg->account_id !== (int) $leg->from_account_id);
+
+        foreach ($unlinked->filter(fn ($leg) => (int) $leg->account_id === (int) $leg->from_account_id) as $outgoing) {
+            $partner = $incoming->first(fn ($leg) => $leg->linked_transaction_id === null
+                && (int) $leg->from_account_id === (int) $outgoing->account_id
+                && (int) $leg->account_id === (int) $outgoing->to_account_id
+                && $leg->date === $outgoing->date
+                && ($leg->currency !== $outgoing->currency || (float) $leg->amount === (float) $outgoing->amount));
+
+            if ($partner === null) {
+                continue;
+            }
+
+            $outgoing->linked_transaction_id = $partner->id;
+            $partner->linked_transaction_id = $outgoing->id;
+            $db->table('transactions')->where('id', $outgoing->id)->update(['linked_transaction_id' => $partner->id]);
+            $db->table('transactions')->where('id', $partner->id)->update(['linked_transaction_id' => $outgoing->id]);
+        }
     }
 
     /**

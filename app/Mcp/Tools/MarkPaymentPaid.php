@@ -12,7 +12,7 @@ use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Tools\Annotations\IsDestructive;
 
 #[Name('mark_payment_paid')]
-#[Description('Pay a payment: books the transaction on the account and links it. By default it is paid as planned, today; pass amount, date or account_id to pay differently (e.g. 14 instead of 13.70). Returns the payment, the transaction and the new account balance.')]
+#[Description('Pay a payment: books the transaction on the account and links it. By default it is paid as planned, today; pass amount, date or account_id to pay differently (e.g. 14 instead of 13.70); amount is required when the account is in another currency than the payment. Returns the payment, the transaction and the new account balance.')]
 #[IsDestructive(false)]
 class MarkPaymentPaid extends FlussoTool
 {
@@ -21,13 +21,14 @@ class MarkPaymentPaid extends FlussoTool
     public function handle(Request $request): Response
     {
         $user = $this->user($request);
-        $payment = $user->payments()->find($request->integer('id'));
+        $payment = $this->owned($request, $user->payments(), 'Payment');
 
-        if ($payment === null) {
-            return $this->notFound('Payment');
+        if ($payment instanceof Response) {
+            return $payment;
         }
 
-        $data = $this->validated($this->passed($request, ['amount', 'date', 'account_id']), MarkPaymentPaidRequest::rulesFor($user));
+        $input = $this->passed($request, ['amount', 'date', 'account_id']);
+        $data = $this->validated($input, MarkPaymentPaidRequest::rulesFor($user, $payment, $input));
         $transaction = $this->payments->markAsPaid($payment, $data);
 
         return $this->json([

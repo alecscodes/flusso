@@ -21,7 +21,7 @@ class IpBanService
      * client has a library user agent and probes URLs that may not exist, so these
      * are neither blocked as bots nor ever the reason for a ban.
      */
-    public const array CONNECTOR_PATHS = ['mcp', 'mcp/*', 'oauth/*', '.well-known/*'];
+    public const array CONNECTOR_PATHS = ['mcp', 'mcp/*', 'oauth/authorize', 'oauth/token', 'oauth/token/refresh', 'oauth/register', '.well-known/oauth-*', '.well-known/openid-configuration'];
 
     public function isBanned(Request $request): bool
     {

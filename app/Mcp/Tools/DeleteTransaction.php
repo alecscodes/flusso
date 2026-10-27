@@ -20,10 +20,10 @@ class DeleteTransaction extends FlussoTool
     public function handle(Request $request): Response
     {
         $user = $this->user($request);
-        $transaction = $user->transactions()->find($request->integer('id'));
+        $transaction = $this->owned($request, $user->transactions(), 'Transaction');
 
-        if ($transaction === null) {
-            return $this->notFound('Transaction');
+        if ($transaction instanceof Response) {
+            return $transaction;
         }
 
         $accountIds = [$transaction->account_id, $transaction->to_account_id];

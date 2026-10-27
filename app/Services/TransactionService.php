@@ -75,7 +75,7 @@ class TransactionService
      */
     public function deleteTransaction(Transaction $transaction): void
     {
-        $transaction->delete();
+        DB::transaction(fn () => $transaction->delete());
     }
 
     /**
@@ -87,7 +87,7 @@ class TransactionService
     private function attributes(User $user, array $data): array
     {
         $type = TransactionType::from($data['type'] instanceof TransactionType ? $data['type']->value : $data['type']);
-        $account = $user->accounts()->findOrFail($data['account_id']);
+        $account = $user->accounts()->withTrashed()->findOrFail($data['account_id']);
 
         $attributes = [
             'account_id' => $account->id,
@@ -101,7 +101,7 @@ class TransactionService
         ];
 
         if ($type === TransactionType::Transfer) {
-            $toAccount = $user->accounts()->findOrFail($data['to_account_id']);
+            $toAccount = $user->accounts()->withTrashed()->findOrFail($data['to_account_id']);
 
             $attributes['to_account_id'] = $toAccount->id;
             $attributes['to_amount'] = $data['to_amount'] ?? $this->receivedAmount($account, $toAccount, (float) $data['amount']);

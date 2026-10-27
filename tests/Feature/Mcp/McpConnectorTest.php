@@ -109,14 +109,16 @@ test('404s on connector paths never ban the caller, other 404s still do', functi
     $headers = ['CF-Connecting-IP' => '203.0.113.50', 'CF-Ray' => 'abc', 'User-Agent' => 'python-httpx/0.27'];
 
     $this->get('/.well-known/openid-configuration', $headers)->assertNotFound();
-    $this->get('/oauth/does-not-exist', $headers)->assertNotFound();
     $this->get('/mcp/nothing-here', $headers)->assertNotFound();
 
     expect(DB::table('banned_ips')->count())->toBe(0);
 
+    // Only the endpoints a connector really uses are exempt, not everything under /oauth.
+    $this->get('/oauth/does-not-exist', ['CF-Connecting-IP' => '203.0.113.52', 'CF-Ray' => 'abc', 'User-Agent' => 'Mozilla/5.0'])->assertForbidden();
+
     $this->get('/wp-login.php', ['CF-Connecting-IP' => '203.0.113.51', 'CF-Ray' => 'abc', 'User-Agent' => 'Mozilla/5.0'])->assertForbidden();
 
-    expect(DB::table('banned_ips')->pluck('ip')->all())->toBe(['203.0.113.51']);
+    expect(DB::table('banned_ips')->pluck('ip')->sort()->values()->all())->toBe(['203.0.113.51', '203.0.113.52']);
 });
 
 test('bots are still blocked on the app but not on the connector paths', function () {

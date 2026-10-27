@@ -19,10 +19,10 @@ class GetPlannedPayment extends FlussoTool
 
     public function handle(Request $request): Response
     {
-        $rule = $this->user($request)->recurringPayments()->with(['account', 'category', 'payments.account', 'payments.category'])->find($request->integer('id'));
+        $rule = $this->owned($request, $this->user($request)->recurringPayments()->with(['account', 'category', 'payments.account', 'payments.category']), 'Planned payment');
 
-        if ($rule === null) {
-            return $this->notFound('Planned payment');
+        if ($rule instanceof Response) {
+            return $rule;
         }
 
         return $this->json([

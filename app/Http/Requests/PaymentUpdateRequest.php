@@ -25,7 +25,7 @@ class PaymentUpdateRequest extends FormRequest
     public static function rulesFor(User $user): array
     {
         return [
-            'amount' => ['required', 'numeric', 'min:0.01'],
+            'amount' => ['required', 'numeric', 'min:0.01', 'decimal:0,2'],
             'due_date' => ['required', 'date'],
             'account_id' => ['required', 'integer', $user->ownedAccountRule()],
             'description' => ['nullable', 'string', 'max:1000'],

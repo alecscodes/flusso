@@ -2,6 +2,7 @@
 import AppLayout from '@/layouts/AppLayout.vue';
 import { edit as appearanceEdit } from '@/routes/appearance';
 import { index as bannedIpsIndex } from '@/routes/banned-ips';
+import { index as connectedAppsIndex } from '@/routes/connected-apps';
 import { edit as profileEdit } from '@/routes/profile';
 import { edit as registrationEdit } from '@/routes/registration';
 import { edit as financeEdit } from '@/routes/settings/finance';
@@ -11,6 +12,7 @@ import { Link, usePage } from '@inertiajs/vue3';
 import {
     KeyRound,
     Palette,
+    Plug,
     Shield,
     ShieldOff,
     User,
@@ -26,6 +28,7 @@ const navigation = [
     { name: 'Appearance', href: appearanceEdit.url(), icon: Palette },
     { name: 'Two-Factor Auth', href: twoFactorShow.url(), icon: Shield },
     { name: 'Registration', href: registrationEdit.url(), icon: UserPlus },
+    { name: 'Connected apps', href: connectedAppsIndex.url(), icon: Plug },
     { name: 'Banned IPs', href: bannedIpsIndex.url(), icon: ShieldOff },
     { name: 'Finance', href: financeEdit.url(), icon: Wallet },
 ];

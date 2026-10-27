@@ -57,9 +57,9 @@ class Transaction extends Model
 
     protected static function booted(): void
     {
-        // A deleted transaction takes its attached files with it.
-        static::deleting(function (Transaction $transaction) {
-            $transaction->files->each(function (TransactionFile $file) {
+        // Files go with the row only when it is gone for good, so a soft delete (e.g. marking a payment unpaid) can be restored.
+        static::forceDeleting(function (Transaction $transaction) {
+            $transaction->files()->get()->each(function (TransactionFile $file) {
                 Storage::disk('local')->delete($file->path);
                 $file->delete();
             });

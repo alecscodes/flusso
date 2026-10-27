@@ -3,11 +3,15 @@
 namespace App\Services;
 
 use App\Models\Category;
+use App\Models\RecurringPayment;
 use App\Models\User;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class CategoryService
 {
+    public function __construct(private RecurringPaymentService $recurringPayments) {}
+
     public function getCategoriesForUser(User $user): Collection
     {
         return $user->categories()
@@ -28,12 +32,19 @@ class CategoryService
 
     public function updateCategory(Category $category, array $data): Category
     {
-        $category->update([
-            'name' => $data['name'] ?? $category->name,
-            'type' => $data['type'] ?? $category->type,
-            'icon' => $data['icon'] ?? $category->icon,
-            'color' => $data['color'] ?? $category->color,
-        ]);
+        DB::transaction(function () use ($category, $data) {
+            $category->update([
+                'name' => $data['name'] ?? $category->name,
+                'type' => $data['type'] ?? $category->type,
+                'icon' => $data['icon'] ?? $category->icon,
+                'color' => $data['color'] ?? $category->color,
+            ]);
+
+            // Pending payments take their type from the category via their rule.
+            if ($category->wasChanged('type')) {
+                $category->recurringPayments->each(fn (RecurringPayment $rule) => $this->recurringPayments->sync($rule));
+            }
+        });
 
         return $category->fresh();
     }

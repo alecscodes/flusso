@@ -25,18 +25,19 @@ class TransactionRequest extends FormRequest
 
     public function rules(): array
     {
-        return self::rulesFor($this->user(), $this->all());
+        return self::rulesFor($this->user(), $this->all(), $this->route('transaction'));
     }
 
     /**
      * Also used by the MCP tools, so both entry points validate identically.
      *
+     * An edited transaction may keep its current accounts even if they were archived since.
+     *
      * @param  array<string, mixed>  $input
      * @return array<string, mixed>
      */
-    public static function rulesFor(User $user, array $input): array
+    public static function rulesFor(User $user, array $input, ?Transaction $transaction = null): array
     {
-        $ownedAccount = $user->ownedAccountRule();
         $ownedCategory = $user->ownedCategoryRule();
 
         // A category must be of the same kind as the transaction (income/expense).
@@ -46,11 +47,11 @@ class TransactionRequest extends FormRequest
 
         return [
             'type' => ['required', Rule::enum(TransactionType::class)],
-            'account_id' => ['required', 'integer', $ownedAccount],
+            'account_id' => ['required', 'integer', $user->ownedAccountRule($transaction?->account_id)],
             'category_id' => ['nullable', 'integer', 'prohibited_if:type,transfer', $ownedCategory],
-            'to_account_id' => ['required_if:type,transfer', 'nullable', 'integer', 'different:account_id', 'prohibited_unless:type,transfer', $ownedAccount],
-            'amount' => ['required', 'numeric', 'min:0.01'],
-            'to_amount' => ['nullable', 'numeric', 'min:0.01', 'prohibited_unless:type,transfer'],
+            'to_account_id' => ['required_if:type,transfer', 'nullable', 'integer', 'different:account_id', 'prohibited_unless:type,transfer', $user->ownedAccountRule($transaction?->to_account_id)],
+            'amount' => ['required', 'numeric', 'min:0.01', 'decimal:0,2'],
+            'to_amount' => ['nullable', 'numeric', 'min:0.01', 'decimal:0,2', 'prohibited_unless:type,transfer'],
             'description' => ['nullable', 'string', 'max:1000'],
             'date' => ['required', 'date'],
             'files' => ['nullable', 'array', 'max:5'],

@@ -77,7 +77,7 @@ class Payment extends Model
     /** @return BelongsTo<Category, $this> */
     public function category(): BelongsTo
     {
-        return $this->belongsTo(Category::class);
+        return $this->belongsTo(Category::class)->withTrashed();
     }
 
     /** @return BelongsTo<RecurringPayment, $this> */

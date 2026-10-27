@@ -39,7 +39,7 @@ class RecurringPaymentRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'account_id' => ['required', 'integer', $user->ownedAccountRule()],
             'category_id' => ['required', 'integer', $user->ownedCategoryRule()],
-            'amount' => ['required', 'numeric', 'min:0.01'],
+            'amount' => ['required', 'numeric', 'min:0.01', 'decimal:0,2'],
             'interval_type' => ['required', Rule::enum(IntervalType::class)],
             'interval_value' => ['required', 'integer', 'min:1', 'max:1000'],
             'start_date' => ['required', 'date'],

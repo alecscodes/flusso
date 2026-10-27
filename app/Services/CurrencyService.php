@@ -28,6 +28,11 @@ class CurrencyService
     private const CACHE_TTL = 60; // 1 hour
 
     /**
+     * How long (seconds) a failed lookup is remembered, so an outage costs one attempt, not one per conversion
+     */
+    private const FAILURE_TTL = 600;
+
+    /**
      * Request-level cache for primary currency
      */
     private ?string $primaryCurrencyCache = null;
@@ -55,7 +60,7 @@ class CurrencyService
         // Check Laravel cache first
         $cachedRate = Cache::get($cacheKey);
         if ($cachedRate !== null) {
-            return $cachedRate;
+            return $cachedRate === false ? null : $cachedRate;
         }
 
         // Check database cache
@@ -75,7 +80,15 @@ class CurrencyService
         $rate = $this->fetchRate($fromCurrency, $toCurrency);
 
         if ($rate === null) {
-            return null;
+            // API down: fall back to the latest stored rate (any date), if there is one
+            $lastKnown = CurrencyExchangeRate::where('from_currency', $fromCurrency)
+                ->where('to_currency', $toCurrency)
+                ->latest('date')
+                ->value('rate');
+            $lastKnown = $lastKnown === null ? null : (float) $lastKnown;
+            Cache::put($cacheKey, $lastKnown ?? false, self::FAILURE_TTL);
+
+            return $lastKnown;
         }
 
         // Cache the rate in both Laravel cache and database

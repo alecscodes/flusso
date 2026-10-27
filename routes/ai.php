@@ -4,9 +4,8 @@ use App\Mcp\Servers\FlussoServer;
 use Illuminate\Support\Facades\Route;
 use Laravel\Mcp\Facades\Mcp;
 
-Mcp::oauthRoutes();
-
 // Dynamic client registration is open by design (Claude registers itself); keep it from being spammed.
-collect(Route::getRoutes()->getRoutes())->first(fn ($route) => $route->getName() === 'mcp.oauth.register')?->middleware('throttle:20,1');
+// These routes are only the discovery documents and the registration endpoint.
+Route::middleware('throttle:20,1')->group(fn () => Mcp::oauthRoutes());
 
 Mcp::web('/mcp', FlussoServer::class)->middleware(['auth:api', 'throttle:120,1']);

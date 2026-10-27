@@ -16,10 +16,17 @@ use Illuminate\Support\Facades\Log;
  *
  * Plain DB::table on purpose: no model events. Existing rows are cleaned and
  * numbered first, then the table is rebuilt; `payments` is referenced by nothing
- * so the rebuild is safe. Safe to re-run.
+ * so the rebuild is safe.
+ *
+ * Runs outside Laravel's wrapper transaction (SQLite ignores `PRAGMA foreign_keys`
+ * inside one) after a VACUUM INTO snapshot. Columns, data and drops are one
+ * transaction of our own: all-or-nothing, so `is_paid` (dropped last) only
+ * disappears when everything else went through and a retry starts clean.
  */
 return new class extends Migration
 {
+    public $withinTransaction = false;
+
     public function up(): void
     {
         $db = DB::connection();
@@ -31,34 +38,34 @@ return new class extends Migration
 
         $this->backup($db);
 
-        $schema->table('payments', function (Blueprint $table) {
-            $table->unsignedInteger('occurrence')->nullable()->after('recurring_payment_id');
-            $table->boolean('is_overridden')->default(false)->after('transaction_id');
-            $table->timestamp('skipped_at')->nullable()->after('is_overridden');
-        });
+        $this->withoutForeignKeys($db, fn () => $db->transaction(function () use ($db, $schema) {
+            $schema->table('payments', function (Blueprint $table) {
+                $table->unsignedInteger('occurrence')->nullable()->after('recurring_payment_id');
+                $table->boolean('is_overridden')->default(false)->after('transaction_id');
+                $table->timestamp('skipped_at')->nullable()->after('is_overridden');
+            });
 
-        $db->transaction(function () use ($db) {
             $this->wrapOneOffPayments($db);
             $this->settlePaidState($db);
             $this->dropStaleRows($db);
             $this->numberOccurrences($db);
-        });
 
-        $schema->table('payments', function (Blueprint $table) {
-            $table->dropIndex('payments_user_id_due_date_is_paid_deleted_at_index');
-            $table->dropIndex('payments_recurring_payment_id_deleted_at_index');
-            $table->dropUnique('payments_recurring_due_date_unique');
-            $table->dropForeign(['recurring_payment_id']);
-        });
+            $schema->table('payments', function (Blueprint $table) {
+                $table->dropIndex('payments_user_id_due_date_is_paid_deleted_at_index');
+                $table->dropIndex('payments_recurring_payment_id_deleted_at_index');
+                $table->dropUnique('payments_recurring_due_date_unique');
+                $table->dropForeign(['recurring_payment_id']);
+            });
 
-        $schema->table('payments', fn (Blueprint $table) => $table->dropColumn(['is_paid', 'paid_at', 'deleted_at']));
-        $schema->table('payments', fn (Blueprint $table) => $table->unsignedBigInteger('recurring_payment_id')->nullable(false)->change());
+            $schema->table('payments', fn (Blueprint $table) => $table->dropColumn(['is_paid', 'paid_at', 'deleted_at']));
+            $schema->table('payments', fn (Blueprint $table) => $table->unsignedBigInteger('recurring_payment_id')->nullable(false)->change());
 
-        $schema->table('payments', function (Blueprint $table) {
-            $table->foreign('recurring_payment_id')->references('id')->on('recurring_payments')->cascadeOnDelete();
-            $table->unique(['recurring_payment_id', 'occurrence']);
-            $table->index(['user_id', 'due_date']);
-        });
+            $schema->table('payments', function (Blueprint $table) {
+                $table->foreign('recurring_payment_id')->references('id')->on('recurring_payments')->cascadeOnDelete();
+                $table->unique(['recurring_payment_id', 'occurrence']);
+                $table->index(['user_id', 'due_date']);
+            });
+        }));
     }
 
     /**
@@ -91,6 +98,23 @@ return new class extends Migration
         });
 
         DB::table('payments')->whereNotNull('transaction_id')->update(['is_paid' => true]);
+    }
+
+    private function withoutForeignKeys(Connection $db, Closure $callback): void
+    {
+        $enabled = $db->getDriverName() === 'sqlite' && $db->scalar('pragma foreign_keys');
+
+        if ($enabled) {
+            $db->statement('pragma foreign_keys = off');
+        }
+
+        try {
+            $callback();
+        } finally {
+            if ($enabled) {
+                $db->statement('pragma foreign_keys = on');
+            }
+        }
     }
 
     private function backup(Connection $db): void
@@ -177,8 +201,9 @@ return new class extends Migration
     }
 
     /**
-     * Occurrence n is the payment on the rule's n-th date; payments that do not
-     * sit on the schedule take the next free number. A rule whose first payment
+     * Occurrence n is the payment on the rule's n-th date. Payments that do not sit
+     * on the schedule are marked as edited by hand and numbered above everything the
+     * rule schedules or already holds, so they never take a scheduled number. A rule whose first payment
      * is not on its start date but whose whole history follows the schedule from
      * there gets that start date, so syncing does not shift today's payment.
      */
@@ -191,7 +216,8 @@ return new class extends Migration
                 continue;
             }
 
-            $numbers = $this->number((new RecurringPayment)->forceFill((array) $row), $payments);
+            $rule = (new RecurringPayment)->forceFill((array) $row);
+            $numbers = $this->number($rule, $payments);
 
             if (in_array(null, $numbers->all(), true)) {
                 $realigned = (new RecurringPayment)->forceFill([...(array) $row, 'start_date' => $payments->first()->due_date]);
@@ -200,15 +226,19 @@ return new class extends Migration
                 if (! in_array(null, $realignedNumbers->all(), true)) {
                     Log::info("Planned payments migration: rule {$row->id} start date {$row->start_date} -> {$payments->first()->due_date}.");
                     $db->table('recurring_payments')->where('id', $row->id)->update(['start_date' => $payments->first()->due_date]);
+                    $rule = $realigned;
                     $numbers = $realignedNumbers;
                 }
             }
 
-            $last = -1;
+            $next = max([-1, ...$numbers->filter(fn ($number) => $number !== null)->all(), ...array_keys($rule->targetOccurrences())]) + 1;
 
             foreach ($payments as $index => $payment) {
-                $last = ($numbers[$index] ?? -1) > $last ? $numbers[$index] : $last + 1;
-                $db->table('payments')->where('id', $payment->id)->update(['occurrence' => $last]);
+                $db->table('payments')->where('id', $payment->id)->update(
+                    $numbers[$index] !== null
+                        ? ['occurrence' => $numbers[$index]]
+                        : ['occurrence' => $next++, 'is_overridden' => true],
+                );
             }
         }
     }

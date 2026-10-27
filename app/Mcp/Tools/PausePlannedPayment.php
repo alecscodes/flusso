@@ -19,10 +19,10 @@ class PausePlannedPayment extends PlannedPaymentTool
     public function handle(Request $request): Response
     {
         $user = $this->user($request);
-        $rule = $user->recurringPayments()->find($request->integer('id'));
+        $rule = $this->owned($request, $user->recurringPayments(), 'Planned payment');
 
-        if ($rule === null) {
-            return $this->notFound('Planned payment');
+        if ($rule instanceof Response) {
+            return $rule;
         }
 
         $input = [...$this->currentInput($rule), 'is_active' => false];

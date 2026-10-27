@@ -9,6 +9,8 @@ use App\Models\RecurringPayment;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Validator;
 use Laravel\Mcp\Request;
@@ -51,6 +53,19 @@ abstract class FlussoTool extends Tool
     protected function notFound(string $what): Response
     {
         return Response::error("{$what} not found.");
+    }
+
+    /**
+     * The record whose id was passed, taken from the user's own records, or the not-found error.
+     *
+     * @template TModel of Model
+     *
+     * @param  Relation<TModel, *, *>  $own
+     * @return TModel|Response
+     */
+    protected function owned(Request $request, Relation $own, string $what): Model|Response
+    {
+        return $own->find($request->integer('id')) ?? $this->notFound($what);
     }
 
     protected function json(mixed $data): Response

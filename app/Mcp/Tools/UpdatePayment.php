@@ -23,10 +23,10 @@ class UpdatePayment extends FlussoTool
     public function handle(Request $request): Response
     {
         $user = $this->user($request);
-        $payment = $user->payments()->find($request->integer('id'));
+        $payment = $this->owned($request, $user->payments(), 'Payment');
 
-        if ($payment === null) {
-            return $this->notFound('Payment');
+        if ($payment instanceof Response) {
+            return $payment;
         }
 
         $input = [

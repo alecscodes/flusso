@@ -76,8 +76,9 @@ test('creating, editing and deleting a same-currency transfer updates both accou
         'date' => now()->toDateString(),
     ])->assertRedirect(route('transactions.index'));
 
+    // Same currency: the given to_amount is ignored, what left arrives.
     expect(balanceOf($from))->toBe('750.00')
-        ->and(balanceOf($to))->toBe('749.50');
+        ->and(balanceOf($to))->toBe('750.00');
 
     actingAs($user)->delete(route('transactions.destroy', $transfer))->assertRedirect();
 
