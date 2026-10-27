@@ -13,13 +13,14 @@ import { useDate } from '@/composables';
 import { intervalLabel } from '@/lib/utils';
 import {
     destroy as destroyRecurringPayment,
+    show as showRecurringPayment,
     store as recurringPaymentStore,
     update as recurringPaymentUpdate,
 } from '@/routes/recurring-payments';
 import type { Account, Category, RecurringPayment } from '@/types';
-import { Head, router } from '@inertiajs/vue3';
-import { Calendar, Plus, RefreshCw } from '@lucide/vue';
-import { ref } from 'vue';
+import { Head, Link, router } from '@inertiajs/vue3';
+import { Calendar, ChevronDown, Plus, RefreshCw } from '@lucide/vue';
+import { computed, ref } from 'vue';
 
 interface Props {
     recurringPayments: RecurringPayment[];
@@ -32,30 +33,46 @@ const props = defineProps<Props>();
 const { formatDate } = useDate();
 
 const showCreateModal = ref(false);
-const showEditModal = ref(false);
-const editingPayment = ref<RecurringPayment | null>(null);
+const editingRule = ref<RecurringPayment | null>(null);
+const showFinished = ref(false);
 
-function openEditModal(payment: RecurringPayment) {
-    editingPayment.value = payment;
-    showEditModal.value = true;
+const current = computed(() =>
+    props.recurringPayments.filter((rule) => rule.status !== 'finished'),
+);
+const finished = computed(() =>
+    props.recurringPayments.filter((rule) => rule.status === 'finished'),
+);
+
+function scheduleLabel(rule: RecurringPayment): string {
+    return rule.installments === 1
+        ? 'Once'
+        : intervalLabel(rule.interval_value, rule.interval_type);
 }
 
-function closeEditModal() {
-    showEditModal.value = false;
-    editingPayment.value = null;
+function nextDue(rule: RecurringPayment): string | null {
+    return (
+        rule.payments
+            ?.filter((p) => p.transaction_id === null && p.skipped_at === null)
+            .map((p) => p.due_date)
+            .sort()[0] ?? null
+    );
 }
 
-function handleCreateSuccess() {
-    showCreateModal.value = false;
+function progress(rule: RecurringPayment): string | null {
+    if (!rule.installments || rule.installments === 1) return null;
+
+    const paid = rule.payments?.filter((p) => p.transaction_id !== null);
+
+    return `${paid?.length ?? 0} of ${rule.installments} paid`;
 }
 
-function handleEditSuccess() {
-    closeEditModal();
-}
-
-function deletePayment(payment: RecurringPayment) {
-    if (confirm(`Are you sure you want to delete "${payment.name}"?`)) {
-        router.delete(destroyRecurringPayment.url(payment));
+function deleteRule(rule: RecurringPayment) {
+    if (
+        confirm(
+            `Delete "${rule.name}"? Unpaid payments are removed, what you already paid stays in your transactions.`,
+        )
+    ) {
+        router.delete(destroyRecurringPayment.url(rule));
     }
 }
 </script>
@@ -72,111 +89,119 @@ function deletePayment(payment: RecurringPayment) {
                     Planned Payments
                 </h1>
                 <p class="mt-1 text-muted-foreground">
-                    Manage your subscriptions and planned bills
+                    Your bills, subscriptions and one-off payments
                 </p>
             </div>
             <Button @click="showCreateModal = true">
                 <Plus class="h-4 w-4" />
-                Add Planned Payment
+                Add planned payment
             </Button>
         </div>
 
         <div
-            v-if="props.recurringPayments.length > 0"
+            v-if="current.length > 0"
             class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
         >
             <Card
-                v-for="payment in props.recurringPayments"
-                :key="payment.id"
+                v-for="rule in current"
+                :key="rule.id"
                 :class="
-                    !payment.is_active
+                    rule.status === 'paused'
                         ? 'group opacity-60 transition-all duration-300'
                         : 'group transition-all duration-300'
                 "
                 hover
             >
                 <CardContent class="pt-6">
-                    <div class="flex items-start justify-between">
-                        <div class="flex items-center gap-3">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="flex min-w-0 items-center gap-3">
                             <div
                                 :class="[
-                                    'flex h-12 w-12 items-center justify-center rounded-xl',
-                                    payment.is_active
+                                    'flex h-12 w-12 shrink-0 items-center justify-center rounded-xl',
+                                    rule.status === 'active'
                                         ? 'bg-primary/10 text-primary'
                                         : 'bg-muted text-muted-foreground',
                                 ]"
                             >
                                 <RefreshCw class="h-6 w-6" />
                             </div>
-                            <div>
-                                <h3 class="font-semibold text-foreground">
-                                    {{ payment.name }}
-                                </h3>
+                            <div class="min-w-0">
+                                <Link
+                                    :href="showRecurringPayment.url(rule)"
+                                    class="block truncate font-semibold text-foreground hover:text-primary"
+                                >
+                                    {{ rule.name }}
+                                </Link>
                                 <p class="text-sm text-muted-foreground">
-                                    {{
-                                        intervalLabel(
-                                            payment.interval_value,
-                                            payment.interval_type,
-                                        )
-                                    }}
+                                    {{ scheduleLabel(rule) }}
                                 </p>
                             </div>
                         </div>
-                    </div>
-
-                    <div class="mt-4 flex items-center justify-between">
-                        <AmountDisplay
-                            :amount="payment.amount"
-                            :currency="payment.currency"
-                            type="expense"
-                            size="lg"
-                            :show-sign="false"
-                        />
                         <Badge
                             :variant="
-                                payment.is_active ? 'success' : 'secondary'
+                                rule.status === 'active'
+                                    ? 'success'
+                                    : 'secondary'
                             "
                         >
-                            {{ payment.is_active ? 'Active' : 'Inactive' }}
+                            {{ rule.status === 'active' ? 'Active' : 'Paused' }}
                         </Badge>
                     </div>
 
+                    <div class="mt-4">
+                        <AmountDisplay
+                            :amount="rule.amount"
+                            :currency="rule.currency"
+                            :type="
+                                rule.category?.type === 'income'
+                                    ? 'income'
+                                    : 'expense'
+                            "
+                            size="lg"
+                            :show-sign="false"
+                        />
+                    </div>
+
                     <div class="mt-4 space-y-2">
+                        <CategoryBadge
+                            v-if="rule.category"
+                            :category="rule.category"
+                            size="sm"
+                        />
                         <div
-                            v-if="payment.category"
-                            class="flex items-center gap-2"
-                        >
-                            <CategoryBadge
-                                :category="payment.category"
-                                size="sm"
-                            />
-                        </div>
-                        <div
+                            v-if="nextDue(rule)"
                             class="flex items-center gap-2 text-sm text-muted-foreground"
                         >
                             <Calendar class="h-4 w-4" />
-                            Started {{ formatDate(payment.start_date) }}
+                            Next {{ formatDate(nextDue(rule)!) }}
                         </div>
                         <div
-                            v-if="payment.account"
+                            v-if="rule.account"
                             class="text-sm text-muted-foreground"
                         >
-                            From: {{ payment.account.name }}
+                            From: {{ rule.account.name }}
                         </div>
                         <div
-                            v-if="payment.installments"
+                            v-if="progress(rule)"
                             class="text-sm text-muted-foreground"
                         >
-                            {{ payment.installments }} installments
+                            {{ progress(rule) }}
                         </div>
                     </div>
 
                     <div class="mt-4 flex gap-2 border-t border-border pt-4">
+                        <Link
+                            :href="showRecurringPayment.url(rule)"
+                            class="flex-1"
+                        >
+                            <Button variant="outline" size="sm" class="w-full">
+                                Details
+                            </Button>
+                        </Link>
                         <Button
                             variant="outline"
                             size="sm"
-                            class="flex-1"
-                            @click="openEditModal(payment)"
+                            @click="editingRule = rule"
                         >
                             Edit
                         </Button>
@@ -184,7 +209,7 @@ function deletePayment(payment: RecurringPayment) {
                             variant="ghost"
                             size="sm"
                             class="text-destructive hover:text-destructive"
-                            @click="deletePayment(payment)"
+                            @click="deleteRule(rule)"
                         >
                             Delete
                         </Button>
@@ -196,51 +221,101 @@ function deletePayment(payment: RecurringPayment) {
         <EmptyState
             v-else
             title="No planned payments"
-            description="Set up planned payments to track your subscriptions and bills"
+            description="Add the bills and subscriptions you pay, so you always know what is coming"
             :icon="RefreshCw"
         >
             <template #action>
                 <Button @click="showCreateModal = true">
                     <Plus class="h-4 w-4" />
-                    Add Planned Payment
+                    Add planned payment
                 </Button>
             </template>
         </EmptyState>
+
+        <div v-if="finished.length > 0" class="space-y-3">
+            <button
+                type="button"
+                class="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+                :aria-expanded="showFinished"
+                @click="showFinished = !showFinished"
+            >
+                <ChevronDown
+                    :class="[
+                        'h-4 w-4 transition-transform',
+                        showFinished && 'rotate-180',
+                    ]"
+                />
+                Finished ({{ finished.length }})
+            </button>
+
+            <div
+                v-if="showFinished"
+                class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+            >
+                <Card
+                    v-for="rule in finished"
+                    :key="rule.id"
+                    class="opacity-70"
+                >
+                    <CardContent
+                        class="flex items-center justify-between gap-3 py-4"
+                    >
+                        <div class="min-w-0">
+                            <Link
+                                :href="showRecurringPayment.url(rule)"
+                                class="block truncate font-medium text-foreground hover:text-primary"
+                            >
+                                {{ rule.name }}
+                            </Link>
+                            <p class="text-sm text-muted-foreground">
+                                {{ scheduleLabel(rule) }} ·
+                                {{ rule.payments?.length ?? 0 }} paid or skipped
+                            </p>
+                        </div>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            class="text-destructive hover:text-destructive"
+                            @click="deleteRule(rule)"
+                        >
+                            Delete
+                        </Button>
+                    </CardContent>
+                </Card>
+            </div>
+        </div>
     </div>
 
     <Modal
         :open="showCreateModal"
-        title="Create Planned Payment"
-        description="Set up a new planned payment, subscription or bill"
+        title="Add planned payment"
+        description="A bill, a subscription or a one-off you want to remember"
         size="lg"
         @close="showCreateModal = false"
     >
         <RecurringPaymentForm
-            :accounts="props.accounts"
-            :categories="props.categories"
+            :accounts="accounts"
+            :categories="categories"
             :action="recurringPaymentStore.url()"
-            method="post"
-            @success="handleCreateSuccess"
+            @success="showCreateModal = false"
             @cancel="showCreateModal = false"
         />
     </Modal>
 
     <Modal
-        :open="showEditModal"
-        title="Edit Planned Payment"
-        description="Update planned payment details"
+        :open="!!editingRule"
+        title="Edit planned payment"
         size="lg"
-        @close="closeEditModal"
+        @close="editingRule = null"
     >
         <RecurringPaymentForm
-            v-if="editingPayment"
-            :recurring-payment="editingPayment"
-            :accounts="props.accounts"
-            :categories="props.categories"
-            :action="recurringPaymentUpdate.url(editingPayment)"
-            method="patch"
-            @success="handleEditSuccess"
-            @cancel="closeEditModal"
+            v-if="editingRule"
+            :recurring-payment="editingRule"
+            :accounts="accounts"
+            :categories="categories"
+            :action="recurringPaymentUpdate.url(editingRule)"
+            @success="editingRule = null"
+            @cancel="editingRule = null"
         />
     </Modal>
 </template>

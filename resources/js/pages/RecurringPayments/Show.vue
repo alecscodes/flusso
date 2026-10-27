@@ -4,6 +4,8 @@ import {
     CategoryBadge,
     PaymentCard,
 } from '@/components/data-display';
+import { RecurringPaymentForm } from '@/components/forms';
+import PaymentDialogs from '@/components/modals/PaymentDialogs.vue';
 import {
     Badge,
     Button,
@@ -12,15 +14,16 @@ import {
     CardHeader,
     CardTitle,
     EmptyState,
+    Modal,
 } from '@/components/ui';
 import { useDate } from '@/composables';
 import { intervalLabel } from '@/lib/utils';
 import {
-    markPaid as markPaidRoute,
-    markUnpaid as markUnpaidRoute,
-} from '@/routes/payments';
-import { index as recurringPaymentsIndex } from '@/routes/recurring-payments';
-import type { RecurringPayment } from '@/types';
+    destroy as destroyRecurringPayment,
+    index as recurringPaymentsIndex,
+    update as recurringPaymentUpdate,
+} from '@/routes/recurring-payments';
+import type { Account, Category, Payment, RecurringPayment } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
@@ -29,42 +32,63 @@ import {
     Receipt,
     RefreshCw,
 } from '@lucide/vue';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 interface Props {
     recurringPayment: RecurringPayment;
+    statistics: {
+        total_payments: number;
+        paid_payments: number;
+        unpaid_payments: number;
+        total_paid_amount: number;
+        total_pending_amount: number;
+        next_due_date: string | null;
+    };
+    accounts: Account[];
+    categories: Category[];
 }
 
 const props = defineProps<Props>();
 
 const { formatDate } = useDate();
 
-const paidPayments = computed(() => {
-    return props.recurringPayment.payments?.filter((p) => p.is_paid) || [];
-});
+const showEditModal = ref(false);
 
-const unpaidPayments = computed(() => {
-    return props.recurringPayment.payments?.filter((p) => !p.is_paid) || [];
-});
+// The cards need the rule (its name, whether it runs once) on every payment.
+const payments = computed<Payment[]>(() =>
+    (props.recurringPayment.payments ?? []).map((payment) => ({
+        ...payment,
+        recurring_payment: props.recurringPayment,
+    })),
+);
 
-function markPaidPayment(payment: { id: number }) {
-    router.patch(
-        markPaidRoute.url(payment),
-        {},
-        {
-            preserveScroll: true,
-        },
-    );
-}
+const pendingPayments = computed(() =>
+    payments.value.filter(
+        (p) => p.transaction_id === null && p.skipped_at === null,
+    ),
+);
 
-function markUnpaidPayment(payment: { id: number }) {
-    router.patch(
-        markUnpaidRoute.url(payment),
-        {},
-        {
-            preserveScroll: true,
-        },
-    );
+const historyPayments = computed(() =>
+    payments.value
+        .filter((p) => p.transaction_id !== null || p.skipped_at !== null)
+        .reverse(),
+);
+
+const statusLabel = computed(
+    () =>
+        ({ active: 'Active', paused: 'Paused', finished: 'Finished' })[
+            props.recurringPayment.status ?? 'active'
+        ],
+);
+
+function deleteRule() {
+    if (
+        confirm(
+            `Delete "${props.recurringPayment.name}"? Unpaid payments are removed, what you already paid stays in your transactions.`,
+        )
+    ) {
+        router.delete(destroyRecurringPayment.url(props.recurringPayment));
+    }
 }
 </script>
 
@@ -95,7 +119,7 @@ function markUnpaidPayment(payment: { id: number }) {
                         <div
                             :class="[
                                 'flex h-20 w-20 items-center justify-center rounded-2xl',
-                                recurringPayment.is_active
+                                recurringPayment.status === 'active'
                                     ? 'bg-primary/10 text-primary'
                                     : 'bg-muted text-muted-foreground',
                             ]"
@@ -109,33 +133,35 @@ function markUnpaidPayment(payment: { id: number }) {
 
                         <Badge
                             :variant="
-                                recurringPayment.is_active
+                                recurringPayment.status === 'active'
                                     ? 'success'
                                     : 'secondary'
                             "
                             class="mt-2"
                         >
-                            {{
-                                recurringPayment.is_active
-                                    ? 'Active'
-                                    : 'Inactive'
-                            }}
+                            {{ statusLabel }}
                         </Badge>
 
                         <div class="mt-4">
                             <AmountDisplay
                                 :amount="recurringPayment.amount"
                                 :currency="recurringPayment.currency"
-                                type="expense"
+                                :type="
+                                    recurringPayment.category?.type === 'income'
+                                        ? 'income'
+                                        : 'expense'
+                                "
                                 size="xl"
                                 :show-sign="false"
                             />
                             <p class="text-sm text-muted-foreground">
                                 {{
-                                    intervalLabel(
-                                        recurringPayment.interval_value,
-                                        recurringPayment.interval_type,
-                                    )
+                                    recurringPayment.installments === 1
+                                        ? 'Once'
+                                        : intervalLabel(
+                                              recurringPayment.interval_value,
+                                              recurringPayment.interval_type,
+                                          )
                                 }}
                             </p>
                         </div>
@@ -149,7 +175,7 @@ function markUnpaidPayment(payment: { id: number }) {
                                         class="h-4 w-4 text-muted-foreground"
                                     />
                                     <span class="text-sm text-muted-foreground"
-                                        >Start Date</span
+                                        >Starts</span
                                     >
                                 </div>
                                 <span
@@ -170,7 +196,7 @@ function markUnpaidPayment(payment: { id: number }) {
                                         class="h-4 w-4 text-muted-foreground"
                                     />
                                     <span class="text-sm text-muted-foreground"
-                                        >End Date</span
+                                        >Ends</span
                                     >
                                 </div>
                                 <span
@@ -213,17 +239,52 @@ function markUnpaidPayment(payment: { id: number }) {
                             </div>
 
                             <div
-                                v-if="recurringPayment.installments"
+                                v-if="
+                                    recurringPayment.installments &&
+                                    recurringPayment.installments > 1
+                                "
                                 class="flex items-center justify-between rounded-xl bg-muted/50 p-3"
                             >
                                 <span class="text-sm text-muted-foreground"
-                                    >Installments</span
+                                    >Payments</span
                                 >
                                 <span
                                     class="text-sm font-medium text-foreground"
                                 >
-                                    {{ recurringPayment.installments }}
+                                    {{ statistics.paid_payments }} of
+                                    {{ recurringPayment.installments }} paid
                                 </span>
+                            </div>
+
+                            <div
+                                v-if="statistics.next_due_date"
+                                class="flex items-center justify-between rounded-xl bg-muted/50 p-3"
+                            >
+                                <span class="text-sm text-muted-foreground"
+                                    >Next payment</span
+                                >
+                                <span
+                                    class="text-sm font-medium text-foreground"
+                                >
+                                    {{ formatDate(statistics.next_due_date) }}
+                                </span>
+                            </div>
+
+                            <div class="flex gap-2 pt-2">
+                                <Button
+                                    variant="outline"
+                                    class="flex-1"
+                                    @click="showEditModal = true"
+                                >
+                                    Edit
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    class="text-destructive hover:text-destructive"
+                                    @click="deleteRule"
+                                >
+                                    Delete
+                                </Button>
                             </div>
                         </div>
                     </div>
@@ -231,20 +292,19 @@ function markUnpaidPayment(payment: { id: number }) {
             </Card>
 
             <div class="space-y-6 lg:col-span-2">
-                <Card v-if="unpaidPayments.length > 0">
+                <Card v-if="pendingPayments.length > 0">
                     <CardHeader>
                         <CardTitle class="flex items-center gap-2">
                             <Receipt class="h-5 w-5 text-primary" />
-                            Upcoming Payments
+                            To pay
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div class="grid gap-4 sm:grid-cols-2">
                             <PaymentCard
-                                v-for="payment in unpaidPayments"
+                                v-for="payment in pendingPayments"
                                 :key="payment.id"
                                 :payment="payment"
-                                @mark-paid="markPaidPayment"
                             />
                         </div>
                     </CardContent>
@@ -252,24 +312,23 @@ function markUnpaidPayment(payment: { id: number }) {
 
                 <Card>
                     <CardHeader>
-                        <CardTitle>Payment History</CardTitle>
+                        <CardTitle>History</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div
-                            v-if="paidPayments.length > 0"
+                            v-if="historyPayments.length > 0"
                             class="grid gap-4 sm:grid-cols-2"
                         >
                             <PaymentCard
-                                v-for="payment in paidPayments"
+                                v-for="payment in historyPayments"
                                 :key="payment.id"
                                 :payment="payment"
-                                @mark-unpaid="markUnpaidPayment"
                             />
                         </div>
                         <EmptyState
                             v-else
-                            title="No payment history"
-                            description="Paid payments will appear here"
+                            title="Nothing paid yet"
+                            description="Paid and skipped payments will appear here"
                             :icon="Receipt"
                             class="py-8"
                         />
@@ -278,4 +337,22 @@ function markUnpaidPayment(payment: { id: number }) {
             </div>
         </div>
     </div>
+
+    <Modal
+        :open="showEditModal"
+        title="Edit planned payment"
+        size="lg"
+        @close="showEditModal = false"
+    >
+        <RecurringPaymentForm
+            :recurring-payment="recurringPayment"
+            :accounts="accounts"
+            :categories="categories"
+            :action="recurringPaymentUpdate.url(recurringPayment)"
+            @success="showEditModal = false"
+            @cancel="showEditModal = false"
+        />
+    </Modal>
+
+    <PaymentDialogs :accounts="accounts" />
 </template>

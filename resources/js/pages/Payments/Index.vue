@@ -1,104 +1,97 @@
 <script setup lang="ts">
 import { PaymentCard } from '@/components/data-display';
+import { RecurringPaymentForm } from '@/components/forms';
+import PaymentDialogs from '@/components/modals/PaymentDialogs.vue';
 import {
+    Button,
     Card,
     CardContent,
     CardHeader,
     CardTitle,
     EmptyState,
+    Modal,
 } from '@/components/ui';
 import { useCurrency, useDate } from '@/composables';
-import {
-    markPaid as markPaidRoute,
-    markUnpaid as markUnpaidRoute,
-} from '@/routes/payments';
-import type { Payment } from '@/types';
-import { Head, router } from '@inertiajs/vue3';
+import { store as recurringPaymentStore } from '@/routes/recurring-payments';
+import type { Account, Category, Payment } from '@/types';
+import { Head } from '@inertiajs/vue3';
 import {
     AlertCircle,
     Calendar,
-    CheckCircle,
     CircleDollarSign,
+    Plus,
     Receipt,
     Wallet,
 } from '@lucide/vue';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 interface PaymentTotals {
     available_balance: number;
-    total_balance: number;
     overdue_amount: number;
+    overdue_count: number;
     upcoming_amount: number;
-    total_due_this_period: number;
+    upcoming_count: number;
+    period_amount: number;
     balance_after_planned: number;
     primary_currency: string;
 }
 
 interface Props {
-    payments: Payment[];
-    totals: PaymentTotals;
+    overduePayments: Payment[];
+    periodPayments: Payment[];
+    laterPayments: Payment[];
+    /** "YYYY-MM" => what is still to pay that month, in the primary currency. */
     monthlyTotals: Record<string, number>;
+    accounts: Account[];
+    categories: Category[];
+    totals: PaymentTotals;
 }
 
 const props = defineProps<Props>();
 
 const { formatCurrency } = useCurrency();
-const { isOverdue, formatMonthYear } = useDate();
+const { formatMonthYear } = useDate();
 
-const overduePayments = computed(() => {
-    return props.payments.filter((p) => !p.is_paid && isOverdue(p.due_date));
-});
+const showCreateModal = ref(false);
 
-const upcomingPayments = computed(() => {
-    return props.payments.filter((p) => !p.is_paid && !isOverdue(p.due_date));
-});
+const laterByMonth = computed(() => {
+    const months: Record<string, Payment[]> = {};
 
-const paidPayments = computed(() => {
-    return props.payments.filter((p) => p.is_paid);
-});
-
-const groupedUpcoming = computed(() => {
-    const groups: Record<string, Payment[]> = {};
-    upcomingPayments.value.forEach((payment) => {
-        const key = formatMonthYear(payment.due_date);
-        if (!groups[key]) groups[key] = [];
-        groups[key].push(payment);
+    props.laterPayments.forEach((payment) => {
+        (months[payment.due_date.slice(0, 7)] ??= []).push(payment);
     });
-    return groups;
+
+    return Object.entries(months);
 });
 
-function markPaidPayment(payment: Payment) {
-    router.patch(
-        markPaidRoute.url(payment),
-        {},
-        {
-            preserveScroll: true,
-        },
-    );
-}
-
-function markUnpaidPayment(payment: Payment) {
-    router.patch(
-        markUnpaidRoute.url(payment),
-        {},
-        {
-            preserveScroll: true,
-        },
-    );
-}
+const isEmpty = computed(
+    () =>
+        props.overduePayments.length +
+            props.periodPayments.length +
+            props.laterPayments.length ===
+        0,
+);
 </script>
 
 <template>
     <Head title="Payments" />
 
     <div class="space-y-8">
-        <div>
-            <h1 class="text-3xl font-bold tracking-tight text-foreground">
-                Payments
-            </h1>
-            <p class="mt-1 text-muted-foreground">
-                Track and manage all your upcoming and past payments
-            </p>
+        <div
+            class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+        >
+            <div>
+                <h1 class="text-3xl font-bold tracking-tight text-foreground">
+                    Payments
+                </h1>
+                <p class="mt-1 text-muted-foreground">
+                    What you have to pay, and when
+                </p>
+            </div>
+            <Button @click="showCreateModal = true">
+                <Plus class="h-4 w-4" />
+                Add planned payment
+            </Button>
         </div>
 
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -139,7 +132,7 @@ function markUnpaidPayment(payment: Payment) {
                         </div>
                         <div>
                             <p class="text-sm text-muted-foreground">
-                                Overdue ({{ overduePayments.length }})
+                                Overdue ({{ totals.overdue_count }})
                             </p>
                             <p class="text-2xl font-bold text-foreground">
                                 {{
@@ -166,7 +159,7 @@ function markUnpaidPayment(payment: Payment) {
                         </div>
                         <div>
                             <p class="text-sm text-muted-foreground">
-                                Upcoming ({{ upcomingPayments.length }})
+                                Upcoming ({{ totals.upcoming_count }})
                             </p>
                             <p class="text-2xl font-bold text-foreground">
                                 {{
@@ -209,36 +202,27 @@ function markUnpaidPayment(payment: Payment) {
             </Card>
         </div>
 
-        <Card class="border-rose-200/50 dark:border-rose-900/30">
-            <CardContent class="pt-6">
-                <div class="flex items-center gap-4">
-                    <Receipt
-                        class="h-8 w-8 text-rose-500/80 dark:text-rose-400/80"
-                    />
-                    <div>
-                        <p class="text-sm text-muted-foreground">
-                            To pay this period
-                        </p>
-                        <p class="text-xl font-semibold text-foreground">
-                            {{
-                                formatCurrency(
-                                    totals.total_due_this_period,
-                                    totals.primary_currency,
-                                )
-                            }}
-                        </p>
-                    </div>
-                </div>
-            </CardContent>
-        </Card>
-
         <Card v-if="overduePayments.length > 0">
             <CardHeader>
                 <CardTitle
-                    class="flex items-center gap-2 text-rose-600 dark:text-rose-400"
+                    class="flex flex-wrap items-center justify-between gap-2"
                 >
-                    <AlertCircle class="h-5 w-5" />
-                    Overdue Payments
+                    <span
+                        class="flex items-center gap-2 text-rose-600 dark:text-rose-400"
+                    >
+                        <AlertCircle class="h-5 w-5" />
+                        Overdue
+                    </span>
+                    <span
+                        class="rounded-lg bg-muted px-3 py-1 text-base font-semibold text-foreground"
+                    >
+                        {{
+                            formatCurrency(
+                                totals.overdue_amount,
+                                totals.primary_currency,
+                            )
+                        }}
+                    </span>
                 </CardTitle>
             </CardHeader>
             <CardContent>
@@ -247,73 +231,105 @@ function markUnpaidPayment(payment: Payment) {
                         v-for="payment in overduePayments"
                         :key="payment.id"
                         :payment="payment"
-                        @mark-paid="markPaidPayment"
                     />
                 </div>
             </CardContent>
         </Card>
 
-        <div v-if="Object.keys(groupedUpcoming).length > 0" class="space-y-6">
-            <Card v-for="(payments, month) in groupedUpcoming" :key="month">
-                <CardHeader>
-                    <CardTitle
-                        class="flex flex-wrap items-center justify-between gap-2"
-                    >
-                        <span class="flex items-center gap-2">
-                            <Calendar class="h-5 w-5 text-primary" />
-                            {{ month }}
-                        </span>
-                        <span
-                            class="rounded-lg bg-muted px-3 py-1 text-base font-semibold text-foreground"
-                        >
-                            {{
-                                formatCurrency(
-                                    monthlyTotals[month] ?? 0,
-                                    totals.primary_currency,
-                                )
-                            }}
-                        </span>
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                        <PaymentCard
-                            v-for="payment in payments"
-                            :key="payment.id"
-                            :payment="payment"
-                            @mark-paid="markPaidPayment"
-                        />
-                    </div>
-                </CardContent>
-            </Card>
-        </div>
-
-        <EmptyState
-            v-if="payments.length === 0"
-            title="No payments"
-            description="Payments from your planned payments and subscriptions will appear here"
-            :icon="Receipt"
-        />
-
-        <Card v-if="paidPayments.length > 0">
+        <Card v-if="periodPayments.length > 0">
             <CardHeader>
-                <CardTitle class="flex items-center gap-2">
-                    <CheckCircle
-                        class="h-5 w-5 text-emerald-600 dark:text-emerald-400"
-                    />
-                    Recently Paid
+                <CardTitle
+                    class="flex flex-wrap items-center justify-between gap-2"
+                >
+                    <span class="flex items-center gap-2">
+                        <Calendar class="h-5 w-5 text-primary" />
+                        This period
+                    </span>
+                    <span
+                        class="rounded-lg bg-muted px-3 py-1 text-base font-semibold text-foreground"
+                    >
+                        {{
+                            formatCurrency(
+                                totals.period_amount,
+                                totals.primary_currency,
+                            )
+                        }}
+                    </span>
                 </CardTitle>
             </CardHeader>
             <CardContent>
                 <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     <PaymentCard
-                        v-for="payment in paidPayments.slice(0, 6)"
+                        v-for="payment in periodPayments"
                         :key="payment.id"
                         :payment="payment"
-                        @mark-unpaid="markUnpaidPayment"
                     />
                 </div>
             </CardContent>
         </Card>
+
+        <Card v-for="[month, payments] in laterByMonth" :key="month">
+            <CardHeader>
+                <CardTitle
+                    class="flex flex-wrap items-center justify-between gap-2"
+                >
+                    <span class="flex items-center gap-2">
+                        <Calendar class="h-5 w-5 text-muted-foreground" />
+                        {{ formatMonthYear(`${month}-01`) }}
+                    </span>
+                    <span
+                        class="rounded-lg bg-muted px-3 py-1 text-base font-semibold text-foreground"
+                    >
+                        {{
+                            formatCurrency(
+                                monthlyTotals[month] ?? 0,
+                                totals.primary_currency,
+                            )
+                        }}
+                    </span>
+                </CardTitle>
+            </CardHeader>
+            <CardContent>
+                <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <PaymentCard
+                        v-for="payment in payments"
+                        :key="payment.id"
+                        :payment="payment"
+                    />
+                </div>
+            </CardContent>
+        </Card>
+
+        <EmptyState
+            v-if="isEmpty"
+            title="Nothing planned"
+            description="Add a planned payment for a bill, a subscription or a one-off you need to remember"
+            :icon="Receipt"
+        >
+            <template #action>
+                <Button @click="showCreateModal = true">
+                    <Plus class="h-4 w-4" />
+                    Add planned payment
+                </Button>
+            </template>
+        </EmptyState>
     </div>
+
+    <Modal
+        :open="showCreateModal"
+        title="Add planned payment"
+        description="A bill, a subscription or a one-off you want to remember"
+        size="lg"
+        @close="showCreateModal = false"
+    >
+        <RecurringPaymentForm
+            :accounts="accounts"
+            :categories="categories"
+            :action="recurringPaymentStore.url()"
+            @success="showCreateModal = false"
+            @cancel="showCreateModal = false"
+        />
+    </Modal>
+
+    <PaymentDialogs :accounts="accounts" />
 </template>

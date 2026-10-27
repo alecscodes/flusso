@@ -5,6 +5,7 @@ import {
     PaymentCard,
     StatCard,
 } from '@/components/data-display';
+import PaymentDialogs from '@/components/modals/PaymentDialogs.vue';
 import {
     Button,
     Card,
@@ -15,10 +16,7 @@ import {
 } from '@/components/ui';
 import { useCurrency, useDate } from '@/composables';
 import { show as accountShow, index as accountsIndex } from '@/routes/accounts';
-import {
-    markPaid as markPaidRoute,
-    index as paymentsIndex,
-} from '@/routes/payments';
+import { index as paymentsIndex } from '@/routes/payments';
 import { index as transactionsIndex } from '@/routes/transactions';
 import type {
     Account,
@@ -77,16 +75,6 @@ const totalCategorySpending = computed(() => {
         0,
     );
 });
-
-function markPaidPayment(payment: Payment) {
-    router.patch(
-        markPaidRoute.url(payment),
-        {},
-        {
-            preserveScroll: true,
-        },
-    );
-}
 </script>
 
 <template>
@@ -307,7 +295,6 @@ function markPaidPayment(payment: Payment) {
                                     )"
                                     :key="payment.id"
                                     :payment="payment"
-                                    @mark-paid="markPaidPayment"
                                 />
                             </div>
                         </div>
@@ -327,7 +314,6 @@ function markPaidPayment(payment: Payment) {
                                     )"
                                     :key="payment.id"
                                     :payment="payment"
-                                    @mark-paid="markPaidPayment"
                                 />
                             </div>
                         </div>
@@ -347,4 +333,6 @@ function markPaidPayment(payment: Payment) {
             </div>
         </div>
     </div>
+
+    <PaymentDialogs :accounts="accounts" />
 </template>

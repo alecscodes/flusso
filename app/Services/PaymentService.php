@@ -2,301 +2,179 @@
 
 namespace App\Services;
 
-use App\Enums\CategoryType;
 use App\Enums\PaymentType;
-use App\Enums\TransactionType;
-use App\Models\Category;
 use App\Models\Payment;
-use App\Models\RecurringPayment;
 use App\Models\Transaction;
 use App\Models\User;
-use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class PaymentService
 {
-    private const DEFAULT_MONTHS_AHEAD = 12;
+    private const RELATIONS = ['account', 'category', 'recurringPayment', 'transaction'];
 
     public function __construct(
-        private CurrencyService $currencyService
+        private CurrencyService $currencyService,
+        private TransactionService $transactionService,
+        private RecurringPaymentService $recurringPaymentService,
     ) {}
 
-    public function getPaymentsForUser(User $user): Collection
-    {
-        return $user->payments()
-            ->with(['account', 'category', 'recurringPayment'])
-            ->orderBy('due_date')
-            ->orderBy('is_paid')
-            ->get();
-    }
-
-    public function getUpcomingPayments(User $user, ?CarbonInterface $until = null): Collection
-    {
-        $until = $until ?? now()->addMonths(self::DEFAULT_MONTHS_AHEAD);
-
-        return $user->payments()
-            ->unpaid()
-            ->where('due_date', '>=', now()->toDateString())
-            ->where('due_date', '<=', $until->toDateString())
-            ->with(['account', 'category', 'recurringPayment'])
-            ->orderBy('due_date')
-            ->get();
-    }
-
+    /**
+     * Unpaid, unskipped payments due before today.
+     */
     public function getOverduePayments(User $user): Collection
     {
-        return $user->payments()
-            ->overdue()
-            ->with(['account', 'category', 'recurringPayment'])
-            ->orderBy('due_date')
-            ->get();
+        return $user->payments()->overdue()->with(self::RELATIONS)->orderBy('due_date')->orderBy('id')->get();
     }
 
-    public function getPaymentsForPeriod(User $user, CarbonInterface $startDate, CarbonInterface $endDate): Collection
+    /**
+     * Unpaid, unskipped payments due from today until the end date (inclusive).
+     */
+    public function getUpcomingPayments(User $user, CarbonInterface $until): Collection
     {
-        return $user->payments()
-            ->dueBetween($startDate->toDateString(), $endDate->toDateString())
-            ->with(['account', 'category', 'recurringPayment'])
-            ->orderBy('due_date')
-            ->get();
+        return $user->payments()->visible()->pending()
+            ->dueBetween(now()->toDateString(), $until->toDateString())
+            ->with(self::RELATIONS)->orderBy('due_date')->orderBy('id')->get();
     }
 
-    public function createManualPayment(User $user, array $data): Payment
+    /**
+     * The Payments page: what is overdue, what falls in the current financial
+     * period (paid and skipped ones included, so they can be undone) and what is later.
+     *
+     * @return array{overdue: Collection, period: Collection, later: Collection, monthly_totals: array<string, float>}
+     */
+    public function getOverview(User $user): array
     {
-        $paymentType = $this->determinePaymentType($data);
+        $period = $user->getFinancialPeriod();
+        $today = now()->toDateString();
 
-        return $user->payments()->create([
-            'account_id' => $data['account_id'],
-            'category_id' => $data['category_id'],
-            'type' => $paymentType,
-            'amount' => $data['amount'],
-            'currency' => $data['currency'],
-            'description' => $data['description'] ?? null,
-            'due_date' => $data['due_date'],
-            'is_paid' => false,
-        ]);
-    }
+        [$overdue, $rest] = $user->payments()->visible()
+            ->where(fn ($query) => $query->where('due_date', '>=', $period['start']->toDateString())->orWhere(fn ($query) => $query->pending()))
+            ->with(self::RELATIONS)->orderBy('due_date')->orderBy('id')->get()
+            ->partition(fn (Payment $payment) => $payment->isPending() && $payment->due_date->toDateString() < $today);
 
-    public function generatePaymentsForRecurringPayment(
-        RecurringPayment $recurringPayment,
-        ?CarbonInterface $until = null
-    ): Collection {
-        if (! $recurringPayment->is_active || $recurringPayment->hasEnded()) {
-            return collect();
+        [$inPeriod, $later] = $rest->partition(fn (Payment $payment) => $payment->due_date->toDateString() <= $period['end']->toDateString());
+
+        $monthlyTotals = [];
+
+        foreach ($later->filter(fn (Payment $payment) => $payment->isPending() && $payment->type === PaymentType::Expense) as $payment) {
+            $month = $payment->due_date->format('Y-m');
+            $monthlyTotals[$month] = ($monthlyTotals[$month] ?? 0) + ($this->currencyService->convertToPrimaryCurrency((float) $payment->amount, $payment->currency, $user) ?? 0);
         }
 
-        $until = $until ?? now()->addMonths(self::DEFAULT_MONTHS_AHEAD);
-        $payments = collect();
-
-        $latestPayment = $recurringPayment->payments()
-            ->latest('due_date')
-            ->first();
-
-        $nextDate = $latestPayment
-            ? $recurringPayment->calculateNextDate(Carbon::parse($latestPayment->due_date))
-            : Carbon::parse($recurringPayment->start_date);
-
-        $paymentType = $this->getPaymentTypeFromCategory($recurringPayment->category);
-        $existingCount = $recurringPayment->payments()->count();
-
-        while ($nextDate->lte($until)) {
-            if ($recurringPayment->end_date && $nextDate->gt(Carbon::parse($recurringPayment->end_date))) {
-                break;
-            }
-
-            if ($recurringPayment->installments && $existingCount >= $recurringPayment->installments) {
-                break;
-            }
-
-            $existingPayment = $recurringPayment->payments()
-                ->whereDate('due_date', $nextDate->toDateString())
-                ->exists();
-
-            if (! $existingPayment) {
-                $payment = $recurringPayment->payments()->create([
-                    'user_id' => $recurringPayment->user_id,
-                    'account_id' => $recurringPayment->account_id,
-                    'category_id' => $recurringPayment->category_id,
-                    'type' => $paymentType,
-                    'amount' => $recurringPayment->amount,
-                    'currency' => $recurringPayment->currency,
-                    'description' => $recurringPayment->name,
-                    'due_date' => $nextDate->toDateString(),
-                    'is_paid' => false,
-                ]);
-
-                $payments->push($payment);
-                $existingCount++;
-            }
-
-            $nextDate = $recurringPayment->calculateNextDate($nextDate);
-        }
-
-        return $payments;
+        return ['overdue' => $overdue->values(), 'period' => $inPeriod->values(), 'later' => $later->values(), 'monthly_totals' => $monthlyTotals];
     }
 
-    public function generateAllPaymentsForUser(User $user, ?CarbonInterface $until = null): Collection
-    {
-        $until = $until ?? now()->addMonths(self::DEFAULT_MONTHS_AHEAD);
-        $allPayments = collect();
-
-        $activeRecurringPayments = $user->recurringPayments()
-            ->active()
-            ->notEnded()
-            ->with('category')
-            ->get();
-
-        foreach ($activeRecurringPayments as $recurringPayment) {
-            $payments = $this->generatePaymentsForRecurringPayment($recurringPayment, $until);
-            $allPayments = $allPayments->merge($payments);
-        }
-
-        return $allPayments;
-    }
-
-    public function markAsPaid(Payment $payment, ?CarbonInterface $paidDate = null): Transaction
-    {
-        if ($payment->is_paid) {
-            throw new \RuntimeException('Payment is already marked as paid');
-        }
-
-        return DB::transaction(function () use ($payment, $paidDate) {
-            $transactionType = match ($payment->type) {
-                PaymentType::Income => TransactionType::Income,
-                PaymentType::Expense => TransactionType::Expense,
-            };
-
-            $transaction = $payment->user->transactions()->create([
-                'account_id' => $payment->account_id,
-                'category_id' => $payment->category_id,
-                'recurring_payment_id' => $payment->recurring_payment_id,
-                'type' => $transactionType,
-                'amount' => $payment->amount,
-                'currency' => $payment->currency,
-                'description' => $payment->description,
-                'date' => $paidDate?->toDateString() ?? $payment->due_date->toDateString(),
-            ]);
-
-            $payment->update([
-                'is_paid' => true,
-                'paid_at' => now(),
-                'transaction_id' => $transaction->id,
-            ]);
-
-            if ($payment->recurring_payment_id) {
-                $recurringPayment = $payment->recurringPayment;
-                if ($recurringPayment && $recurringPayment->is_active) {
-                    $this->generatePaymentsForRecurringPayment($recurringPayment);
-                }
-            }
-
-            return $transaction->load(['account', 'category']);
-        });
-    }
-
-    public function markAsUnpaid(Payment $payment, bool $deleteTransaction = true): void
-    {
-        if (! $payment->is_paid) {
-            throw new \RuntimeException('Payment is already marked as unpaid');
-        }
-
-        DB::transaction(function () use ($payment, $deleteTransaction) {
-            if ($payment->transaction_id && $deleteTransaction) {
-                $payment->transaction->delete();
-            }
-
-            $payment->update([
-                'is_paid' => false,
-                'paid_at' => null,
-                'transaction_id' => null,
-            ]);
-        });
-    }
-
-    public function deletePayment(Payment $payment): void
-    {
-        DB::transaction(function () use ($payment) {
-            if ($payment->is_paid && $payment->transaction_id) {
-                $this->markAsUnpaid($payment, true);
-            }
-
-            $payment->delete();
-        });
-    }
-
+    /**
+     * What is still to pay and what has been paid in a period, in the primary currency.
+     */
     public function getPaymentSummaryForPeriod(User $user, CarbonInterface $startDate, CarbonInterface $endDate): array
     {
-        $payments = $this->getPaymentsForPeriod($user, $startDate, $endDate);
+        $payments = $user->payments()->visible()
+            ->dueBetween($startDate->toDateString(), $endDate->toDateString())
+            ->with('transaction')->get();
 
-        $duePayments = $payments->where('type', PaymentType::Expense)->where('is_paid', false);
-        $expectedPayments = $payments->where('type', PaymentType::Income)->where('is_paid', false);
-        $paidPayments = $payments->where('is_paid', true);
-
-        $totalDue = $this->currencyService->sumInPrimaryCurrency($duePayments, 'amount', 'currency', $user);
-        $totalExpected = $this->currencyService->sumInPrimaryCurrency($expectedPayments, 'amount', 'currency', $user);
-        $totalPaid = $this->currencyService->sumInPrimaryCurrency($paidPayments, 'amount', 'currency', $user);
+        $pending = $payments->filter->isPending();
+        $due = $pending->where('type', PaymentType::Expense);
+        $expected = $pending->where('type', PaymentType::Income);
+        $paid = $payments->filter->isPaid();
 
         return [
-            'total_due' => $totalDue,
-            'total_expected_income' => $totalExpected,
-            'total_paid' => $totalPaid,
-            'unpaid_count' => $payments->where('is_paid', false)->count(),
-            'paid_count' => $payments->where('is_paid', true)->count(),
+            'total_due' => $this->currencyService->sumInPrimaryCurrency($due, 'amount', 'currency', $user),
+            'total_expected_income' => $this->currencyService->sumInPrimaryCurrency($expected, 'amount', 'currency', $user),
+            'total_paid' => $this->currencyService->sumInPrimaryCurrency($paid->map(fn (Payment $payment) => $payment->transaction ?? $payment), 'amount', 'currency', $user),
+            'unpaid_count' => $pending->count(),
+            'paid_count' => $paid->count(),
             'primary_currency' => $this->currencyService->getPrimaryCurrency($user),
         ];
     }
 
     /**
-     * Calculate monthly totals with proper currency conversion
+     * Pay an occurrence: a transaction is booked through the ledger (the owner may
+     * pay another amount, on another date or from another account) and linked.
+     *
+     * @param  array{amount?: numeric|null, date?: string|null, account_id?: int|null}  $data
      */
-    public function getMonthlyTotals(User $user): array
+    public function markAsPaid(Payment $payment, array $data = []): Transaction
     {
-        $upcomingPayments = $this->getUpcomingPayments($user);
-        $monthlyTotals = [];
+        $this->ensurePending($payment);
 
-        foreach ($upcomingPayments as $payment) {
-            $month = Carbon::parse($payment->due_date)->format('F Y');
+        return DB::transaction(function () use ($payment, $data) {
+            $transaction = $this->transactionService->createTransaction($payment->user, [
+                'account_id' => $data['account_id'] ?? $payment->account_id,
+                'category_id' => $payment->category_id,
+                'recurring_payment_id' => $payment->recurring_payment_id,
+                'type' => $payment->type->value,
+                'amount' => $data['amount'] ?? $payment->amount,
+                'date' => $data['date'] ?? now()->toDateString(),
+                'description' => $payment->description,
+            ]);
 
-            if (! isset($monthlyTotals[$month])) {
-                $monthlyTotals[$month] = 0;
-            }
+            $payment->update(['transaction_id' => $transaction->id]);
 
-            // Convert each payment amount to primary currency
-            $convertedAmount = $this->currencyService->convertToPrimaryCurrency(
-                $payment->amount,
-                $payment->currency,
-                $user
-            ) ?? 0;
-
-            $monthlyTotals[$month] += $convertedAmount;
-        }
-
-        return $monthlyTotals;
+            return $transaction;
+        });
     }
 
-    private function getPaymentTypeFromCategory($category): PaymentType
+    /**
+     * Re-open a paid occurrence; deleting the transaction (observer) clears the link.
+     */
+    public function markAsUnpaid(Payment $payment): void
     {
-        return match ($category->type) {
-            CategoryType::Income => PaymentType::Income,
-            CategoryType::Expense => PaymentType::Expense,
-        };
+        throw_unless($payment->isPaid(), ValidationException::withMessages(['payment' => 'This payment is not paid.']));
+
+        $this->transactionService->deleteTransaction($payment->transaction);
     }
 
-    private function determinePaymentType(array $data): PaymentType
+    /**
+     * Edit one occurrence by hand; the schedule then leaves it alone.
+     *
+     * @param  array{amount: numeric, due_date: string, account_id: int, description?: string|null}  $data
+     */
+    public function updatePayment(Payment $payment, array $data): Payment
     {
-        if (isset($data['type'])) {
-            return $data['type'] instanceof PaymentType ? $data['type'] : PaymentType::from($data['type']);
-        }
+        $this->ensurePending($payment);
 
-        if (isset($data['category_id'])) {
-            $category = Category::find($data['category_id']);
-            if ($category) {
-                return $this->getPaymentTypeFromCategory($category);
-            }
-        }
+        $payment->update([...$data, 'description' => $data['description'] ?? null, 'is_overridden' => true]);
 
-        return PaymentType::Expense;
+        return $payment;
+    }
+
+    public function skip(Payment $payment): void
+    {
+        $this->ensurePending($payment);
+
+        $payment->update(['skipped_at' => now()]);
+    }
+
+    public function unskip(Payment $payment): void
+    {
+        throw_if($payment->skipped_at === null, ValidationException::withMessages(['payment' => 'This payment is not skipped.']));
+
+        $payment->update(['skipped_at' => null]);
+        $this->recurringPaymentService->sync($payment->recurringPayment);
+    }
+
+    /**
+     * Only a payment that runs once can be deleted (its rule goes with it); a
+     * repeating one would simply be generated again, so it has to be skipped.
+     */
+    public function deletePayment(Payment $payment): void
+    {
+        $this->ensurePending($payment);
+
+        throw_unless(
+            $payment->recurringPayment->installments === 1,
+            ValidationException::withMessages(['payment' => 'A repeating payment cannot be deleted. Skip it instead.']),
+        );
+
+        $this->recurringPaymentService->deleteRecurringPayment($payment->recurringPayment);
+    }
+
+    private function ensurePending(Payment $payment): void
+    {
+        throw_unless($payment->isPending(), ValidationException::withMessages(['payment' => 'This payment is already paid or skipped.']));
     }
 }

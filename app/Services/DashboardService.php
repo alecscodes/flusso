@@ -24,8 +24,6 @@ class DashboardService
         $startDate = $period['start'];
         $endDate = $period['end'];
 
-        $this->paymentService->generateAllPaymentsForUser($user);
-
         $accounts = $this->accountService->getAccountsForUser($user);
         $summary = $this->transactionService->getTransactionSummaryForPeriod($user, $startDate, $endDate);
         $categorySpending = $this->transactionService->getCategorySpendingForPeriod($user, $startDate, $endDate);
@@ -57,15 +55,17 @@ class DashboardService
     }
 
     /**
-     * Get upcoming payments for a specific period.
+     * Unpaid payments due from today to the end of the period (overdue ones are listed separately).
      */
     public function getUpcomingPaymentsForPeriod(User $user, CarbonInterface $startDate, CarbonInterface $endDate): Collection
     {
         return $user->payments()
-            ->unpaid()
-            ->whereBetween('due_date', [$startDate->toDateString(), $endDate->toDateString()])
-            ->with(['account', 'category', 'recurringPayment'])
+            ->visible()
+            ->pending()
+            ->dueBetween(max($startDate->toDateString(), now()->toDateString()), $endDate->toDateString())
+            ->with(['account', 'category', 'recurringPayment', 'transaction'])
             ->orderBy('due_date')
+            ->orderBy('id')
             ->get();
     }
 }

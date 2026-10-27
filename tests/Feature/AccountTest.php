@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Account;
+use App\Models\Transaction;
 use App\Models\User;
 
 use function Pest\Laravel\actingAs;
@@ -49,4 +50,32 @@ test('user can delete an account', function () {
         ->assertRedirect(route('accounts.index'));
 
     expect(Account::find($account->id))->toBeNull();
+});
+
+test('the currency of an account with transactions cannot change', function () {
+    $user = User::factory()->create();
+    $account = Account::factory()->create(['user_id' => $user->id, 'currency' => 'EUR']);
+    $transaction = Transaction::factory()->create(['user_id' => $user->id, 'account_id' => $account->id, 'type' => 'expense']);
+
+    $update = fn (string $currency) => actingAs($user)->put(route('accounts.update', $account), ['name' => 'Same', 'currency' => $currency]);
+
+    $update('USD')->assertSessionHasErrors('currency');
+    expect($account->fresh()->currency)->toBe('EUR');
+
+    // Same currency and other fields still save; a deleted transaction still counts (it can be restored).
+    $update('EUR')->assertSessionHasNoErrors();
+    $transaction->delete();
+    $update('USD')->assertSessionHasErrors('currency');
+});
+
+test('the currency of an account without transactions can change and its planned payments follow', function () {
+    $user = User::factory()->create();
+    $account = Account::factory()->create(['user_id' => $user->id, 'currency' => 'EUR']);
+    $rule = plannedPayment($user, ['installments' => 2], $account);
+
+    actingAs($user)->put(route('accounts.update', $account), ['name' => 'Switched', 'currency' => 'RON'])->assertRedirect();
+
+    expect($account->fresh()->currency)->toBe('RON')
+        ->and($rule->fresh()->currency)->toBe('RON')
+        ->and($rule->payments()->pluck('currency')->unique()->all())->toBe(['RON']);
 });

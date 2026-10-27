@@ -10,4 +10,6 @@ Artisan::command('inspire', function () {
 
 Schedule::command('ip:unban --expired')->daily();
 
+Schedule::command('payments:sync')->daily();
+
 Schedule::command('queue:work --stop-when-empty --max-time=50')->everyMinute()->withoutOverlapping(5);

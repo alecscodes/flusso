@@ -58,8 +58,8 @@ test('payments due on the last day of the period are included in the period summ
     $account = Account::factory()->create(['user_id' => $user->id, 'currency' => 'EUR']);
 
     Payment::factory()->create([
-        'user_id' => $user->id, 'account_id' => $account->id, 'recurring_payment_id' => null,
-        'type' => 'expense', 'currency' => 'EUR', 'amount' => 40, 'due_date' => '2026-02-28', 'is_paid' => false,
+        'user_id' => $user->id, 'account_id' => $account->id,
+        'type' => 'expense', 'amount' => 40, 'due_date' => '2026-02-28',
     ]);
 
     actingAs($user)->get(route('dashboard'))

@@ -2,8 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\RecurringPaymentStoreRequest;
-use App\Http\Requests\RecurringPaymentUpdateRequest;
+use App\Http\Requests\RecurringPaymentRequest;
 use App\Models\RecurringPayment;
 use App\Services\AccountService;
 use App\Services\CategoryService;
@@ -35,7 +34,7 @@ class RecurringPaymentController extends Controller
         ]);
     }
 
-    public function store(RecurringPaymentStoreRequest $request): RedirectResponse
+    public function store(RecurringPaymentRequest $request): RedirectResponse
     {
         $this->authorize('create', RecurringPayment::class);
 
@@ -43,20 +42,26 @@ class RecurringPaymentController extends Controller
 
         FlashToast::success('Planned payment created successfully.');
 
-        return redirect()->route('recurring-payments.index');
+        return redirect()->back(fallback: route('recurring-payments.index'));
     }
 
-    public function show(RecurringPayment $recurringPayment): Response
+    public function show(Request $request, RecurringPayment $recurringPayment): Response
     {
         $this->authorize('view', $recurringPayment);
 
+        $user = $request->user();
+
         return Inertia::render('RecurringPayments/Show', [
-            'recurringPayment' => $recurringPayment->load(['account', 'category', 'payments']),
+            'recurringPayment' => $recurringPayment
+                ->load(['account', 'category', 'payments.account', 'payments.category', 'payments.transaction'])
+                ->append('status'),
             'statistics' => $this->recurringPaymentService->getStatistics($recurringPayment),
+            'accounts' => $this->accountService->getAccountsForUser($user),
+            'categories' => $this->categoryService->getCategoriesForUser($user),
         ]);
     }
 
-    public function update(RecurringPaymentUpdateRequest $request, RecurringPayment $recurringPayment): RedirectResponse
+    public function update(RecurringPaymentRequest $request, RecurringPayment $recurringPayment): RedirectResponse
     {
         $this->authorize('update', $recurringPayment);
 
@@ -64,7 +69,7 @@ class RecurringPaymentController extends Controller
 
         FlashToast::success('Planned payment updated successfully.');
 
-        return redirect()->route('recurring-payments.index');
+        return redirect()->back(fallback: route('recurring-payments.index'));
     }
 
     public function destroy(RecurringPayment $recurringPayment): RedirectResponse

@@ -4,8 +4,7 @@ namespace App\Models;
 
 use App\Casts\DateOnly;
 use App\Enums\IntervalType;
-use Carbon\Carbon;
-use Carbon\CarbonInterface;
+use App\Support\CalendarDate;
 use Database\Factories\RecurringPaymentFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -13,19 +12,30 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * A planned payment: a rule that stands for numbered occurrences (`payments`).
+ * Occurrence n falls on `start_date + n * interval`; it ends never, on a date,
+ * or after a number of installments. "Once" is a single installment.
+ * Currency follows the account.
+ */
 class RecurringPayment extends Model
 {
     /** @use HasFactory<RecurringPaymentFactory> */
     use HasFactory, SoftDeletes;
 
+    /** How far ahead rules without an installment count are scheduled. */
+    private const HORIZON_MONTHS = 12;
+
     protected static function booted(): void
     {
-        // Delete unpaid payments when recurring payment is deleted
-        static::deleting(function (RecurringPayment $recurringPayment) {
-            $recurringPayment->payments()
-                ->where('is_paid', false)
-                ->delete();
+        static::saving(function (RecurringPayment $rule) {
+            if (! $rule->exists || $rule->isDirty('account_id')) {
+                $rule->currency = Account::withTrashed()->findOrFail($rule->account_id)->currency;
+            }
         });
+
+        // A deleted rule keeps its paid history but not what is still owed.
+        static::deleting(fn (RecurringPayment $rule) => $rule->payments()->unpaid()->delete());
     }
 
     protected $fillable = [
@@ -34,7 +44,6 @@ class RecurringPayment extends Model
         'category_id',
         'name',
         'amount',
-        'currency',
         'interval_type',
         'interval_value',
         'start_date',
@@ -81,75 +90,74 @@ class RecurringPayment extends Model
         return $this->hasMany(Payment::class);
     }
 
-    public function scopeActive($query)
-    {
-        return $query->where('is_active', true);
-    }
-
-    public function scopeInactive($query)
-    {
-        return $query->where('is_active', false);
-    }
-
     public function scopeForUser($query, int $userId)
     {
         return $query->where('user_id', $userId);
     }
 
-    public function scopeNotEnded($query)
+    /**
+     * The date of occurrence n, always counted from the start date so month ends never drift.
+     */
+    public function dateFor(int $n): CalendarDate
     {
-        return $query->where(function ($q) {
-            $q->whereNull('end_date')
-                ->orWhere('end_date', '>=', now()->toDateString());
-        });
-    }
-
-    public function scopeNotExhausted($query)
-    {
-        return $query->where(function ($q) {
-            $q->whereNull('installments')
-                ->orWhereRaw('(SELECT COUNT(*) FROM payments WHERE payments.recurring_payment_id = recurring_payments.id AND payments.deleted_at IS NULL) < recurring_payments.installments');
-        });
-    }
-
-    public function isActive(): bool
-    {
-        return $this->is_active;
-    }
-
-    public function hasEnded(): bool
-    {
-        if ($this->end_date && $this->end_date->lt(now()->startOfDay())) {
-            return true;
-        }
-
-        if ($this->installments && $this->payments()->count() >= $this->installments) {
-            return true;
-        }
-
-        return false;
-    }
-
-    public function getNextDueDate(): ?CarbonInterface
-    {
-        $latestPayment = $this->payments()->latest('due_date')->first();
-
-        if ($latestPayment) {
-            return $this->calculateNextDate(Carbon::parse($latestPayment->due_date));
-        }
-
-        return Carbon::parse($this->start_date);
-    }
-
-    public function calculateNextDate(CarbonInterface $fromDate): CarbonInterface
-    {
-        $intervalValue = (int) $this->interval_value;
+        $steps = $n * max(1, (int) $this->interval_value);
 
         return match ($this->interval_type) {
-            IntervalType::Days => $fromDate->copy()->addDays($intervalValue),
-            IntervalType::Weeks => $fromDate->copy()->addWeeks($intervalValue),
-            IntervalType::Months => $fromDate->copy()->addMonths($intervalValue),
-            IntervalType::Years => $fromDate->copy()->addYears($intervalValue),
+            IntervalType::Days => $this->start_date->addDays($steps),
+            IntervalType::Weeks => $this->start_date->addWeeks($steps),
+            IntervalType::Months => $this->start_date->addMonthsNoOverflow($steps),
+            IntervalType::Years => $this->start_date->addYearsNoOverflow($steps),
         };
+    }
+
+    /**
+     * The occurrences that should exist, by number. Rules without an installment
+     * count are scheduled a year ahead; the daily sync extends them.
+     *
+     * @return array<int, CalendarDate>
+     */
+    public function targetOccurrences(): array
+    {
+        $horizon = now()->addMonthsNoOverflow(self::HORIZON_MONTHS)->toDateString();
+        $dates = [];
+
+        for ($n = 0; $this->installments === null || $n < $this->installments; $n++) {
+            $date = $this->dateFor($n);
+
+            if (($this->end_date && $date->gt($this->end_date)) || ($this->installments === null && $date->toDateString() > $horizon)) {
+                break;
+            }
+
+            $dates[$n] = $date;
+        }
+
+        return $dates;
+    }
+
+    public function isPaused(): bool
+    {
+        return ! $this->is_active || $this->account->trashed();
+    }
+
+    /**
+     * paused | finished (nothing left to pay and no occurrence left to schedule, ever) | active.
+     * Needs `payments` (and `account`) loaded to avoid extra queries.
+     */
+    public function getStatusAttribute(): string
+    {
+        if ($this->isPaused()) {
+            return 'paused';
+        }
+
+        if ($this->payments->contains(fn (Payment $payment) => $payment->isPending())) {
+            return 'active';
+        }
+
+        $next = ($this->payments->max('occurrence') ?? -1) + 1;
+
+        $hasMore = ($this->installments === null || $next < $this->installments)
+            && ($this->end_date === null || $this->dateFor($next)->lte($this->end_date));
+
+        return $hasMore ? 'active' : 'finished';
     }
 }

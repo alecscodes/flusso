@@ -33,7 +33,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('transactions/{transaction}/files/{file}/download', [TransactionController::class, 'downloadFile'])->name('transactions.files.download');
     Route::resource('recurring-payments', RecurringPaymentController::class)->except(['create', 'edit']);
     Route::get('payments', [PaymentController::class, 'index'])->name('payments.index');
-    Route::post('payments', [PaymentController::class, 'store'])->name('payments.store');
+    Route::patch('payments/{payment}', [PaymentController::class, 'update'])->name('payments.update');
+    Route::delete('payments/{payment}', [PaymentController::class, 'destroy'])->name('payments.destroy');
+    Route::patch('payments/{payment}/skip', [PaymentController::class, 'skip'])->name('payments.skip');
+    Route::patch('payments/{payment}/unskip', [PaymentController::class, 'unskip'])->name('payments.unskip');
     Route::patch('payments/{payment}/mark-paid', [PaymentController::class, 'markPaid'])->name('payments.mark-paid');
     Route::patch('payments/{payment}/mark-unpaid', [PaymentController::class, 'markUnpaid'])->name('payments.mark-unpaid');
     Route::get('currency/rates', [CurrencyController::class, 'getRates'])->name('currency.rates');

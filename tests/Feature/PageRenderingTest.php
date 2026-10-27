@@ -146,9 +146,10 @@ test('payments index page renders with data', function () {
         ->assertSuccessful()
         ->assertInertia(fn ($page) => $page
             ->component('Payments/Index')
-            ->has('payments')
             ->has('overduePayments')
-            ->has('upcomingPayments')
+            ->has('periodPayments')
+            ->has('laterPayments')
+            ->has('accounts')
             ->has('totals')
         );
 });

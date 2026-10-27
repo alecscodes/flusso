@@ -70,11 +70,14 @@ export interface RecurringPayment {
     interval_value: number;
     start_date: string;
     end_date: string | null;
+    /** 1 means the payment runs once. */
     installments: number | null;
     is_active: boolean;
     created_at: string;
     updated_at: string;
     deleted_at: string | null;
+    /** Only on the planned payments pages. */
+    status?: 'active' | 'paused' | 'finished';
     account?: Account;
     category?: Category;
     payments?: Payment[];
@@ -93,27 +96,28 @@ export interface TransactionFile {
     formatted_size?: string;
 }
 
+/** One occurrence of a planned payment: paid when it has a transaction, skipped when `skipped_at` is set. */
 export interface Payment {
     id: number;
     user_id: number;
     account_id: number;
     category_id: number;
-    recurring_payment_id: number | null;
+    recurring_payment_id: number;
+    occurrence: number | null;
     type: 'income' | 'expense';
     amount: string;
     currency: string;
     description: string | null;
     due_date: string;
-    is_paid: boolean;
-    paid_at: string | null;
     transaction_id: number | null;
+    is_overridden: boolean;
+    skipped_at: string | null;
     created_at: string;
     updated_at: string;
-    deleted_at: string | null;
     account?: Account;
     category?: Category;
     recurring_payment?: RecurringPayment;
-    transaction?: Transaction;
+    transaction?: Transaction | null;
 }
 
 export interface PaginatedData<T> {

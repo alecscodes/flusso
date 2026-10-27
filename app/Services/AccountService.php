@@ -10,7 +10,8 @@ use Illuminate\Support\Facades\DB;
 class AccountService
 {
     public function __construct(
-        private CurrencyService $currencyService
+        private CurrencyService $currencyService,
+        private RecurringPaymentService $recurringPaymentService,
     ) {}
 
     public function getAccountsForUser(User $user): Collection
@@ -50,6 +51,10 @@ class AccountService
             'is_savings' => $data['is_savings'] ?? $account->is_savings,
         ]);
 
+        if ($account->wasChanged('currency')) {
+            $account->recurringPayments->each(fn ($rule) => $this->recurringPaymentService->sync($rule));
+        }
+
         return $account->fresh();
     }
 
@@ -62,7 +67,7 @@ class AccountService
     {
         DB::transaction(function () use ($account) {
             $account->recurringPayments()->update(['is_active' => false]);
-            $account->payments()->unpaid()->delete();
+            $account->payments()->pending()->delete();
             $account->delete();
         });
     }

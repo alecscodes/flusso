@@ -1,72 +1,103 @@
 <?php
 
-use App\Enums\IntervalType;
 use App\Models\Account;
 use App\Models\Category;
 use App\Models\RecurringPayment;
+use App\Models\Transaction;
 use App\Models\User;
 
 use function Pest\Laravel\actingAs;
 
-test('user can create a one-time planned recurring payment when start and end date are the same', function () {
+function ruleInput(User $user, array $overrides = []): array
+{
+    return [
+        'name' => 'Netflix',
+        'account_id' => Account::factory()->create(['user_id' => $user->id, 'currency' => 'EUR'])->id,
+        'category_id' => Category::factory()->create(['user_id' => $user->id, 'type' => 'expense'])->id,
+        'amount' => 15.99,
+        'interval_type' => 'months',
+        'interval_value' => 1,
+        'start_date' => now()->addDays(3)->toDateString(),
+        ...$overrides,
+    ];
+}
+
+test('a planned payment that runs once is a rule with a single installment', function () {
     $user = User::factory()->create();
-    $account = Account::factory()->create(['user_id' => $user->id]);
-    $category = Category::factory()->create(['user_id' => $user->id, 'type' => 'expense']);
-    $oneTimeDate = now()->addDays(10)->toDateString();
 
-    $response = actingAs($user)
-        ->post(route('recurring-payments.store'), [
-            'account_id' => $account->id,
-            'category_id' => $category->id,
-            'name' => 'One-time planned payment',
-            'amount' => 75.00,
-            'currency' => 'eur',
-            'interval_type' => IntervalType::Months->value,
-            'interval_value' => 1,
-            'start_date' => $oneTimeDate,
-            'end_date' => $oneTimeDate,
-            'is_active' => true,
-        ]);
+    actingAs($user)->from(route('payments.index'))
+        ->post(route('recurring-payments.store'), ruleInput($user, ['name' => 'Taxe', 'installments' => 1]))
+        ->assertRedirect(route('payments.index'));
 
-    $response->assertRedirect(route('recurring-payments.index'));
+    $rule = RecurringPayment::where('name', 'Taxe')->first();
 
-    $recurringPayment = RecurringPayment::where('user_id', $user->id)->where('name', 'One-time planned payment')->first();
-    expect($recurringPayment)->not->toBeNull()
-        ->and($recurringPayment->start_date->toDateString())->toBe($oneTimeDate)
-        ->and($recurringPayment->end_date->toDateString())->toBe($oneTimeDate)
-        ->and($recurringPayment->payments()->count())->toBe(1);
+    expect($rule)->installments->toBe(1)->end_date->toBeNull()->currency->toBe('EUR')
+        ->and($rule->payments()->count())->toBe(1)
+        ->and($rule->payments()->first())->occurrence->toBe(0);
 });
 
-test('user can update a recurring payment to one-time planned when start and end date are the same', function () {
+test('a repeating planned payment is generated a year ahead', function () {
     $user = User::factory()->create();
-    $account = Account::factory()->create(['user_id' => $user->id]);
-    $category = Category::factory()->create(['user_id' => $user->id, 'type' => 'expense']);
-    $recurringPayment = RecurringPayment::factory()->create([
-        'user_id' => $user->id,
-        'account_id' => $account->id,
-        'category_id' => $category->id,
-        'start_date' => now()->addDays(5),
-        'end_date' => now()->addMonths(2),
-    ]);
-    $oneTimeDate = now()->addDays(15)->toDateString();
 
-    $response = actingAs($user)
-        ->put(route('recurring-payments.update', $recurringPayment), [
-            'account_id' => $account->id,
-            'category_id' => $category->id,
-            'name' => $recurringPayment->name,
-            'amount' => $recurringPayment->amount,
-            'currency' => strtolower($recurringPayment->currency),
-            'interval_type' => $recurringPayment->interval_type->value,
-            'interval_value' => $recurringPayment->interval_value,
-            'start_date' => $oneTimeDate,
-            'end_date' => $oneTimeDate,
-            'is_active' => true,
-        ]);
+    actingAs($user)->post(route('recurring-payments.store'), ruleInput($user))->assertRedirect();
 
-    $response->assertRedirect(route('recurring-payments.index'));
+    expect(RecurringPayment::first()->payments()->count())->toBeGreaterThanOrEqual(12);
+});
 
-    $recurringPayment->refresh();
-    expect($recurringPayment->start_date->toDateString())->toBe($oneTimeDate)
-        ->and($recurringPayment->end_date->toDateString())->toBe($oneTimeDate);
+test('it ends never, on a date or after a number of payments but not two at once', function () {
+    $user = User::factory()->create();
+
+    actingAs($user)->post(route('recurring-payments.store'), ruleInput($user, ['end_date' => now()->addMonths(6)->toDateString(), 'installments' => 3]))
+        ->assertSessionHasErrors('end_date');
+    actingAs($user)->post(route('recurring-payments.store'), ruleInput($user, ['end_date' => now()->subDay()->toDateString()]))
+        ->assertSessionHasErrors('end_date');
+
+    expect(RecurringPayment::count())->toBe(0);
+});
+
+test('editing a rule can clear its end', function () {
+    $user = User::factory()->create();
+    $rule = plannedPayment($user, ['installments' => 3]);
+
+    actingAs($user)->put(route('recurring-payments.update', $rule), [
+        'name' => 'Rent', 'account_id' => $rule->account_id, 'category_id' => $rule->category_id, 'amount' => 10,
+        'interval_type' => 'months', 'interval_value' => 1, 'start_date' => $rule->start_date->toDateString(),
+        'installments' => null, 'end_date' => null,
+    ])->assertRedirect();
+
+    expect($rule->fresh()->installments)->toBeNull()
+        ->and($rule->payments()->count())->toBeGreaterThanOrEqual(12);
+});
+
+test('the currency cannot be set by the client and accounts and categories must be mine', function () {
+    $user = User::factory()->create();
+    $stranger = User::factory()->create();
+    $foreignAccount = Account::factory()->create(['user_id' => $stranger->id]);
+    $foreignCategory = Category::factory()->create(['user_id' => $stranger->id]);
+
+    actingAs($user)->post(route('recurring-payments.store'), ruleInput($user, ['account_id' => $foreignAccount->id, 'category_id' => $foreignCategory->id]))
+        ->assertSessionHasErrors(['account_id', 'category_id']);
+
+    actingAs($user)->post(route('recurring-payments.store'), ruleInput($user, ['currency' => 'USD']))->assertRedirect();
+    expect(RecurringPayment::first()->currency)->toBe('EUR');
+});
+
+test('a rule can use an income category', function () {
+    $user = User::factory()->create();
+    $salary = Category::factory()->create(['user_id' => $user->id, 'type' => 'income']);
+
+    actingAs($user)->post(route('recurring-payments.store'), ruleInput($user, ['category_id' => $salary->id, 'installments' => 1]))->assertRedirect();
+
+    expect(RecurringPayment::first()->payments()->first()->type->value)->toBe('income');
+});
+
+test('deleting a transaction booked by a rule leaves the rule alone', function () {
+    $user = User::factory()->create();
+    $rule = plannedPayment($user, ['installments' => 1]);
+    actingAs($user)->patch(route('payments.mark-paid', $rule->payments()->first()))->assertRedirect();
+
+    actingAs($user)->delete(route('transactions.destroy', Transaction::first()))->assertRedirect();
+
+    expect(RecurringPayment::find($rule->id))->not->toBeNull()
+        ->and($rule->fresh(['payments', 'account'])->status)->toBe('active');
 });

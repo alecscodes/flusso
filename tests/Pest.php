@@ -1,5 +1,10 @@
 <?php
 
+use App\Models\Account;
+use App\Models\Category;
+use App\Models\RecurringPayment;
+use App\Models\User;
+use App\Services\RecurringPaymentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -51,4 +56,25 @@ expect()->extend('toBeOne', function () {
 function something()
 {
     // ..
+}
+
+/**
+ * A planned payment (rule) with its occurrences generated, on a fresh EUR account unless given one.
+ *
+ * @param  array<string, mixed>  $overrides
+ */
+function plannedPayment(User $user, array $overrides = [], ?Account $account = null): RecurringPayment
+{
+    $account ??= Account::factory()->create(['user_id' => $user->id, 'currency' => 'EUR', 'balance' => 1000]);
+
+    return app(RecurringPaymentService::class)->createRecurringPayment($user, [
+        'name' => 'Rent',
+        'account_id' => $account->id,
+        'category_id' => Category::factory()->create(['user_id' => $user->id, 'type' => 'expense'])->id,
+        'amount' => 10,
+        'interval_type' => 'months',
+        'interval_value' => 1,
+        'start_date' => now()->toDateString(),
+        ...$overrides,
+    ]);
 }

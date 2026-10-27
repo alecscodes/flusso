@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\PaymentStoreRequest;
+use App\Enums\PaymentType;
+use App\Http\Requests\MarkPaymentPaidRequest;
+use App\Http\Requests\PaymentUpdateRequest;
 use App\Models\Payment;
 use App\Services\AccountService;
+use App\Services\CategoryService;
 use App\Services\CurrencyService;
 use App\Services\PaymentService;
 use App\Support\FlashToast;
@@ -18,6 +21,7 @@ class PaymentController extends Controller
     public function __construct(
         private PaymentService $paymentService,
         private AccountService $accountService,
+        private CategoryService $categoryService,
         private CurrencyService $currencyService
     ) {}
 
@@ -26,88 +30,103 @@ class PaymentController extends Controller
         $this->authorize('viewAny', Payment::class);
 
         $user = $request->user();
-
-        $this->paymentService->generateAllPaymentsForUser($user);
-
         $period = $user->getFinancialPeriod();
-        $paymentSummary = $this->paymentService->getPaymentSummaryForPeriod(
+        $overview = $this->paymentService->getOverview($user);
+        $summary = $this->paymentService->getPaymentSummaryForPeriod($user, $period['start'], $period['end']);
+
+        $toPay = fn ($payments) => $this->currencyService->sumInPrimaryCurrency(
+            $payments->filter(fn (Payment $payment) => $payment->isPending() && $payment->type === PaymentType::Expense),
+            'amount',
+            'currency',
             $user,
-            $period['start'],
-            $period['end']
         );
 
-        // Get totals from services
         $availableBalance = $this->accountService->getTotalBalanceInPrimaryCurrency($user);
-        $totalBalance = $this->accountService->getFullBalanceInPrimaryCurrency($user);
-        $paymentSummary['balance_after_planned'] = $availableBalance - $paymentSummary['total_due'];
-
-        $overduePayments = $this->paymentService->getOverduePayments($user);
-        $overdueTotal = $this->currencyService->sumInPrimaryCurrency($overduePayments, 'amount', 'currency', $user);
-
-        $upcomingPayments = $this->paymentService->getUpcomingPayments($user);
-        $upcomingTotal = $this->currencyService->sumInPrimaryCurrency($upcomingPayments, 'amount', 'currency', $user);
-
-        // Get monthly totals from service
-        $monthlyTotals = $this->paymentService->getMonthlyTotals($user);
+        $upcoming = $overview['period']->concat($overview['later']);
 
         return Inertia::render('Payments/Index', [
-            'payments' => $this->paymentService->getPaymentsForUser($user),
-            'overduePayments' => $overduePayments,
-            'upcomingPayments' => $upcomingPayments,
-            'monthlyTotals' => $monthlyTotals,
+            'overduePayments' => $overview['overdue'],
+            'periodPayments' => $overview['period'],
+            'laterPayments' => $overview['later'],
+            'monthlyTotals' => $overview['monthly_totals'],
+            'accounts' => $this->accountService->getAccountsForUser($user),
+            'categories' => $this->categoryService->getCategoriesForUser($user),
             'totals' => [
                 'available_balance' => $availableBalance,
-                'total_balance' => $totalBalance,
-                'overdue_amount' => $overdueTotal,
-                'upcoming_amount' => $upcomingTotal,
-                'total_due_this_period' => $paymentSummary['total_due'],
-                'balance_after_planned' => $paymentSummary['balance_after_planned'],
-                'primary_currency' => $paymentSummary['primary_currency'],
+                'overdue_amount' => $toPay($overview['overdue']),
+                'overdue_count' => $overview['overdue']->count(),
+                'upcoming_amount' => $toPay($upcoming),
+                'upcoming_count' => $upcoming->filter->isPending()->count(),
+                'period_amount' => $toPay($overview['period']),
+                'balance_after_planned' => $availableBalance - $summary['total_due'],
+                'primary_currency' => $summary['primary_currency'],
             ],
         ]);
     }
 
-    public function store(PaymentStoreRequest $request): RedirectResponse
+    public function update(PaymentUpdateRequest $request, Payment $payment): RedirectResponse
     {
-        $this->authorize('create', Payment::class);
+        $this->authorize('update', $payment);
 
-        $this->paymentService->createManualPayment($request->user(), $request->validated());
+        $this->paymentService->updatePayment($payment, $request->validated());
 
-        FlashToast::success('Payment created successfully.');
+        FlashToast::success('Payment updated.');
+
+        return redirect()->back();
+    }
+
+    public function destroy(Payment $payment): RedirectResponse
+    {
+        $this->authorize('delete', $payment);
+
+        $this->paymentService->deletePayment($payment);
+
+        FlashToast::success('Planned payment deleted.');
 
         return redirect()->route('payments.index');
     }
 
-    public function markPaid(Request $request, Payment $payment): RedirectResponse
+    public function skip(Payment $payment): RedirectResponse
     {
         $this->authorize('update', $payment);
 
-        try {
-            $this->paymentService->markAsPaid($payment, now());
+        $this->paymentService->skip($payment);
 
-            FlashToast::success('Payment marked as paid.');
+        FlashToast::success('Payment skipped.');
 
-            return redirect()->back();
-        } catch (\Exception $e) {
-            return redirect()->back()
-                ->withErrors(['error' => $e->getMessage()]);
-        }
+        return redirect()->back();
     }
 
-    public function markUnpaid(Request $request, Payment $payment): RedirectResponse
+    public function unskip(Payment $payment): RedirectResponse
     {
         $this->authorize('update', $payment);
 
-        try {
-            $deleteTransaction = $request->boolean('delete_transaction', true);
-            $this->paymentService->markAsUnpaid($payment, $deleteTransaction);
+        $this->paymentService->unskip($payment);
 
-            FlashToast::success('Payment marked as unpaid.');
+        FlashToast::success('Payment restored.');
 
-            return redirect()->back();
-        } catch (\Exception $e) {
-            return redirect()->back()
-                ->withErrors(['error' => $e->getMessage()]);
-        }
+        return redirect()->back();
+    }
+
+    public function markPaid(MarkPaymentPaidRequest $request, Payment $payment): RedirectResponse
+    {
+        $this->authorize('update', $payment);
+
+        $this->paymentService->markAsPaid($payment, $request->validated());
+
+        FlashToast::success('Payment marked as paid.');
+
+        return redirect()->back();
+    }
+
+    public function markUnpaid(Payment $payment): RedirectResponse
+    {
+        $this->authorize('update', $payment);
+
+        $this->paymentService->markAsUnpaid($payment);
+
+        FlashToast::success('Payment marked as unpaid.');
+
+        return redirect()->back();
     }
 }

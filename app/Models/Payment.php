@@ -5,39 +5,55 @@ namespace App\Models;
 use App\Casts\DateOnly;
 use App\Enums\PaymentType;
 use Database\Factories\PaymentFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * One occurrence of a planned payment. It is paid when it links a transaction,
+ * skipped when `skipped_at` is set, and `is_overridden` once the owner edited it
+ * by hand (the schedule then leaves its amount, date and account alone).
+ */
 class Payment extends Model
 {
     /** @use HasFactory<PaymentFactory> */
-    use HasFactory, SoftDeletes;
+    use HasFactory;
+
+    protected static function booted(): void
+    {
+        static::saving(function (Payment $payment) {
+            if (! $payment->exists || $payment->isDirty('account_id')) {
+                $payment->currency = Account::withTrashed()->findOrFail($payment->account_id)->currency;
+            }
+        });
+    }
 
     protected $fillable = [
         'user_id',
         'account_id',
         'category_id',
         'recurring_payment_id',
+        'occurrence',
         'type',
         'amount',
         'currency',
         'description',
         'due_date',
-        'is_paid',
-        'paid_at',
         'transaction_id',
+        'is_overridden',
+        'skipped_at',
     ];
 
     protected function casts(): array
     {
         return [
             'type' => PaymentType::class,
+            'occurrence' => 'integer',
             'amount' => 'decimal:2',
             'due_date' => DateOnly::class,
-            'is_paid' => 'boolean',
-            'paid_at' => 'datetime',
+            'is_overridden' => 'boolean',
+            'skipped_at' => 'datetime',
         ];
     }
 
@@ -58,7 +74,7 @@ class Payment extends Model
 
     public function recurringPayment(): BelongsTo
     {
-        return $this->belongsTo(RecurringPayment::class);
+        return $this->belongsTo(RecurringPayment::class)->withTrashed();
     }
 
     public function transaction(): BelongsTo
@@ -66,19 +82,37 @@ class Payment extends Model
         return $this->belongsTo(Transaction::class);
     }
 
-    public function scopePaid($query)
+    public function scopePaid(Builder $query): Builder
     {
-        return $query->where('is_paid', true);
+        return $query->whereNotNull('transaction_id');
     }
 
-    public function scopeUnpaid($query)
+    public function scopeUnpaid(Builder $query): Builder
     {
-        return $query->where('is_paid', false);
+        return $query->whereNull('transaction_id');
     }
 
-    public function scopeForRecurringPayment($query, int $recurringPaymentId)
+    /**
+     * Still owed: neither paid nor skipped.
+     */
+    public function scopePending(Builder $query): Builder
     {
-        return $query->where('recurring_payment_id', $recurringPaymentId);
+        return $query->whereNull('transaction_id')->whereNull('skipped_at');
+    }
+
+    /**
+     * What may show up in lists: the account is not archived and the rule not deleted.
+     */
+    public function scopeVisible(Builder $query): Builder
+    {
+        return $query
+            ->whereIn('account_id', Account::query()->select('id'))
+            ->whereIn('recurring_payment_id', RecurringPayment::query()->select('id'));
+    }
+
+    public function scopeOverdue(Builder $query): Builder
+    {
+        return $query->visible()->pending()->where('due_date', '<', now()->toDateString());
     }
 
     public function scopeForUser($query, int $userId)
@@ -86,38 +120,18 @@ class Payment extends Model
         return $query->where('user_id', $userId);
     }
 
-    public function scopeDueBetween($query, $startDate, $endDate)
+    public function scopeDueBetween(Builder $query, string $startDate, string $endDate): Builder
     {
-        return $query->whereBetween('due_date', [$startDate, $endDate]);
-    }
-
-    public function scopeOverdue($query)
-    {
-        return $query->unpaid()->where('due_date', '<', now()->toDateString());
-    }
-
-    public function scopeUpcoming($query)
-    {
-        return $query->unpaid()->where('due_date', '>=', now()->toDateString());
+        return $query->where('due_date', '>=', $startDate)->where('due_date', '<=', $endDate);
     }
 
     public function isPaid(): bool
     {
-        return $this->is_paid;
+        return $this->transaction_id !== null;
     }
 
-    public function isOverdue(): bool
+    public function isPending(): bool
     {
-        return ! $this->is_paid && $this->due_date->lt(now()->startOfDay());
-    }
-
-    public function isIncome(): bool
-    {
-        return $this->type === PaymentType::Income;
-    }
-
-    public function isExpense(): bool
-    {
-        return $this->type === PaymentType::Expense;
+        return $this->transaction_id === null && $this->skipped_at === null;
     }
 }

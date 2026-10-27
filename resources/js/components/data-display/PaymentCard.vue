@@ -2,10 +2,15 @@
 import AmountDisplay from '@/components/data-display/AmountDisplay.vue';
 import CategoryBadge from '@/components/data-display/CategoryBadge.vue';
 import { Badge, Button } from '@/components/ui';
-import { useDate } from '@/composables';
+import {
+    paymentName,
+    runsOnce,
+    useDate,
+    usePaymentActions,
+} from '@/composables';
 import { cn } from '@/lib/utils';
 import type { Payment } from '@/types';
-import { Calendar, Check, Clock, RefreshCw } from '@lucide/vue';
+import { Calendar, Check, Clock, RefreshCw, SkipForward } from '@lucide/vue';
 import { computed } from 'vue';
 
 interface Props {
@@ -15,16 +20,16 @@ interface Props {
 
 const props = defineProps<Props>();
 
-const emit = defineEmits<{
-    markPaid: [payment: Payment];
-    markUnpaid: [payment: Payment];
-}>();
-
+const actions = usePaymentActions();
 const { formatDate, formatRelative, isOverdue, isDueToday, isDueSoon } =
     useDate();
 
+const isPaid = computed(() => props.payment.transaction_id !== null);
+const isSkipped = computed(() => props.payment.skipped_at !== null);
+
 const status = computed(() => {
-    if (props.payment.is_paid) return 'paid';
+    if (isPaid.value) return 'paid';
+    if (isSkipped.value) return 'skipped';
     if (isOverdue(props.payment.due_date)) return 'overdue';
     if (isDueToday(props.payment.due_date)) return 'today';
     if (isDueSoon(props.payment.due_date, 3)) return 'soon';
@@ -36,6 +41,11 @@ const statusConfig = {
         badge: 'success' as const,
         label: 'Paid',
         icon: Check,
+    },
+    skipped: {
+        badge: 'secondary' as const,
+        label: 'Skipped',
+        icon: SkipForward,
     },
     overdue: {
         badge: 'destructive' as const,
@@ -59,10 +69,18 @@ const statusConfig = {
     },
 };
 
+/** What was actually paid, when the owner paid another amount. */
+const shownAmount = computed(
+    () => props.payment.transaction?.amount ?? props.payment.amount,
+);
+
+const name = computed(() => paymentName(props.payment));
+
 const cardClasses = computed(() =>
     cn(
         'group relative min-w-0 overflow-hidden rounded-2xl border bg-card p-4 transition-all duration-300 sm:p-5',
-        props.payment.is_paid
+        isSkipped.value && 'opacity-60',
+        isPaid.value
             ? 'border-emerald-200 dark:border-emerald-900/50'
             : status.value === 'overdue'
               ? 'border-rose-200 dark:border-rose-900/50'
@@ -81,7 +99,7 @@ const cardClasses = computed(() =>
                 <div
                     :class="[
                         'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
-                        payment.is_paid
+                        isPaid
                             ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                             : status === 'overdue'
                               ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
@@ -96,17 +114,9 @@ const cardClasses = computed(() =>
                 <div class="min-w-0 flex-1">
                     <h3
                         class="truncate font-semibold text-foreground"
-                        :title="
-                            payment.description ||
-                            payment.recurring_payment?.name ||
-                            'Payment'
-                        "
+                        :title="name"
                     >
-                        {{
-                            payment.description ||
-                            payment.recurring_payment?.name ||
-                            'Payment'
-                        }}
+                        {{ name }}
                     </h3>
                     <div
                         class="mt-0.5 flex flex-wrap items-center gap-x-1 gap-y-0 text-sm text-muted-foreground"
@@ -127,8 +137,8 @@ const cardClasses = computed(() =>
 
         <div class="mt-4 flex flex-wrap items-center gap-3 gap-y-1">
             <AmountDisplay
-                :amount="payment.amount"
-                :currency="payment.currency"
+                :amount="shownAmount"
+                :currency="payment.transaction?.currency ?? payment.currency"
                 :type="payment.type"
                 size="lg"
                 class="shrink-0"
@@ -155,26 +165,62 @@ const cardClasses = computed(() =>
             From: {{ payment.account.name }}
         </div>
 
-        <div class="mt-4 flex min-w-0 gap-2">
-            <Button
-                v-if="!payment.is_paid"
-                variant="success"
-                size="sm"
-                class="flex-1"
-                @click="emit('markPaid', payment)"
-            >
-                <Check class="h-4 w-4" />
-                Mark as Paid
-            </Button>
-            <Button
-                v-else
-                variant="outline"
-                size="sm"
-                class="flex-1"
-                @click="emit('markUnpaid', payment)"
-            >
-                Undo Payment
-            </Button>
+        <div class="mt-4 flex min-w-0 flex-wrap gap-2">
+            <template v-if="isPaid">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    class="flex-1"
+                    @click="actions.markUnpaid(payment)"
+                >
+                    Undo Payment
+                </Button>
+            </template>
+            <template v-else-if="isSkipped">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    class="flex-1"
+                    @click="actions.unskip(payment)"
+                >
+                    Restore
+                </Button>
+            </template>
+            <template v-else>
+                <Button
+                    variant="success"
+                    size="sm"
+                    class="flex-1"
+                    @click="actions.pay(payment)"
+                >
+                    <Check class="h-4 w-4" />
+                    Mark as Paid
+                </Button>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    @click="actions.edit(payment)"
+                >
+                    Edit
+                </Button>
+                <Button
+                    v-if="runsOnce(payment)"
+                    variant="ghost"
+                    size="sm"
+                    class="text-destructive hover:text-destructive"
+                    @click="actions.remove(payment)"
+                >
+                    Delete
+                </Button>
+                <Button
+                    v-else
+                    variant="ghost"
+                    size="sm"
+                    @click="actions.skip(payment)"
+                >
+                    Skip
+                </Button>
+            </template>
         </div>
     </div>
 </template>

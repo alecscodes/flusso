@@ -259,7 +259,7 @@ test('archiving an account keeps its history and every other balance', function 
     ]);
 
     $rule = RecurringPayment::factory()->create(['user_id' => $user->id, 'account_id' => $archived->id, 'is_active' => true]);
-    $occurrence = Payment::factory()->create(['user_id' => $user->id, 'account_id' => $archived->id, 'recurring_payment_id' => $rule->id, 'is_paid' => false]);
+    $occurrence = Payment::factory()->create(['user_id' => $user->id, 'account_id' => $archived->id, 'recurring_payment_id' => $rule->id]);
 
     app(AccountService::class)->deleteAccount($archived);
 

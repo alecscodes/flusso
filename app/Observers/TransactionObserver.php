@@ -4,6 +4,7 @@ namespace App\Observers;
 
 use App\Enums\TransactionType;
 use App\Models\Account;
+use App\Models\Payment;
 use App\Models\Transaction;
 use RuntimeException;
 
@@ -50,8 +51,13 @@ class TransactionObserver
         ]);
     }
 
+    /**
+     * Fires for soft and force deletes: a payment whose transaction is gone is open again.
+     */
     public function deleted(Transaction $transaction): void
     {
+        Payment::where('transaction_id', $transaction->id)->update(['transaction_id' => null]);
+
         $this->recalculate($transaction);
     }
 
