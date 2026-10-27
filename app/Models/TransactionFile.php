@@ -23,6 +23,7 @@ class TransactionFile extends Model
         ];
     }
 
+    /** @return BelongsTo<Transaction, $this> */
     public function transaction(): BelongsTo
     {
         return $this->belongsTo(Transaction::class);

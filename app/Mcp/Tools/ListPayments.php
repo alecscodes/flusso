@@ -31,7 +31,7 @@ class ListPayments extends FlussoTool
         $payments = match ($input['scope']) {
             'overdue' => $this->payments->getOverduePayments($user),
             'upcoming' => $this->payments->getUpcomingPayments($user, now()->addDays($input['days'] ?? 30)),
-            'range' => $this->payments->getPaymentsBetween($user, date('Y-m-d', strtotime($input['date_from'])), date('Y-m-d', strtotime($input['date_to']))),
+            default => $this->payments->getPaymentsBetween($user, date('Y-m-d', strtotime($input['date_from'])), date('Y-m-d', strtotime($input['date_to']))),
         };
 
         return $this->json($payments->map(fn ($payment) => $this->payment($payment))->all());

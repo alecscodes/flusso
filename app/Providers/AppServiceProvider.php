@@ -72,6 +72,6 @@ class AppServiceProvider extends ServiceProvider
             'state' => $parameters['request']->query('state'),
             'csrfToken' => csrf_token(),
             'authorizeUrl' => route('passport.authorizations.approve'),
-        ]));
+        ])->toResponse(request()));
     }
 }

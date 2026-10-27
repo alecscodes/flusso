@@ -12,7 +12,6 @@ class DashboardService
         private TransactionService $transactionService,
         private PaymentService $paymentService,
         private AccountService $accountService,
-        private CurrencyService $currencyService
     ) {}
 
     /**

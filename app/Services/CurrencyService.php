@@ -204,7 +204,7 @@ class CurrencyService
             ->orderByDesc('balance')
             ->first();
 
-        $primaryCurrency = $accountWithHighestBalance?->currency ?? 'EUR';
+        $primaryCurrency = $accountWithHighestBalance->currency ?? 'EUR';
         $this->primaryCurrencyCache = $primaryCurrency;
 
         return $primaryCurrency;

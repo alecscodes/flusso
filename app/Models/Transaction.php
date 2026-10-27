@@ -22,6 +22,8 @@ use Illuminate\Support\Facades\Storage;
  * A transfer is ONE row: `account_id` is the source (amount in its currency),
  * `to_account_id` the destination and `to_amount` what arrived there (in the
  * destination's currency).
+ *
+ * @property string|null $to_amount
  */
 #[ObservedBy(TransactionObserver::class)]
 class Transaction extends Model
@@ -66,36 +68,43 @@ class Transaction extends Model
         });
     }
 
+    /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
+    /** @return BelongsTo<Account, $this> */
     public function account(): BelongsTo
     {
         return $this->belongsTo(Account::class)->withTrashed();
     }
 
+    /** @return BelongsTo<Account, $this> */
     public function toAccount(): BelongsTo
     {
         return $this->belongsTo(Account::class, 'to_account_id')->withTrashed();
     }
 
+    /** @return BelongsTo<Category, $this> */
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
     }
 
+    /** @return BelongsTo<RecurringPayment, $this> */
     public function recurringPayment(): BelongsTo
     {
         return $this->belongsTo(RecurringPayment::class);
     }
 
+    /** @return HasOne<Payment, $this> */
     public function payment(): HasOne
     {
         return $this->hasOne(Payment::class);
     }
 
+    /** @return HasMany<TransactionFile, $this> */
     public function files(): HasMany
     {
         return $this->hasMany(TransactionFile::class);
@@ -144,6 +153,7 @@ class Transaction extends Model
     /**
      * The transaction list filters, shared by the Transactions page and the MCP search.
      *
+     * @param  Builder<Transaction>  $query
      * @param  array{search?: string|null, account_id?: int|string|null, category_id?: int|string|null, type?: string|null, date_start?: string|null, date_end?: string|null}  $filters
      */
     public function scopeFilter(Builder $query, array $filters): Builder
@@ -156,8 +166,8 @@ class Transaction extends Model
                     $q->orWhere('amount', $filters['search'])->orWhere('to_amount', $filters['search']);
                 }
             }))
-            ->when(filled($filters['account_id'] ?? null), fn (Builder $q) => $q->forAccount((int) $filters['account_id']))
-            ->when(filled($filters['category_id'] ?? null), fn (Builder $q) => $q->forCategory((int) $filters['category_id']))
+            ->when(filled($filters['account_id'] ?? null), fn ($q) => $q->forAccount((int) $filters['account_id']))
+            ->when(filled($filters['category_id'] ?? null), fn ($q) => $q->forCategory((int) $filters['category_id']))
             ->when(in_array($filters['type'] ?? null, array_column(TransactionType::cases(), 'value'), true), fn (Builder $q) => $q->where('type', $filters['type']))
             ->inPeriod($filters['date_start'] ?? null, $filters['date_end'] ?? null);
     }

@@ -37,6 +37,7 @@ class Account extends Model
     /**
      * Get the user that owns the account.
      */
+    /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
@@ -45,6 +46,7 @@ class Account extends Model
     /**
      * Get the recurring payments for the account.
      */
+    /** @return HasMany<RecurringPayment, $this> */
     public function recurringPayments(): HasMany
     {
         return $this->hasMany(RecurringPayment::class);
@@ -53,6 +55,7 @@ class Account extends Model
     /**
      * Get the payments for the account.
      */
+    /** @return HasMany<Payment, $this> */
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);

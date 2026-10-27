@@ -216,7 +216,7 @@ return new class extends Migration
     /**
      * The occurrence number of each payment when it sits on the schedule, else null.
      *
-     * @return Collection<int, int|null>
+     * @return Collection<array-key, int|float|null>
      */
     private function number(RecurringPayment $rule, Collection $payments): Collection
     {

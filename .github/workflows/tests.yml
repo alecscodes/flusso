@@ -56,5 +56,8 @@ jobs:
       - name: Check Types
         run: npm run types:check
 
+      - name: Static Analysis
+        run: composer analyse
+
       - name: Tests
         run: php artisan test

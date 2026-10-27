@@ -9,11 +9,16 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * One occurrence of a planned payment. It is paid when it links a transaction,
  * skipped when `skipped_at` is set, and `is_overridden` once the owner edited it
  * by hand (the schedule then leaves its amount, date and account alone).
+ *
+ * @property int|null $occurrence
+ * @property bool $is_overridden
+ * @property Carbon|null $skipped_at
  */
 class Payment extends Model
 {
@@ -57,26 +62,31 @@ class Payment extends Model
         ];
     }
 
+    /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
+    /** @return BelongsTo<Account, $this> */
     public function account(): BelongsTo
     {
         return $this->belongsTo(Account::class)->withTrashed();
     }
 
+    /** @return BelongsTo<Category, $this> */
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
     }
 
+    /** @return BelongsTo<RecurringPayment, $this> */
     public function recurringPayment(): BelongsTo
     {
         return $this->belongsTo(RecurringPayment::class)->withTrashed();
     }
 
+    /** @return BelongsTo<Transaction, $this> */
     public function transaction(): BelongsTo
     {
         return $this->belongsTo(Transaction::class);
@@ -110,6 +120,10 @@ class Payment extends Model
             ->whereIn('recurring_payment_id', RecurringPayment::query()->select('id'));
     }
 
+    /**
+     * @param  Builder<Payment>  $query
+     * @return Builder<Payment>
+     */
     public function scopeOverdue(Builder $query): Builder
     {
         return $query->visible()->pending()->where('due_date', '<', now()->toDateString());

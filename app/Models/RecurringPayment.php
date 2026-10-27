@@ -4,7 +4,7 @@ namespace App\Models;
 
 use App\Casts\DateOnly;
 use App\Enums\IntervalType;
-use App\Support\CalendarDate;
+use Carbon\CarbonImmutable;
 use Database\Factories\RecurringPaymentFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -65,26 +65,31 @@ class RecurringPayment extends Model
         ];
     }
 
+    /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
+    /** @return BelongsTo<Account, $this> */
     public function account(): BelongsTo
     {
         return $this->belongsTo(Account::class)->withTrashed();
     }
 
+    /** @return BelongsTo<Category, $this> */
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class)->withTrashed();
     }
 
+    /** @return HasMany<Transaction, $this> */
     public function transactions(): HasMany
     {
         return $this->hasMany(Transaction::class);
     }
 
+    /** @return HasMany<Payment, $this> */
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);
@@ -98,7 +103,7 @@ class RecurringPayment extends Model
     /**
      * The date of occurrence n, always counted from the start date so month ends never drift.
      */
-    public function dateFor(int $n): CalendarDate
+    public function dateFor(int $n): CarbonImmutable
     {
         $steps = $n * max(1, (int) $this->interval_value);
 
@@ -114,7 +119,7 @@ class RecurringPayment extends Model
      * The occurrences that should exist, by number. Rules without an installment
      * count are scheduled a year ahead; the daily sync extends them.
      *
-     * @return array<int, CalendarDate>
+     * @return array<int, CarbonImmutable>
      */
     public function targetOccurrences(): array
     {

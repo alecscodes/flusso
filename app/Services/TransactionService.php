@@ -57,7 +57,7 @@ class TransactionService
                 'recurring_payment_id' => $data['recurring_payment_id'] ?? null,
             ]);
 
-            if (isset($data['files']) && is_array($data['files'])) {
+            if (isset($data['files'])) {
                 $this->fileUploadService->handleTransactionFiles($transaction, $data['files']);
             }
 
@@ -75,7 +75,7 @@ class TransactionService
         return DB::transaction(function () use ($transaction, $data) {
             $transaction->update($this->attributes($transaction->user, $data));
 
-            if (isset($data['files']) && is_array($data['files'])) {
+            if (isset($data['files'])) {
                 $this->fileUploadService->handleTransactionFiles($transaction, $data['files']);
             }
 
@@ -178,7 +178,7 @@ class TransactionService
                 'category' => $group->first()->category,
                 'total' => (float) $group->sum(fn (Transaction $transaction) => $transaction->currency === $primaryCurrency
                     ? $transaction->amount
-                    : $this->currencyService->convert($transaction->amount, $transaction->currency, $primaryCurrency) ?? 0),
+                    : $this->currencyService->convert((float) $transaction->amount, $transaction->currency, $primaryCurrency) ?? 0),
                 'count' => $group->count(),
             ])
             ->sortByDesc('total')

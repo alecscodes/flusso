@@ -9,7 +9,6 @@ use App\Models\RecurringPayment;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Auth\AuthenticationException;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Validator;
 use Laravel\Mcp\Request;
@@ -176,7 +175,7 @@ abstract class FlussoTool extends Tool
     /**
      * @return array{id: int, name: string}|null
      */
-    protected function ref(?Model $model): ?array
+    protected function ref(Account|Category|null $model): ?array
     {
         return $model === null ? null : ['id' => $model->getKey(), 'name' => $model->name];
     }
