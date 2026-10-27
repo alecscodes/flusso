@@ -74,8 +74,9 @@ return Application::configure(basePath: dirname(__DIR__))
                 return null;
             }
 
-            // Handle non-storage paths - only process 404 exceptions
-            if (! ($e instanceof NotFoundHttpException)) {
+            // Only a path that matches no route is probing; a 404 from a matched route
+            // (e.g. a payment deleted in another tab) must never ban the owner.
+            if (! ($e instanceof NotFoundHttpException) || $request->route() !== null) {
                 return null;
             }
 

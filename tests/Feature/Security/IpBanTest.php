@@ -315,3 +315,13 @@ test('storage paths with existing files do not trigger IP bans', function () {
         }
     }
 });
+
+test('a 404 from a matched route does not ban the signed-in owner', function () {
+    $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.60']);
+
+    $this->actingAs(User::factory()->create())
+        ->patch('/payments/999999/mark-paid')
+        ->assertNotFound();
+
+    expect(DB::table('banned_ips')->where('ip', '203.0.113.60')->exists())->toBeFalse();
+});
