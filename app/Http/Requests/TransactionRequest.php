@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Enums\TransactionType;
 use App\Models\Transaction;
+use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -24,17 +25,28 @@ class TransactionRequest extends FormRequest
 
     public function rules(): array
     {
+        return self::rulesFor($this->user(), $this->all());
+    }
+
+    /**
+     * Also used by the MCP tools, so both entry points validate identically.
+     *
+     * @param  array<string, mixed>  $input
+     * @return array<string, mixed>
+     */
+    public static function rulesFor(User $user, array $input): array
+    {
         $ownedAccount = Rule::exists('accounts', 'id')
-            ->where('user_id', $this->user()->id)
+            ->where('user_id', $user->id)
             ->whereNull('deleted_at');
 
         $ownedCategory = Rule::exists('categories', 'id')
-            ->where('user_id', $this->user()->id)
+            ->where('user_id', $user->id)
             ->whereNull('deleted_at');
 
         // A category must be of the same kind as the transaction (income/expense).
-        if (in_array($this->input('type'), [TransactionType::Income->value, TransactionType::Expense->value], true)) {
-            $ownedCategory->where('type', $this->input('type'));
+        if (in_array($input['type'] ?? null, [TransactionType::Income->value, TransactionType::Expense->value], true)) {
+            $ownedCategory->where('type', $input['type']);
         }
 
         return [

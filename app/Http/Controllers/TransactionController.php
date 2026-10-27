@@ -42,7 +42,7 @@ class TransactionController extends Controller
             ->orderBy('date', 'desc')
             ->orderBy('created_at', 'desc');
 
-        $this->applyTransactionFilters($query, $request);
+        $query->filter($request->only(['search', 'account_id', 'category_id', 'type', 'date_start', 'date_end']));
 
         $hasDateFilters = $request->filled('date_start') || $request->filled('date_end');
 
@@ -61,36 +61,6 @@ class TransactionController extends Controller
             'hasDateFilters' => $hasDateFilters,
             'primaryCurrency' => $this->currencyService->getPrimaryCurrency($user),
         ]);
-    }
-
-    private function applyTransactionFilters($query, Request $request): void
-    {
-        if ($request->filled('search')) {
-            $search = $request->string('search')->toString();
-
-            $query->where(function ($q) use ($search) {
-                $q->where('description', 'like', '%'.$search.'%');
-
-                if (is_numeric($search)) {
-                    $q->orWhere('amount', $search)->orWhere('to_amount', $search);
-                }
-            });
-        }
-
-        if ($request->filled('account_id')) {
-            $query->forAccount((int) $request->input('account_id'));
-        }
-
-        if ($request->filled('category_id')) {
-            $query->forCategory((int) $request->input('category_id'));
-        }
-
-        $type = $request->input('type');
-        if (is_string($type) && in_array($type, ['income', 'expense', 'transfer'], true)) {
-            $query->where('type', $type);
-        }
-
-        $query->inPeriod($request->input('date_start'), $request->input('date_end'));
     }
 
     public function store(TransactionRequest $request): RedirectResponse

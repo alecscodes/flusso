@@ -40,6 +40,14 @@ class PaymentService
     }
 
     /**
+     * Every payment due between two dates (inclusive), paid and skipped ones included.
+     */
+    public function getPaymentsBetween(User $user, string $from, string $to): Collection
+    {
+        return $user->payments()->visible()->dueBetween($from, $to)->with(self::RELATIONS)->orderBy('due_date')->orderBy('id')->get();
+    }
+
+    /**
      * The Payments page: what is overdue, what falls in the current financial
      * period (paid and skipped ones included, so they can be undone) and what is later.
      *

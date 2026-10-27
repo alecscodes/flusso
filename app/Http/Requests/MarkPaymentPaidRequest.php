@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -17,10 +18,20 @@ class MarkPaymentPaidRequest extends FormRequest
 
     public function rules(): array
     {
+        return self::rulesFor($this->user());
+    }
+
+    /**
+     * Also used by the MCP tools.
+     *
+     * @return array<string, mixed>
+     */
+    public static function rulesFor(User $user): array
+    {
         return [
             'amount' => ['nullable', 'numeric', 'min:0.01'],
             'date' => ['nullable', 'date'],
-            'account_id' => ['nullable', 'integer', Rule::exists('accounts', 'id')->where('user_id', $this->user()->id)->whereNull('deleted_at')],
+            'account_id' => ['nullable', 'integer', Rule::exists('accounts', 'id')->where('user_id', $user->id)->whereNull('deleted_at')],
         ];
     }
 }

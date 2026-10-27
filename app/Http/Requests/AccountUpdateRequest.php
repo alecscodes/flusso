@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Account;
 use App\Models\Transaction;
 use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -24,9 +25,19 @@ class AccountUpdateRequest extends FormRequest
      */
     public function rules(): array
     {
+        return self::rulesFor($this->route('account'));
+    }
+
+    /**
+     * Also used by the MCP tools.
+     *
+     * @return array<string, ValidationRule|array<mixed>|string>
+     */
+    public static function rulesFor(Account $account): array
+    {
         return [
             'name' => ['required', 'string', 'max:255'],
-            'currency' => ['required', 'string', 'size:3', 'uppercase', $this->currencyIsLocked(...)],
+            'currency' => ['required', 'string', 'size:3', 'uppercase', fn (string $attribute, mixed $value, Closure $fail) => self::currencyIsLocked($account, $value, $fail)],
             'balance' => ['nullable', 'numeric', 'min:0'],
             'is_savings' => ['sometimes', 'boolean'],
         ];
@@ -36,10 +47,8 @@ class AccountUpdateRequest extends FormRequest
      * Transactions are always in their account's currency, so once an account has
      * any (even deleted ones, which can be restored) its currency is fixed.
      */
-    private function currencyIsLocked(string $attribute, mixed $value, Closure $fail): void
+    private static function currencyIsLocked(Account $account, mixed $value, Closure $fail): void
     {
-        $account = $this->route('account');
-
         if ($value !== $account->currency && Transaction::withTrashed()->forAccount($account->id)->exists()) {
             $fail('The currency cannot be changed once the account has transactions.');
         }

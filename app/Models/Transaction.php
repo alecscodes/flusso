@@ -141,6 +141,27 @@ class Transaction extends Model
             ->when($endDate, fn (Builder $q) => $q->where('date', '<=', Date::parse($endDate)->toDateString()));
     }
 
+    /**
+     * The transaction list filters, shared by the Transactions page and the MCP search.
+     *
+     * @param  array{search?: string|null, account_id?: int|string|null, category_id?: int|string|null, type?: string|null, date_start?: string|null, date_end?: string|null}  $filters
+     */
+    public function scopeFilter(Builder $query, array $filters): Builder
+    {
+        return $query
+            ->when(is_string($filters['search'] ?? null) && $filters['search'] !== '', fn (Builder $q) => $q->where(function (Builder $q) use ($filters) {
+                $q->where('description', 'like', '%'.$filters['search'].'%');
+
+                if (is_numeric($filters['search'])) {
+                    $q->orWhere('amount', $filters['search'])->orWhere('to_amount', $filters['search']);
+                }
+            }))
+            ->when(filled($filters['account_id'] ?? null), fn (Builder $q) => $q->forAccount((int) $filters['account_id']))
+            ->when(filled($filters['category_id'] ?? null), fn (Builder $q) => $q->forCategory((int) $filters['category_id']))
+            ->when(in_array($filters['type'] ?? null, array_column(TransactionType::cases(), 'value'), true), fn (Builder $q) => $q->where('type', $filters['type']))
+            ->inPeriod($filters['date_start'] ?? null, $filters['date_end'] ?? null);
+    }
+
     public function scopeForUser($query, int $userId)
     {
         return $query->where('user_id', $userId);

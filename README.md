@@ -141,6 +141,22 @@ php artisan ip:unban --all
 
 You can also unban from **Settings → Banned IPs** in the dashboard.
 
+### 🤖 Connect Claude
+
+Flusso is an MCP server: Claude can read your balances and payments and book transactions for you.
+
+1. Claude → **Settings → Connectors → Add custom connector**
+2. URL: `https://your-domain/mcp`
+3. Sign in to Flusso and press **Approve**.
+
+Set `APP_URL` to the public https URL. The OAuth signing keys live in `storage/app/oauth`; create them once (and after every fresh volume) with:
+
+```bash
+mkdir -p storage/app/oauth && test -f storage/app/oauth/oauth-private.key || php artisan passport:keys --no-interaction
+```
+
+`/mcp`, `/oauth/*` and `/.well-known/*` are exempt from the bot blocker and the IP ban. Access tokens last 30 days, refresh tokens a year; revoke access by deleting rows in `oauth_access_tokens`.
+
 ---
 
 ## 🔧 Artisan Commands

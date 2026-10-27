@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class IpBanService
 {
@@ -14,6 +15,13 @@ class IpBanService
     private const int MAX_LOGIN_ATTEMPTS = 2;
 
     private const int BAN_DAYS = 90;
+
+    /**
+     * Paths used by the Claude connector (MCP and OAuth discovery/token calls). Its
+     * client has a library user agent and probes URLs that may not exist, so these
+     * are neither blocked as bots nor ever the reason for a ban.
+     */
+    public const array CONNECTOR_PATHS = ['mcp', 'mcp/*', 'oauth/*', '.well-known/*'];
 
     public function isBanned(Request $request): bool
     {
@@ -139,6 +147,10 @@ class IpBanService
 
     public function shouldBanPath(string $path): bool
     {
+        if (Str::is(self::CONNECTOR_PATHS, $path)) {
+            return false;
+        }
+
         $excludedPaths = ['assets', 'build'];
         $excludedExtensions = ['.js', '.css', '.map', '.ico', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.woff', '.woff2', '.ttf', '.eot'];
 

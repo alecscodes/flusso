@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Enums\IntervalType;
 use App\Models\RecurringPayment;
+use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -24,10 +25,20 @@ class RecurringPaymentRequest extends FormRequest
 
     public function rules(): array
     {
+        return self::rulesFor($this->user());
+    }
+
+    /**
+     * Also used by the MCP tools.
+     *
+     * @return array<string, mixed>
+     */
+    public static function rulesFor(User $user): array
+    {
         return [
             'name' => ['required', 'string', 'max:255'],
-            'account_id' => ['required', 'integer', Rule::exists('accounts', 'id')->where('user_id', $this->user()->id)->whereNull('deleted_at')],
-            'category_id' => ['required', 'integer', Rule::exists('categories', 'id')->where('user_id', $this->user()->id)->whereNull('deleted_at')],
+            'account_id' => ['required', 'integer', Rule::exists('accounts', 'id')->where('user_id', $user->id)->whereNull('deleted_at')],
+            'category_id' => ['required', 'integer', Rule::exists('categories', 'id')->where('user_id', $user->id)->whereNull('deleted_at')],
             'amount' => ['required', 'numeric', 'min:0.01'],
             'interval_type' => ['required', Rule::enum(IntervalType::class)],
             'interval_value' => ['required', 'integer', 'min:1', 'max:1000'],

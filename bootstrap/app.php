@@ -42,6 +42,9 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // MCP clients get a 401 they can act on, never a redirect to the login page.
+        $exceptions->shouldRenderJsonWhen(fn (Request $request, Throwable $e) => $request->is('mcp', 'mcp/*', 'oauth/token', 'oauth/register') || $request->expectsJson());
+
         $exceptions->render(function (Throwable $e, Request $request) {
             $service = app(IpBanService::class);
 

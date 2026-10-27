@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\IpBanService;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -25,6 +26,10 @@ class BlockBots
 
     public function handle(Request $request, Closure $next): Response
     {
+        if ($request->is(IpBanService::CONNECTOR_PATHS)) {
+            return $next($request);
+        }
+
         $userAgent = strtolower($request->userAgent() ?? '');
 
         // Block requests without User-Agent (many bots don't send one)
