@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\TransactionType;
 use App\Models\Account;
+use App\Models\Category;
 use App\Models\Transaction;
 use App\Models\User;
 use Carbon\CarbonInterface;
@@ -17,19 +18,6 @@ class TransactionService
         private CurrencyService $currencyService,
         private FileUploadService $fileUploadService
     ) {}
-
-    /**
-     * Get transactions for a period (inclusive); a null bound leaves that side open.
-     */
-    private function getTransactionsForPeriod(User $user, ?CarbonInterface $startDate, ?CarbonInterface $endDate): Collection
-    {
-        return $user->transactions()
-            ->with('category')
-            ->inPeriod($startDate, $endDate)
-            ->orderBy('date', 'desc')
-            ->orderBy('created_at', 'desc')
-            ->get();
-    }
 
     /**
      * Create an expense, income or transfer.
@@ -80,7 +68,8 @@ class TransactionService
 
     /**
      * The writable columns for a validated payload. Currency, category and
-     * destination consistency are enforced by the TransactionObserver.
+     * same-currency destination amounts are normalised by the TransactionObserver;
+     * what is left here is looking up the accounts and, between currencies, the amount received.
      *
      * @return array<string, mixed>
      */
@@ -104,23 +93,25 @@ class TransactionService
             $toAccount = $user->accounts()->withTrashed()->findOrFail($data['to_account_id']);
 
             $attributes['to_account_id'] = $toAccount->id;
-            $attributes['to_amount'] = $data['to_amount'] ?? $this->receivedAmount($account, $toAccount, (float) $data['amount']);
+            $attributes['to_amount'] = $data['to_amount'] ?? ($account->currency === $toAccount->currency
+                ? null
+                : $this->receivedAmount($account, $toAccount, (float) $data['amount']));
         }
 
         return $attributes;
     }
 
     /**
-     * What arrives in the destination account when the owner did not say: the
-     * same amount between same-currency accounts, otherwise today's rate.
+     * What arrives in another currency when the owner did not say: today's rate
+     * (never an old one, it is saved).
      */
     private function receivedAmount(Account $from, Account $to, float $amount): float
     {
-        $rate = $this->currencyService->getRate($from->currency, $to->currency);
+        $rate = $this->currencyService->getRate($from->currency, $to->currency, allowStale: false);
 
         if ($rate === null) {
             throw ValidationException::withMessages([
-                'to_amount' => 'Unable to fetch the exchange rate. Enter the amount received.',
+                'to_amount' => 'Unable to fetch today\'s exchange rate. Enter the amount received.',
             ]);
         }
 
@@ -128,45 +119,64 @@ class TransactionService
     }
 
     /**
-     * Get transaction summary for a period with currency conversion.
+     * Income, expenses and the number of transactions in a period, in the primary currency.
+     *
+     * @return array{income: float, expenses: float, net: float, transaction_count: int}
      */
     public function getTransactionSummaryForPeriod(User $user, CarbonInterface $startDate, CarbonInterface $endDate): array
     {
-        $transactions = $this->getTransactionsForPeriod($user, $startDate, $endDate);
+        $rows = $user->transactions()
+            ->inPeriod($startDate, $endDate)
+            ->selectRaw('type, currency, sum(amount) as total, count(*) as aggregate')
+            ->groupBy('type', 'currency')
+            ->get();
 
-        $incomeTransactions = $transactions->where('type', TransactionType::Income);
-        $expenseTransactions = $transactions->where('type', TransactionType::Expense);
+        $inPrimaryCurrency = fn (TransactionType $type): float => $this->currencyService->sumInPrimaryCurrency(
+            $rows->where('type', $type),
+            'total',
+            'currency',
+            $user,
+        );
 
-        $income = $this->currencyService->sumInPrimaryCurrency($incomeTransactions, 'amount', 'currency', $user);
-        $expenses = $this->currencyService->sumInPrimaryCurrency($expenseTransactions, 'amount', 'currency', $user);
+        $income = $inPrimaryCurrency(TransactionType::Income);
+        $expenses = $inPrimaryCurrency(TransactionType::Expense);
 
         return [
             'income' => $income,
             'expenses' => $expenses,
             'net' => $income - $expenses,
-            'transaction_count' => $transactions->count(),
+            'transaction_count' => (int) $rows->sum('aggregate'),
         ];
     }
 
     /**
-     * Get category spending (in the primary currency) for a period; a null bound leaves that side open.
+     * Expense totals per category (in the primary currency), biggest first. A null
+     * date bound leaves that side open; `$filters` are the list filters (search,
+     * account, category), so the totals describe what the list shows.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return Collection<int, array{category: Category|null, total: float, count: int}>
      */
-    public function getCategorySpendingForPeriod(User $user, ?CarbonInterface $startDate, ?CarbonInterface $endDate, int $limit = 10): Collection
+    public function getCategorySpendingForPeriod(User $user, ?CarbonInterface $startDate, ?CarbonInterface $endDate, int $limit = 10, array $filters = []): Collection
     {
-        $expenseTransactions = $this->getTransactionsForPeriod($user, $startDate, $endDate)
+        $rows = $user->transactions()
+            ->filter($filters)
+            ->inPeriod($startDate, $endDate)
             ->where('type', TransactionType::Expense)
-            ->whereNotNull('category_id');
+            ->whereNotNull('category_id')
+            ->selectRaw('category_id, currency, sum(amount) as total, count(*) as aggregate')
+            ->groupBy('category_id', 'currency')
+            ->get();
 
+        $categories = $user->categories()->withTrashed()->whereKey($rows->pluck('category_id')->unique())->get()->keyBy('id');
         $primaryCurrency = $this->currencyService->getPrimaryCurrency($user);
 
-        return $expenseTransactions
+        return $rows
             ->groupBy('category_id')
-            ->map(fn (Collection $group) => [
-                'category' => $group->first()->category,
-                'total' => (float) $group->sum(fn (Transaction $transaction) => $transaction->currency === $primaryCurrency
-                    ? $transaction->amount
-                    : $this->currencyService->convert((float) $transaction->amount, $transaction->currency, $primaryCurrency) ?? 0),
-                'count' => $group->count(),
+            ->map(fn (Collection $group, int $categoryId) => [
+                'category' => $categories->get($categoryId),
+                'total' => (float) $this->currencyService->sumInPrimaryCurrency($group, 'total', 'currency', $user),
+                'count' => (int) $group->sum('aggregate'),
             ])
             ->sortByDesc('total')
             ->take($limit)

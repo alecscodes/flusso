@@ -33,88 +33,101 @@ class CurrencyService
     private const FAILURE_TTL = 600;
 
     /**
-     * Request-level cache for primary currency
+     * What this request already resolved (the service is scoped), so a missing rate costs
+     * one lookup and one warning rather than one per conversion.
+     *
+     * @var array<string, float|null>
      */
-    private ?string $primaryCurrencyCache = null;
+    private array $rates = [];
+
+    /** @var array<string, true> */
+    private array $warned = [];
+
+    /** @var array<int, string> */
+    private array $primaryCurrencies = [];
 
     /**
-     * Get today's exchange rate from base currency to target currency
-     * Uses the rate cached for today if available, otherwise fetches it from the API
+     * Exchange rate between two currencies: today's, from the cache, the database or the API.
+     * When there is none, the latest stored rate stands in (display only: pass
+     * `$allowStale = false` for anything that gets saved). Null when no rate is usable.
      */
-    public function getRate(string $fromCurrency, string $toCurrency): ?float
+    public function getRate(string $fromCurrency, string $toCurrency, bool $allowStale = true): ?float
     {
-        // Normalize currencies to lowercase
         $fromCurrency = strtolower($fromCurrency);
         $toCurrency = strtolower($toCurrency);
 
-        // If same currency, return 1
         if ($fromCurrency === $toCurrency) {
             return 1.0;
         }
 
-        $date = now()->toDateString();
+        $key = "{$fromCurrency}_{$toCurrency}_".(int) $allowStale;
 
-        // Create cache key
+        if (array_key_exists($key, $this->rates)) {
+            return $this->rates[$key];
+        }
+
+        $rate = $this->todaysRate($fromCurrency, $toCurrency)
+            ?? ($allowStale ? $this->latestStoredRate($fromCurrency, $toCurrency) : null);
+
+        if ($rate === null && ! isset($this->warned["{$fromCurrency}_{$toCurrency}"])) {
+            $this->warned["{$fromCurrency}_{$toCurrency}"] = true;
+            Log::warning('No exchange rate available', ['from' => $fromCurrency, 'to' => $toCurrency]);
+        }
+
+        return $this->rates[$key] = $rate;
+    }
+
+    private function todaysRate(string $fromCurrency, string $toCurrency): ?float
+    {
+        $date = now()->toDateString();
         $cacheKey = "currency_rate_{$fromCurrency}_{$toCurrency}_{$date}";
 
-        // Check Laravel cache first
         $cachedRate = Cache::get($cacheKey);
         if ($cachedRate !== null) {
             return $cachedRate === false ? null : $cachedRate;
         }
 
-        // Check database cache
         $dbRate = CurrencyExchangeRate::where('from_currency', $fromCurrency)
             ->where('to_currency', $toCurrency)
             ->where('date', $date)
-            ->first();
+            ->value('rate');
 
-        if ($dbRate) {
-            $rate = (float) $dbRate->rate;
-            Cache::put($cacheKey, $rate, self::CACHE_TTL * 60); // Convert minutes to seconds
+        if ($dbRate !== null) {
+            Cache::put($cacheKey, (float) $dbRate, self::CACHE_TTL * 60);
 
-            return $rate;
+            return (float) $dbRate;
         }
 
-        // Fetch from API
         $rate = $this->fetchRate($fromCurrency, $toCurrency);
 
         if ($rate === null) {
-            // API down: fall back to the latest stored rate (any date), if there is one
-            $lastKnown = CurrencyExchangeRate::where('from_currency', $fromCurrency)
-                ->where('to_currency', $toCurrency)
-                ->latest('date')
-                ->value('rate');
-            $lastKnown = $lastKnown === null ? null : (float) $lastKnown;
-            Cache::put($cacheKey, $lastKnown ?? false, self::FAILURE_TTL);
+            Cache::put($cacheKey, false, self::FAILURE_TTL);
 
-            return $lastKnown;
+            return null;
         }
 
-        // Cache the rate in both Laravel cache and database
         Cache::put($cacheKey, $rate, self::CACHE_TTL * 60);
 
         try {
             CurrencyExchangeRate::updateOrCreate(
-                [
-                    'from_currency' => $fromCurrency,
-                    'to_currency' => $toCurrency,
-                    'date' => $date,
-                ],
-                [
-                    'rate' => $rate,
-                ]
+                ['from_currency' => $fromCurrency, 'to_currency' => $toCurrency, 'date' => $date],
+                ['rate' => $rate],
             );
-        } catch (UniqueConstraintViolationException $e) {
-            // Handle race condition - another process already inserted this rate
-            Log::debug('Currency rate already exists, handling race condition', [
-                'from' => $fromCurrency,
-                'to' => $toCurrency,
-                'date' => $date,
-            ]);
+        } catch (UniqueConstraintViolationException) {
+            // Another process stored it first.
         }
 
         return $rate;
+    }
+
+    private function latestStoredRate(string $fromCurrency, string $toCurrency): ?float
+    {
+        $rate = CurrencyExchangeRate::where('from_currency', $fromCurrency)
+            ->where('to_currency', $toCurrency)
+            ->latest('date')
+            ->value('rate');
+
+        return $rate === null ? null : (float) $rate;
     }
 
     /**
@@ -194,33 +207,13 @@ class CurrencyService
 
     /**
      * Get the primary currency for a user
-     * Prefers EUR, otherwise uses the most common currency among user's accounts
-     * Uses request-level caching for performance
+     * EUR when the user has an EUR account, otherwise the currency of the account with the highest balance.
      */
     public function getPrimaryCurrency(User $user): string
     {
-        // Use request-level cache if available
-        if ($this->primaryCurrencyCache !== null) {
-            return $this->primaryCurrencyCache;
-        }
-
-        // Check if user has EUR account first
-        $eurAccount = $user->accounts()->where('currency', 'EUR')->first();
-        if ($eurAccount) {
-            $this->primaryCurrencyCache = 'EUR';
-
-            return 'EUR';
-        }
-
-        // If no EUR account, use the currency of the account with the highest balance
-        $accountWithHighestBalance = $user->accounts()
-            ->orderByDesc('balance')
-            ->first();
-
-        $primaryCurrency = $accountWithHighestBalance->currency ?? 'EUR';
-        $this->primaryCurrencyCache = $primaryCurrency;
-
-        return $primaryCurrency;
+        return $this->primaryCurrencies[$user->id] ??= $user->accounts()->where('currency', 'EUR')->exists()
+            ? 'EUR'
+            : ($user->accounts()->orderByDesc('balance')->value('currency') ?? 'EUR');
     }
 
     /**

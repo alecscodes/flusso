@@ -101,7 +101,7 @@ test('recurring payments index page renders with data', function () {
     ]);
 
     actingAs($user)
-        ->get(route('recurring-payments.index'))
+        ->get(route('planned-payments.index'))
         ->assertSuccessful()
         ->assertInertia(fn ($page) => $page
             ->component('RecurringPayments/Index')
@@ -122,7 +122,7 @@ test('recurring payment show page renders with data', function () {
     ]);
 
     actingAs($user)
-        ->get(route('recurring-payments.show', $recurringPayment))
+        ->get(route('planned-payments.show', $recurringPayment))
         ->assertSuccessful()
         ->assertInertia(fn ($page) => $page
             ->component('RecurringPayments/Show')

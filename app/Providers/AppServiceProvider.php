@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Services\CurrencyService;
 use Carbon\CarbonImmutable;
 use DateInterval;
 use Illuminate\Database\Eloquent\Model;
@@ -21,6 +22,9 @@ class AppServiceProvider extends ServiceProvider
     {
         // Claude signs in with the authorization code flow; routes are registered in boot().
         Passport::$deviceCodeGrantEnabled = false;
+
+        // One per request, so rates and the primary currency are looked up once.
+        $this->app->scoped(CurrencyService::class);
     }
 
     /**

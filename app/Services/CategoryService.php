@@ -2,16 +2,14 @@
 
 namespace App\Services;
 
+use App\Enums\CategoryType;
 use App\Models\Category;
-use App\Models\RecurringPayment;
 use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class CategoryService
 {
-    public function __construct(private RecurringPaymentService $recurringPayments) {}
-
     public function getCategoriesForUser(User $user): Collection
     {
         return $user->categories()
@@ -30,22 +28,25 @@ class CategoryService
         ]);
     }
 
+    /**
+     * @param  array{name?: string, type?: string|CategoryType, icon?: string|null, color?: string|null}  $data  icon and color are cleared when passed as null
+     */
     public function updateCategory(Category $category, array $data): Category
     {
         DB::transaction(function () use ($category, $data) {
             $category->update([
                 'name' => $data['name'] ?? $category->name,
                 'type' => $data['type'] ?? $category->type,
-                'icon' => $data['icon'] ?? $category->icon,
-                'color' => $data['color'] ?? $category->color,
+                'icon' => array_key_exists('icon', $data) ? $data['icon'] : $category->icon,
+                'color' => array_key_exists('color', $data) ? $data['color'] : $category->color,
             ]);
 
-            // Pending payments take their type from the category via their rule.
+            // Every unpaid occurrence, past-due ones too, takes its type from the category.
             if ($category->wasChanged('type')) {
-                $category->recurringPayments->each(fn (RecurringPayment $rule) => $this->recurringPayments->sync($rule));
+                $category->payments()->pending()->update(['type' => $category->type->value]);
             }
         });
 
-        return $category->fresh();
+        return $category;
     }
 }

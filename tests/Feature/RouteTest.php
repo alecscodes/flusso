@@ -47,8 +47,8 @@ test('recurring payments routes are accessible', function () {
         'category_id' => $category->id,
     ]);
 
-    actingAs($user)->get(route('recurring-payments.index'))->assertSuccessful();
-    actingAs($user)->get(route('recurring-payments.show', $recurringPayment))->assertSuccessful();
+    actingAs($user)->get(route('planned-payments.index'))->assertSuccessful();
+    actingAs($user)->get(route('planned-payments.show', $recurringPayment))->assertSuccessful();
 });
 
 test('payments route is accessible', function () {

@@ -16,7 +16,7 @@ class DateOnly implements CastsAttributes
 {
     public function get(Model $model, string $key, mixed $value, array $attributes): ?CalendarDate
     {
-        return $value === null ? null : CalendarDate::parse($value)->startOfDay();
+        return $value === null ? null : CalendarDate::parse($value);
     }
 
     public function set(Model $model, string $key, mixed $value, array $attributes): ?string

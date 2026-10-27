@@ -33,8 +33,8 @@ class TransactionController extends Controller
         $user = $request->user();
 
         $request->validate([
-            'date_start' => ['nullable', 'date'],
-            'date_end' => ['nullable', 'date'],
+            'date_start' => ['nullable', 'date_format:Y-m-d'],
+            'date_end' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:date_start'],
         ]);
 
         $query = $user->transactions()
@@ -56,6 +56,7 @@ class TransactionController extends Controller
                     $request->date('date_start'),
                     $request->date('date_end'),
                     limit: 100,
+                    filters: $request->only(['search', 'account_id', 'category_id', 'type']),
                 )
                 : [],
             'hasDateFilters' => $hasDateFilters,
@@ -69,7 +70,7 @@ class TransactionController extends Controller
 
         FlashToast::success('Transaction created successfully.');
 
-        return redirect()->route('transactions.index');
+        return redirect()->back(fallback: route('transactions.index'));
     }
 
     public function update(TransactionRequest $request, Transaction $transaction): RedirectResponse
@@ -78,7 +79,7 @@ class TransactionController extends Controller
 
         FlashToast::success('Transaction updated successfully.');
 
-        return redirect()->route('transactions.index');
+        return redirect()->back(fallback: route('transactions.index'));
     }
 
     public function destroy(Transaction $transaction): RedirectResponse
@@ -89,7 +90,7 @@ class TransactionController extends Controller
 
         FlashToast::success('Transaction deleted successfully.');
 
-        return redirect()->route('transactions.index');
+        return redirect()->back(fallback: route('transactions.index'));
     }
 
     public function downloadFile(Transaction $transaction, TransactionFile $file): BinaryFileResponse

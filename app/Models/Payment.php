@@ -4,8 +4,10 @@ namespace App\Models;
 
 use App\Casts\DateOnly;
 use App\Enums\PaymentType;
+use App\Observers\PaymentObserver;
 use Carbon\CarbonImmutable;
 use Database\Factories\PaymentFactory;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -20,19 +22,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property bool $is_overridden
  * @property CarbonImmutable|null $skipped_at
  */
+#[ObservedBy(PaymentObserver::class)]
 class Payment extends Model
 {
     /** @use HasFactory<PaymentFactory> */
     use HasFactory;
-
-    protected static function booted(): void
-    {
-        static::saving(function (Payment $payment) {
-            if (! $payment->exists || $payment->isDirty('account_id')) {
-                $payment->currency = Account::withTrashed()->findOrFail($payment->account_id)->currency;
-            }
-        });
-    }
 
     protected $fillable = [
         'user_id',
@@ -92,11 +86,6 @@ class Payment extends Model
         return $this->belongsTo(Transaction::class);
     }
 
-    public function scopePaid(Builder $query): Builder
-    {
-        return $query->whereNotNull('transaction_id');
-    }
-
     public function scopeUnpaid(Builder $query): Builder
     {
         return $query->whereNull('transaction_id');
@@ -111,13 +100,28 @@ class Payment extends Model
     }
 
     /**
-     * What may show up in lists: the account is not archived and the rule not deleted.
+     * What may show up in lists: the account is not archived and the rule is neither
+     * deleted nor paused (see RecurringPayment::isPaused()).
+     *
+     * @param  Builder<Payment>  $query
+     * @return Builder<Payment>
      */
     public function scopeVisible(Builder $query): Builder
     {
         return $query
             ->whereIn('account_id', Account::query()->select('id'))
-            ->whereIn('recurring_payment_id', RecurringPayment::query()->select('id'));
+            ->whereIn('recurring_payment_id', RecurringPayment::query()->where('is_active', true)->select('id'));
+    }
+
+    /**
+     * The Payments page window: everything from the period start on, plus whatever is still owed before it.
+     *
+     * @param  Builder<Payment>  $query
+     * @return Builder<Payment>
+     */
+    public function scopeForOverview(Builder $query, string $periodStart): Builder
+    {
+        return $query->where(fn (Builder $query) => $query->where('due_date', '>=', $periodStart)->orWhere(fn (Builder $query) => $query->pending()));
     }
 
     /**

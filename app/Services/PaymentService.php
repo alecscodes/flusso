@@ -14,7 +14,8 @@ use Illuminate\Validation\ValidationException;
 
 class PaymentService
 {
-    private const RELATIONS = ['account', 'category', 'recurringPayment', 'transaction'];
+    /** Enough to list a pending occurrence; paid ones also need their transaction. */
+    private const RELATIONS = ['account', 'category', 'recurringPayment'];
 
     public function __construct(
         private CurrencyService $currencyService,
@@ -24,6 +25,8 @@ class PaymentService
 
     /**
      * Unpaid, unskipped payments due before today.
+     *
+     * @return Collection<int, Payment>
      */
     public function getOverduePayments(User $user): Collection
     {
@@ -32,6 +35,8 @@ class PaymentService
 
     /**
      * Unpaid, unskipped payments due from today until the end date (inclusive).
+     *
+     * @return Collection<int, Payment>
      */
     public function getUpcomingPayments(User $user, CarbonInterface $until): Collection
     {
@@ -40,54 +45,71 @@ class PaymentService
 
     /**
      * Every payment due between two dates (inclusive), paid and skipped ones included.
+     *
+     * @return Collection<int, Payment>
      */
     public function getPaymentsBetween(User $user, string $from, string $to): Collection
     {
-        return $this->inDueOrder($user->payments()->visible()->dueBetween($from, $to));
+        return $this->inDueOrder($user->payments()->visible()->dueBetween($from, $to), ['transaction']);
+    }
+
+    /**
+     * What is still to pay in these payments (pending expenses), in the primary currency.
+     *
+     * @param  Collection<int, Payment>  $payments
+     */
+    public function totalDue(User $user, Collection $payments): float
+    {
+        return $this->currencyService->sumInPrimaryCurrency(
+            $payments->filter(fn (Payment $payment) => $payment->isPending() && $payment->type === PaymentType::Expense),
+            'amount',
+            'currency',
+            $user,
+        );
     }
 
     /**
      * The Payments page: what is overdue, what falls in the current financial
-     * period (paid and skipped ones included, so they can be undone) and what is later.
+     * period (paid and skipped ones included, so they can be undone), what is later,
+     * and the totals that go with them.
      *
-     * @return array{overdue: Collection, period: Collection, later: Collection, monthly_totals: array<string, float>}
+     * @return array{overdue: Collection<int, Payment>, period: Collection<int, Payment>, later: Collection<int, Payment>, monthly_totals: array<string, float>, totals: array<string, float|int|string>}
      */
-    public function getOverview(User $user): array
+    public function getOverview(User $user, float $availableBalance): array
     {
         $period = $user->getFinancialPeriod();
         $today = now()->toDateString();
 
-        [$overdue, $rest] = $this->inDueOrder($user->payments()->visible()
-            ->where(fn ($query) => $query->where('due_date', '>=', $period['start']->toDateString())->orWhere(fn ($query) => $query->pending())))
+        [$overdue, $rest] = $this->inDueOrder($user->payments()->visible()->forOverview($period['start']->toDateString()), ['transaction'])
             ->partition(fn (Payment $payment) => $payment->isPending() && $payment->due_date->toDateString() < $today);
 
         [$inPeriod, $later] = $rest->partition(fn (Payment $payment) => $payment->due_date->toDateString() <= $period['end']->toDateString());
 
-        $monthlyTotals = [];
+        $monthlyTotals = $later
+            ->filter(fn (Payment $payment) => $payment->isPending() && $payment->type === PaymentType::Expense)
+            ->groupBy(fn (Payment $payment) => $payment->due_date->format('Y-m'))
+            ->map(fn (Collection $payments) => $this->totalDue($user, $payments))
+            ->all();
 
-        foreach ($later->filter(fn (Payment $payment) => $payment->isPending() && $payment->type === PaymentType::Expense) as $payment) {
-            $month = $payment->due_date->format('Y-m');
-            $monthlyTotals[$month] = ($monthlyTotals[$month] ?? 0) + ($this->currencyService->convertToPrimaryCurrency((float) $payment->amount, $payment->currency, $user) ?? 0);
-        }
-
-        return ['overdue' => $overdue->values(), 'period' => $inPeriod->values(), 'later' => $later->values(), 'monthly_totals' => $monthlyTotals];
-    }
-
-    /**
-     * What is still to pay (expenses not paid or skipped) in a period, in the primary currency.
-     *
-     * @return array{total_due: float, primary_currency: string}
-     */
-    public function getPaymentSummaryForPeriod(User $user, CarbonInterface $startDate, CarbonInterface $endDate): array
-    {
-        $due = $user->payments()->visible()->pending()
-            ->where('type', PaymentType::Expense)
-            ->dueBetween($startDate->toDateString(), $endDate->toDateString())
-            ->get();
+        $upcoming = $inPeriod->concat($later);
+        $overdueAmount = $this->totalDue($user, $overdue);
+        $periodAmount = $this->totalDue($user, $inPeriod);
 
         return [
-            'total_due' => $this->currencyService->sumInPrimaryCurrency($due, 'amount', 'currency', $user),
-            'primary_currency' => $this->currencyService->getPrimaryCurrency($user),
+            'overdue' => $overdue->values(),
+            'period' => $inPeriod->values(),
+            'later' => $later->values(),
+            'monthly_totals' => $monthlyTotals,
+            'totals' => [
+                'available_balance' => $availableBalance,
+                'overdue_amount' => $overdueAmount,
+                'overdue_count' => $overdue->count(),
+                'upcoming_amount' => $this->totalDue($user, $upcoming),
+                'upcoming_count' => $upcoming->filter->isPending()->count(),
+                'period_amount' => $periodAmount,
+                'balance_after_planned' => $availableBalance - $overdueAmount - $periodAmount,
+                'primary_currency' => $this->currencyService->getPrimaryCurrency($user),
+            ],
         ];
     }
 
@@ -99,8 +121,9 @@ class PaymentService
      */
     public function markAsPaid(Payment $payment, array $data = []): Transaction
     {
+        $this->ensurePending($payment);
+
         return DB::transaction(function () use ($payment, $data) {
-            $payment = $this->lockPending($payment);
             $transaction = $this->transactionService->createTransaction($payment->user, [
                 'account_id' => $data['account_id'] ?? $payment->account_id,
                 'category_id' => $payment->category_id,
@@ -122,9 +145,13 @@ class PaymentService
      */
     public function markAsUnpaid(Payment $payment): void
     {
-        throw_unless($payment->isPaid(), ValidationException::withMessages(['payment' => 'This payment is not paid.']));
+        DB::transaction(function () use ($payment) {
+            $transaction = $payment->transaction;
 
-        $this->transactionService->deleteTransaction($payment->transaction);
+            throw_if($transaction === null, ValidationException::withMessages(['payment' => 'This payment is not paid.']));
+
+            $this->transactionService->deleteTransaction($transaction);
+        });
     }
 
     /**
@@ -134,23 +161,24 @@ class PaymentService
      */
     public function updatePayment(Payment $payment, array $data): Payment
     {
-        $this->ensurePending($payment);
+        return DB::transaction(function () use ($payment, $data) {
+            $payment->refresh();
+            $this->ensurePending($payment);
 
-        $payment->update([...$data, 'description' => $data['description'] ?? null, 'is_overridden' => true]);
+            $payment->update([...$data, 'description' => $data['description'] ?? null, 'is_overridden' => true]);
 
-        return $payment;
+            return $payment;
+        });
     }
 
     public function skip(Payment $payment): void
     {
-        DB::transaction(fn () => $this->claim($this->lockPending($payment), ['skipped_at' => now()]));
+        DB::transaction(fn () => $this->claim($payment, ['skipped_at' => now()]));
     }
 
     public function unskip(Payment $payment): void
     {
         DB::transaction(function () use ($payment) {
-            $payment = Payment::lockForUpdate()->findOrFail($payment->id);
-
             $unskipped = Payment::whereKey($payment->id)->whereNotNull('skipped_at')->update(['skipped_at' => null]);
             throw_if($unskipped === 0, ValidationException::withMessages(['payment' => 'This payment is not skipped.']));
 
@@ -176,24 +204,12 @@ class PaymentService
 
     /**
      * @param  HasMany<Payment, User>  $query
+     * @param  array<int, string>  $with  relations on top of RELATIONS
      * @return Collection<int, Payment>
      */
-    private function inDueOrder(HasMany $query): Collection
+    private function inDueOrder(HasMany $query, array $with = []): Collection
     {
-        return $query->with(self::RELATIONS)->orderBy('due_date')->orderBy('id')->get();
-    }
-
-    /**
-     * Re-read the payment under a row lock (a no-op on SQLite, where writers queue
-     * anyway) so a repeated or concurrent request sees what the first one did.
-     * Call inside a transaction.
-     */
-    private function lockPending(Payment $payment): Payment
-    {
-        $payment = Payment::lockForUpdate()->findOrFail($payment->id);
-        $this->ensurePending($payment);
-
-        return $payment;
+        return $query->with([...self::RELATIONS, ...$with])->orderBy('due_date')->orderBy('id')->get();
     }
 
     /**

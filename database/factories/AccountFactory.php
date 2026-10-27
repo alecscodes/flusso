@@ -21,8 +21,8 @@ class AccountFactory extends Factory
         return [
             'user_id' => User::factory(),
             'name' => fake()->words(2, true),
-            'currency' => fake()->randomElement(['EUR', 'RON', 'USD', 'GBP']),
-            'balance' => fake()->randomFloat(2, 0, 10000),
+            'currency' => 'EUR',
+            'balance' => 1000,
             // A fresh account has no transactions, so its ledger balance is its initial balance.
             'initial_balance' => fn (array $attributes) => $attributes['balance'],
         ];

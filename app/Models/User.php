@@ -78,11 +78,13 @@ class User extends Authenticatable implements OAuthenticatable
     }
 
     /**
-     * Validation: the value is the id of one of this user's live categories.
+     * Validation: the value is the id of one of this user's live categories,
+     * or of `$keepArchived` (the category an edited row already uses).
      */
-    public function ownedCategoryRule(): Exists
+    public function ownedCategoryRule(?int $keepArchived = null): Exists
     {
-        return Rule::exists('categories', 'id')->where('user_id', $this->id)->whereNull('deleted_at');
+        return Rule::exists('categories', 'id')->where('user_id', $this->id)
+            ->using(fn ($query) => $query->where(fn ($query) => $query->whereNull('deleted_at')->when($keepArchived, fn ($query) => $query->orWhere('id', $keepArchived))));
     }
 
     /**

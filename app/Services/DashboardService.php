@@ -22,8 +22,8 @@ class DashboardService
         $endDate = $period['end'];
 
         $balances = $this->accountService->getAccountSummary($user);
-        $summary = $this->transactionService->getTransactionSummaryForPeriod($user, $startDate, $endDate);
-        $categorySpending = $this->transactionService->getCategorySpendingForPeriod($user, $startDate, $endDate);
+        $upcoming = $this->paymentService->getUpcomingPayments($user, $endDate);
+        $overdue = $this->paymentService->getOverduePayments($user);
 
         return [
             'accounts' => $balances['accounts'],
@@ -31,11 +31,14 @@ class DashboardService
                 'start' => $startDate->toDateString(),
                 'end' => $endDate->toDateString(),
             ],
-            'summary' => $summary,
-            'upcomingPayments' => $this->paymentService->getUpcomingPayments($user, $endDate),
-            'overduePayments' => $this->paymentService->getOverduePayments($user),
-            'categorySpending' => $categorySpending,
-            'paymentSummary' => $this->paymentService->getPaymentSummaryForPeriod($user, $startDate, $endDate),
+            'summary' => $this->transactionService->getTransactionSummaryForPeriod($user, $startDate, $endDate),
+            'upcomingPayments' => $upcoming,
+            'overduePayments' => $overdue,
+            'categorySpending' => $this->transactionService->getCategorySpendingForPeriod($user, $startDate, $endDate),
+            'paymentSummary' => [
+                'total_due' => $this->paymentService->totalDue($user, $overdue->concat($upcoming)),
+                'primary_currency' => $balances['primaryCurrency'],
+            ],
             'availableBalance' => $balances['availableBalance'],
             'totalBalance' => $balances['totalBalance'],
             'savingsBalance' => $balances['savingsBalance'],

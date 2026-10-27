@@ -6,8 +6,11 @@ use App\Models\Payment;
 use App\Models\RecurringPayment;
 use App\Models\User;
 use App\Services\AccountService;
+use App\Services\CategoryService;
 use App\Services\PaymentService;
 use App\Services\RecurringPaymentService;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Exceptions;
 
 use function Pest\Laravel\actingAs;
 
@@ -141,8 +144,8 @@ test('paying the last installment finishes the rule and it leaves the active lis
     $rule = plannedPayment($user, ['start_date' => '2026-01-01', 'installments' => 2]);
     $other = plannedPayment($user, ['name' => 'Forever', 'start_date' => '2026-01-01']);
 
-    $statuses = fn () => collect(actingAs($user)->get(route('recurring-payments.index'))->viewData('page')['props']['recurringPayments'])
-        ->pluck('status', 'name')->all();
+    $statuses = fn () => collect(actingAs($user)->get(route('planned-payments.index'))->viewData('page')['props']['recurringPayments'])
+        ->pluck('status', 'name')->map->value->all();
 
     expect($statuses())->toEqual(['Rent' => 'active', 'Forever' => 'active']);
 
@@ -160,7 +163,7 @@ test('a skipped last installment also finishes the rule', function () {
 
     app(PaymentService::class)->skip($rule->payments()->first());
 
-    expect($rule->fresh(['payments', 'account'])->status)->toBe('finished');
+    expect($rule->fresh(['payments', 'account'])->status->value)->toBe('finished');
 });
 
 test('pausing removes only the future unpaid payments and resuming brings them back', function () {
@@ -179,7 +182,7 @@ test('pausing removes only the future unpaid payments and resuming brings them b
 
     // paid (03-10) and past-due unpaid (04-10) stay; 05-10, 06-10, 07-10 are gone.
     expect(dueDates($rule))->toBe(['2026-03-10', '2026-04-10'])
-        ->and($rule->fresh(['payments', 'account'])->status)->toBe('paused');
+        ->and($rule->fresh(['payments', 'account'])->status->value)->toBe('paused');
 
     app(RecurringPaymentService::class)->updateRecurringPayment($rule, $payload(true));
 
@@ -197,7 +200,7 @@ test('a rule on an archived account generates nothing and its leftovers never sh
     $account->delete();
     app(RecurringPaymentService::class)->sync($rule);
 
-    expect($rule->fresh(['payments', 'account'])->status)->toBe('paused')
+    expect($rule->fresh(['payments', 'account'])->status->value)->toBe('paused')
         ->and($rule->payments()->where('due_date', '>=', '2026-04-15')->count())->toBe(0)
         ->and(Payment::visible()->count())->toBe(0);
 
@@ -212,7 +215,8 @@ test('a rule on an archived account generates nothing and its leftovers never sh
     app(AccountService::class)->deleteAccount($other);
 
     expect($second->fresh()->is_active)->toBeFalse()
-        ->and($second->payments()->count())->toBe(0)
+        ->and($second->payments()->where('due_date', '>=', '2026-04-15')->count())->toBe(0)
+        ->and($second->payments()->count())->toBe(2) // past-due ones stay, hidden with the archived account
         ->and($pastDue->exists)->toBeTrue();
 });
 
@@ -222,7 +226,7 @@ test('a deleted rule keeps its paid history and loses what is still owed', funct
     $rule = plannedPayment($user, ['start_date' => '2026-01-01', 'installments' => 3]);
     actingAs($user)->patch(route('payments.mark-paid', $rule->payments()->where('occurrence', 0)->first()))->assertRedirect();
 
-    actingAs($user)->delete(route('recurring-payments.destroy', $rule))->assertRedirect(route('recurring-payments.index'));
+    actingAs($user)->delete(route('planned-payments.destroy', $rule))->assertRedirect(route('planned-payments.index'));
 
     expect(RecurringPayment::find($rule->id))->toBeNull()
         ->and(Payment::where('recurring_payment_id', $rule->id)->count())->toBe(1)
@@ -270,8 +274,8 @@ test('a rule with an end date is only finished when no date is left before it en
         }
     }
 
-    expect($yearly->fresh(['payments', 'account'])->status)->toBe('active')
-        ->and($short->fresh(['payments', 'account'])->status)->toBe('finished');
+    expect($yearly->fresh(['payments', 'account'])->status->value)->toBe('active')
+        ->and($short->fresh(['payments', 'account'])->status->value)->toBe('finished');
 });
 
 test('the daily sync keeps working after the rule category is deleted', function () {
@@ -309,4 +313,98 @@ test('a new rule backfills past occurrences so they can be marked paid', functio
     $rule = plannedPayment(User::factory()->create(), ['start_date' => '2026-02-10', 'installments' => 4]);
 
     expect(dueDates($rule))->toBe(['2026-02-10', '2026-03-10', '2026-04-10', '2026-05-10']);
+});
+
+test('unpaid past-due occurrences are never deleted when the schedule shrinks', function () {
+    $this->travelTo('2026-04-15 12:00:00');
+    $user = User::factory()->create();
+    $rule = plannedPayment($user, ['start_date' => '2026-03-10', 'installments' => 4]);
+
+    app(RecurringPaymentService::class)->updateRecurringPayment($rule, [
+        'name' => 'Rent', 'account_id' => $rule->account_id, 'category_id' => $rule->category_id, 'amount' => 10,
+        'interval_type' => 'months', 'interval_value' => 1, 'start_date' => '2026-03-10', 'installments' => 1,
+    ]);
+
+    // 04-10 is outside the new schedule but already due: still owed. The future ones are gone.
+    expect(dueDates($rule))->toBe(['2026-03-10', '2026-04-10']);
+});
+
+test('an upcoming occurrence is never moved into the past by a rule edit', function () {
+    $this->travelTo('2026-04-15 12:00:00');
+    $user = User::factory()->create();
+    $rule = plannedPayment($user, ['start_date' => '2026-05-10', 'installments' => 3, 'amount' => 10]);
+
+    app(RecurringPaymentService::class)->updateRecurringPayment($rule, [
+        'name' => 'Rent', 'account_id' => $rule->account_id, 'category_id' => $rule->category_id, 'amount' => 12,
+        'interval_type' => 'months', 'interval_value' => 1, 'start_date' => '2026-03-10', 'installments' => 3,
+    ]);
+
+    // Occurrences 0 and 1 would now be 03-10 and 04-10: they keep their dates (but follow the new amount); 2 moves to 05-10.
+    expect($rule->payments()->orderBy('occurrence')->pluck('due_date')->map->toDateString()->all())->toBe(['2026-05-10', '2026-06-10', '2026-05-10'])
+        ->and($rule->payments()->pluck('amount')->unique()->all())->toBe(['12.00']);
+});
+
+test('pausing keeps the occurrences edited by hand and hides every occurrence of a paused rule', function () {
+    $this->travelTo('2026-04-15 12:00:00');
+    $user = User::factory()->create();
+    $rule = plannedPayment($user, ['start_date' => '2026-03-10', 'installments' => 4]);
+    $edited = $rule->payments()->where('occurrence', 2)->first();
+    app(PaymentService::class)->updatePayment($edited, ['amount' => 14, 'due_date' => '2026-05-12', 'account_id' => $rule->account_id]);
+
+    $pause = fn (bool $active) => app(RecurringPaymentService::class)->updateRecurringPayment($rule, [
+        'name' => 'Rent', 'account_id' => $rule->account_id, 'category_id' => $rule->category_id, 'amount' => 10,
+        'interval_type' => 'months', 'interval_value' => 1, 'start_date' => '2026-03-10', 'installments' => 4, 'is_active' => $active,
+    ]);
+    $pause(false);
+
+    // Past-due 03-10 and 04-10 stay in the table, and so does the edited 05-12; none of them is listed.
+    expect(dueDates($rule))->toBe(['2026-03-10', '2026-04-10', '2026-05-12'])
+        ->and(Payment::visible()->count())->toBe(0)
+        ->and(app(PaymentService::class)->getOverduePayments($user))->toHaveCount(0);
+    actingAs($user)->get(route('payments.index'))->assertInertia(fn ($page) => $page
+        ->has('overduePayments', 0)->has('periodPayments', 0)->has('laterPayments', 0));
+
+    $pause(true);
+
+    expect(dueDates($rule))->toBe(['2026-03-10', '2026-04-10', '2026-05-12', '2026-06-10'])
+        ->and($rule->payments()->where('occurrence', 2)->value('amount'))->toBe('14.00')
+        ->and(app(PaymentService::class)->getOverduePayments($user))->toHaveCount(2);
+});
+
+test('changing a category type changes every unpaid occurrence, past-due ones too, but not paid ones', function () {
+    $this->travelTo('2026-04-15 12:00:00');
+    $user = User::factory()->create();
+    $rule = plannedPayment($user, ['start_date' => '2026-03-10', 'installments' => 4]);
+    app(PaymentService::class)->markAsPaid($rule->payments()->where('occurrence', 0)->first());
+
+    app(CategoryService::class)->updateCategory($rule->category, ['name' => 'Salary', 'type' => 'income']);
+
+    expect($rule->payments()->orderBy('occurrence')->get()->map(fn (Payment $payment) => $payment->type->value)->all())
+        ->toBe(['expense', 'income', 'income', 'income']);
+});
+
+test('an account that changes currency takes every unpaid occurrence with it, edited ones too', function () {
+    $this->travelTo('2026-04-15 12:00:00');
+    $user = User::factory()->create();
+    $account = Account::factory()->create(['user_id' => $user->id, 'currency' => 'EUR', 'is_savings' => false]);
+    $rule = plannedPayment($user, ['start_date' => '2026-05-10', 'installments' => 3], $account);
+    $edited = $rule->payments()->where('occurrence', 1)->first();
+    app(PaymentService::class)->updatePayment($edited, ['amount' => 14, 'due_date' => '2026-06-12', 'account_id' => $account->id]);
+
+    app(AccountService::class)->updateAccount($account, ['currency' => 'RON']);
+
+    expect($rule->payments()->pluck('currency')->unique()->all())->toBe(['RON'])
+        ->and($rule->fresh()->currency)->toBe('RON');
+});
+
+test('the daily sync reports a rule it cannot sync and carries on with the others', function () {
+    Exceptions::fake();
+    $user = User::factory()->create();
+    $broken = plannedPayment($user, ['name' => 'Broken']);
+    plannedPayment($user, ['name' => 'Fine']);
+    DB::table('recurring_payments')->where('id', $broken->id)->update(['interval_type' => 'fortnights']);
+
+    expect(app(RecurringPaymentService::class)->syncAll())->toBe(1);
+
+    Exceptions::assertReported(ValueError::class);
 });

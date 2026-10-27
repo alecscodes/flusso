@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Account;
+use App\Models\RecurringPayment;
 use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -17,7 +18,7 @@ class AccountService
     public function getAccountsForUser(User $user): Collection
     {
         return $user->accounts()
-            ->orderByName()
+            ->orderBy('name')
             ->get();
     }
 
@@ -39,47 +40,31 @@ class AccountService
     {
         $account->update([
             'name' => $data['name'] ?? $account->name,
-            'currency' => isset($data['currency']) ? strtoupper($data['currency']) : $account->currency,
+            'currency' => $data['currency'] ?? $account->currency,
             'is_savings' => $data['is_savings'] ?? $account->is_savings,
         ]);
 
         if ($account->wasChanged('currency')) {
-            $account->recurringPayments->each(fn ($rule) => $this->recurringPaymentService->sync($rule));
+            // Whatever is still owed on this account follows its currency, edited by hand or not.
+            $account->payments()->pending()->update(['currency' => $account->currency]);
+            $account->recurringPayments->each(fn (RecurringPayment $rule) => $this->recurringPaymentService->sync($rule));
         }
 
-        return $account->fresh();
+        return $account;
     }
 
     /**
      * Archive the account: only the account itself is soft-deleted, so its history
      * and every other account's balance stay untouched. Its rules are paused and
-     * its unpaid occurrences removed.
+     * its unpaid upcoming occurrences removed (past-due ones stay; paused rules are hidden from the lists).
      */
     public function deleteAccount(Account $account): void
     {
         DB::transaction(function () use ($account) {
             $account->recurringPayments()->update(['is_active' => false]);
-            $account->payments()->pending()->delete();
+            $account->payments()->pending()->where('due_date', '>=', now()->toDateString())->delete();
             $account->delete();
         });
-    }
-
-    /**
-     * Balance of the accounts that are not savings, in the primary currency.
-     */
-    public function getTotalBalanceInPrimaryCurrency(User $user): float
-    {
-        return $this->sumBalances($user, $user->accounts()->whereNotSavings()->get());
-    }
-
-    public function getFullBalanceInPrimaryCurrency(User $user): float
-    {
-        return $this->sumBalances($user, $user->accounts()->get());
-    }
-
-    public function getSavingsBalanceInPrimaryCurrency(User $user): float
-    {
-        return $this->sumBalances($user, $user->accounts()->where('is_savings', true)->get());
     }
 
     /**

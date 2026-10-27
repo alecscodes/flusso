@@ -12,6 +12,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -51,6 +52,11 @@ return Application::configure(basePath: dirname(__DIR__))
             // If IP is already banned, return 403 immediately
             if ($service->isBanned($request)) {
                 return response('Access denied', 403);
+            }
+
+            // Probes end in an HTTP error (404, or 403 from the storage route's signature check); a crash is not a probe.
+            if (! ($e instanceof HttpExceptionInterface)) {
+                return null;
             }
 
             $path = $request->path();

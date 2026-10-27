@@ -176,3 +176,42 @@ test('the migration pairs transfer halves that were never linked instead of coun
         ->and(balances())->toEqual([1 => 820, 2 => -9.93, 3 => 70, 4 => 100]);
     $this->artisan('accounts:verify-balances')->assertSuccessful();
 });
+
+test('the migration refuses a live transfer leg that has no source account and changes nothing', function () {
+    seedLegacyLedger(popsoBalance: 840);
+    DB::table('transactions')->insert([
+        'id' => 12, 'user_id' => 1, 'account_id' => 1, 'type' => 'transfer', 'amount' => 20, 'currency' => 'EUR', 'date' => '2026-05-14',
+        'from_account_id' => null, 'to_account_id' => 3, 'created_at' => '2026-05-01 10:00:00', 'updated_at' => '2026-05-01 10:00:00',
+    ]);
+
+    expect(fn () => $this->migration->up())->toThrow(RuntimeException::class, '12');
+
+    expect(Schema::hasColumn('transactions', 'linked_transaction_id'))->toBeTrue()
+        ->and(DB::table('transactions')->where('id', 1)->value('date'))->toBe('2026-05-11 00:00:00');
+});
+
+test('exchange rates that only differ by the time part collapse to the newest instead of failing', function () {
+    seedLegacyLedger(popsoBalance: 840);
+    DB::table('currency_exchange_rates')->insert([
+        ['from_currency' => 'eur', 'to_currency' => 'ron', 'rate' => 4.9, 'date' => '2026-05-11', 'created_at' => '2026-05-11 08:00:00', 'updated_at' => '2026-05-11 08:00:00'],
+        ['from_currency' => 'eur', 'to_currency' => 'ron', 'rate' => 5.0, 'date' => '2026-05-11 00:00:00', 'created_at' => '2026-05-11 09:00:00', 'updated_at' => '2026-05-11 09:00:00'],
+    ]);
+
+    $this->migration->up();
+
+    $rates = DB::table('currency_exchange_rates')->get();
+
+    expect($rates)->toHaveCount(1)
+        ->and($rates->first())->date->toBe('2026-05-11')->rate->toEqual(5.0);
+});
+
+test('the migration is undone when it leaves a dangling foreign key behind', function () {
+    seedLegacyLedger(popsoBalance: 840);
+    DB::statement('pragma foreign_keys = off');
+    DB::table('transactions')->where('id', 2)->update(['category_id' => 999]);
+    DB::statement('pragma foreign_keys = on');
+
+    expect(fn () => $this->migration->up())->toThrow(RuntimeException::class, 'Foreign key');
+
+    expect(Schema::hasColumn('transactions', 'linked_transaction_id'))->toBeTrue();
+});

@@ -25,11 +25,10 @@ class TransactionFactory extends Factory
             'user_id' => User::factory(),
             'account_id' => Account::factory(),
             'category_id' => Category::factory(),
-            'type' => fake()->randomElement([TransactionType::Income, TransactionType::Expense]),
-            'amount' => fake()->randomFloat(2, 1, 1000),
-            'currency' => fake()->randomElement(['EUR', 'RON', 'USD', 'GBP']),
+            'type' => TransactionType::Expense,
+            'amount' => 100,
             'description' => fake()->optional()->sentence(),
-            'date' => fake()->dateTimeBetween('-1 year', 'now')->format('Y-m-d'),
+            'date' => now()->toDateString(),
         ];
     }
 

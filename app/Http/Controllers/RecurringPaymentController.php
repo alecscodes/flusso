@@ -40,7 +40,7 @@ class RecurringPaymentController extends Controller
 
         FlashToast::success('Planned payment created successfully.');
 
-        return redirect()->back(fallback: route('recurring-payments.index'));
+        return redirect()->back(fallback: route('planned-payments.index'));
     }
 
     public function show(Request $request, RecurringPayment $recurringPayment): Response
@@ -65,7 +65,7 @@ class RecurringPaymentController extends Controller
 
         FlashToast::success('Planned payment updated successfully.');
 
-        return redirect()->back(fallback: route('recurring-payments.index'));
+        return redirect()->back(fallback: route('planned-payments.index'));
     }
 
     public function destroy(RecurringPayment $recurringPayment): RedirectResponse
@@ -76,6 +76,6 @@ class RecurringPaymentController extends Controller
 
         FlashToast::success('Planned payment deleted successfully.');
 
-        return redirect()->route('recurring-payments.index');
+        return redirect()->route('planned-payments.index');
     }
 }

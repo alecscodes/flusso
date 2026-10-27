@@ -6,6 +6,7 @@ use App\Services\IpBanService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Route;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 beforeEach(function () {
@@ -324,4 +325,13 @@ test('a 404 from a matched route does not ban the signed-in owner', function () 
         ->assertNotFound();
 
     expect(DB::table('banned_ips')->where('ip', '203.0.113.60')->exists())->toBeFalse();
+});
+
+test('a crash on a storage path is not a probe and bans nobody', function () {
+    Route::post('storage/crash', fn () => throw new RuntimeException('boom'));
+    $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.66']);
+
+    $this->post('/storage/crash')->assertServerError();
+
+    expect(DB::table('banned_ips')->where('ip', '203.0.113.66')->exists())->toBeFalse();
 });

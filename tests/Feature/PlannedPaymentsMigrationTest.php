@@ -168,3 +168,30 @@ test('a failure part way leaves the table as it was and the migration can run ag
     expect(Schema::hasColumn('payments', 'is_paid'))->toBeFalse()
         ->and(DB::table('payments')->whereNotNull('occurrence')->count())->toBe(8);
 });
+
+test('a standalone payment that was deleted and never paid does not come back as a rule', function () {
+    $this->travelTo('2026-10-27 12:00:00');
+    seedLegacyPlans();
+    DB::table('payments')->insert([
+        'id' => 11, 'user_id' => 1, 'account_id' => 1, 'category_id' => 1, 'recurring_payment_id' => null, 'type' => 'expense', 'amount' => 10,
+        'currency' => 'EUR', 'due_date' => '2026-06-01', 'is_paid' => false, 'deleted_at' => '2026-06-02 10:00:00',
+        'created_at' => '2026-03-01 10:00:00', 'updated_at' => '2026-03-01 10:00:00',
+    ]);
+    $rules = DB::table('recurring_payments')->count();
+
+    $this->migration->up();
+
+    expect(DB::table('payments')->where('id', 11)->exists())->toBeFalse()
+        ->and(DB::table('recurring_payments')->count())->toBe($rules + 1); // only the live standalone payment (8) was wrapped
+});
+
+test('the migration is undone when it leaves a dangling foreign key behind', function () {
+    seedLegacyPlans();
+    DB::statement('pragma foreign_keys = off');
+    DB::table('payments')->where('id', 9)->update(['account_id' => 999]);
+    DB::statement('pragma foreign_keys = on');
+
+    expect(fn () => $this->migration->up())->toThrow(RuntimeException::class, 'Foreign key');
+
+    expect(Schema::hasColumn('payments', 'is_paid'))->toBeTrue();
+});

@@ -22,7 +22,7 @@ import {
     destroy as destroyRecurringPayment,
     index as recurringPaymentsIndex,
     update as recurringPaymentUpdate,
-} from '@/routes/recurring-payments';
+} from '@/routes/planned-payments';
 import type { Account, Category, Payment, RecurringPayment } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {

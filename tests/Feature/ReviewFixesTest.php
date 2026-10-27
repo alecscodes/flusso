@@ -68,7 +68,7 @@ test('update_transaction works on an archived account too', function () {
     expect($transaction->fresh()->amount)->toBe('30.00');
 });
 
-test('between accounts of one currency exactly what left arrives', function () {
+test('between accounts of one currency exactly what left arrives and a different amount received is rejected', function () {
     $user = User::factory()->create();
     $from = Account::factory()->create(['user_id' => $user->id, 'currency' => 'EUR', 'balance' => 100]);
     $to = Account::factory()->create(['user_id' => $user->id, 'currency' => 'EUR', 'balance' => 0]);
@@ -78,6 +78,9 @@ test('between accounts of one currency exactly what left arrives', function () {
     ]);
     FlussoServer::actingAs($user)->tool(Tools\CreateTransaction::class, [
         'type' => 'transfer', 'account_id' => $from->id, 'to_account_id' => $to->id, 'amount' => 20, 'to_amount' => 200,
+    ])->assertHasErrors(['amount received equals the amount sent']);
+    FlussoServer::actingAs($user)->tool(Tools\CreateTransaction::class, [
+        'type' => 'transfer', 'account_id' => $from->id, 'to_account_id' => $to->id, 'amount' => 20, 'to_amount' => 20,
     ])->assertOk();
 
     expect($viaService->to_amount)->toBe('50.00')
@@ -170,7 +173,7 @@ test('amounts with more than two decimals are rejected', function () {
     actingAs($user)->post(route('transactions.store'), ['type' => 'expense', 'account_id' => $account->id, 'amount' => 13.705, 'date' => $today])->assertSessionHasErrors('amount');
     actingAs($user)->patch(route('payments.update', $payment), ['amount' => 13.705, 'due_date' => $today, 'account_id' => $account->id])->assertSessionHasErrors('amount');
     actingAs($user)->patch(route('payments.mark-paid', $payment), ['amount' => 13.705])->assertSessionHasErrors('amount');
-    actingAs($user)->post(route('recurring-payments.store'), [
+    actingAs($user)->post(route('planned-payments.store'), [
         'name' => 'x', 'account_id' => $account->id, 'category_id' => $category->id, 'amount' => 13.705,
         'interval_type' => 'months', 'interval_value' => 1, 'start_date' => $today,
     ])->assertSessionHasErrors('amount');

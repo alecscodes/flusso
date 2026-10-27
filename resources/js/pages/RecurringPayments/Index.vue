@@ -16,7 +16,7 @@ import {
     show as showRecurringPayment,
     store as recurringPaymentStore,
     update as recurringPaymentUpdate,
-} from '@/routes/recurring-payments';
+} from '@/routes/planned-payments';
 import type { Account, Category, RecurringPayment } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { Calendar, ChevronDown, Plus, RefreshCw } from '@lucide/vue';

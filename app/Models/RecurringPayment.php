@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Casts\DateOnly;
 use App\Enums\IntervalType;
+use App\Enums\PlannedPaymentStatus;
 use Carbon\CarbonImmutable;
 use Database\Factories\RecurringPaymentFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -83,12 +84,6 @@ class RecurringPayment extends Model
         return $this->belongsTo(Category::class)->withTrashed();
     }
 
-    /** @return HasMany<Transaction, $this> */
-    public function transactions(): HasMany
-    {
-        return $this->hasMany(Transaction::class);
-    }
-
     /** @return HasMany<Payment, $this> */
     public function payments(): HasMany
     {
@@ -134,6 +129,9 @@ class RecurringPayment extends Model
         return $dates;
     }
 
+    /**
+     * Not active, or its account is archived. Payment::scopeVisible() mirrors this in SQL.
+     */
     public function isPaused(): bool
     {
         return ! $this->is_active || $this->account->trashed();
@@ -141,16 +139,17 @@ class RecurringPayment extends Model
 
     /**
      * paused | finished (nothing left to pay and no occurrence left to schedule, ever) | active.
-     * Needs `payments` (and `account`) loaded to avoid extra queries.
      */
-    public function getStatusAttribute(): string
+    public function getStatusAttribute(): PlannedPaymentStatus
     {
+        $this->loadMissing(['payments', 'account']);
+
         if ($this->isPaused()) {
-            return 'paused';
+            return PlannedPaymentStatus::Paused;
         }
 
         if ($this->payments->contains(fn (Payment $payment) => $payment->isPending())) {
-            return 'active';
+            return PlannedPaymentStatus::Active;
         }
 
         $next = ($this->payments->max('occurrence') ?? -1) + 1;
@@ -158,6 +157,6 @@ class RecurringPayment extends Model
         $hasMore = ($this->installments === null || $next < $this->installments)
             && ($this->end_date === null || $this->dateFor($next)->lte($this->end_date));
 
-        return $hasMore ? 'active' : 'finished';
+        return $hasMore ? PlannedPaymentStatus::Active : PlannedPaymentStatus::Finished;
     }
 }

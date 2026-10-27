@@ -49,6 +49,7 @@ return new class extends Migration
                 }
 
                 $this->recalculateBalances($db);
+                $this->assertForeignKeysHold($db);
             });
         });
     }
@@ -89,6 +90,16 @@ return new class extends Migration
     }
 
     /**
+     * Foreign keys were off while rows moved: fail (and roll back) if any now dangle.
+     */
+    private function assertForeignKeysHold(Connection $db): void
+    {
+        $violations = $db->select('pragma foreign_key_check');
+
+        throw_if($violations !== [], RuntimeException::class, 'Foreign key violations after the ledger migration: '.json_encode($violations));
+    }
+
+    /**
      * Consistent snapshot of a SQLite database that holds data, before anything changes.
      */
     private function backup(Connection $db): void
@@ -107,6 +118,9 @@ return new class extends Migration
 
     private function normalize(Connection $db): void
     {
+        // Trimming rate dates to 10 characters must not collide with the unique (from, to, date) index.
+        $db->statement('delete from currency_exchange_rates where id not in (select max(id) from currency_exchange_rates group by from_currency, to_currency, substr(date, 1, 10))');
+
         foreach ([
             'transactions' => ['date'],
             'payments' => ['due_date'],
@@ -132,6 +146,9 @@ return new class extends Migration
         $handled = [];
         $merged = 0;
         $orphans = [];
+
+        $unknownSource = $legs->filter(fn ($leg) => $leg->from_account_id === null && $leg->deleted_at === null);
+        throw_if($unknownSource->isNotEmpty(), RuntimeException::class, 'Transfer legs without a source account: '.$unknownSource->keys()->implode(', '));
 
         // The outgoing leg is the one booked on the source account.
         foreach ($legs as $leg) {

@@ -47,8 +47,8 @@ test('every page renders lists of several rows without lazy loading', function (
         route('transactions.index'),
         route('transactions.index', ['date_start' => '2026-05-01', 'date_end' => '2026-05-31']),
         route('payments.index'),
-        route('recurring-payments.index'),
-        route('recurring-payments.show', $rule),
+        route('planned-payments.index'),
+        route('planned-payments.show', $rule),
     ] as $url) {
         actingAs($this->user)->get($url)->assertSuccessful();
     }

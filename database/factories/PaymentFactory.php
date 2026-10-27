@@ -31,10 +31,10 @@ class PaymentFactory extends Factory
                 'account_id' => $attributes['account_id'],
                 'category_id' => $attributes['category_id'],
             ])->id,
-            'type' => fake()->randomElement([PaymentType::Income, PaymentType::Expense]),
-            'amount' => fake()->randomFloat(2, 10, 500),
+            'type' => PaymentType::Expense,
+            'amount' => 50,
             'description' => fake()->optional()->sentence(),
-            'due_date' => fake()->dateTimeBetween('-1 month', '+1 month')->format('Y-m-d'),
+            'due_date' => now()->toDateString(),
             'occurrence' => null,
         ];
     }

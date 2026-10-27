@@ -45,6 +45,7 @@ return new class extends Migration
                 $table->timestamp('skipped_at')->nullable()->after('is_overridden');
             });
 
+            $this->dropTrashedStandalonePayments($db);
             $this->wrapOneOffPayments($db);
             $this->settlePaidState($db);
             $this->dropStaleRows($db);
@@ -65,6 +66,10 @@ return new class extends Migration
                 $table->unique(['recurring_payment_id', 'occurrence']);
                 $table->index(['user_id', 'due_date']);
             });
+
+            $violations = $db->select('pragma foreign_key_check');
+
+            throw_if($violations !== [], RuntimeException::class, 'Foreign key violations after the planned payments migration: '.json_encode($violations));
         }));
     }
 
@@ -129,6 +134,15 @@ return new class extends Migration
         File::ensureDirectoryExists($directory);
 
         $db->statement('vacuum into ?', [$directory.'/pre-planned-payments-'.now()->format('Ymd-His-u').'.sqlite']);
+    }
+
+    /**
+     * A standalone payment the owner deleted (and never paid) must not come back as a rule.
+     */
+    private function dropTrashedStandalonePayments(Connection $db): void
+    {
+        $db->table('payments')->whereNull('recurring_payment_id')->whereNotNull('deleted_at')
+            ->where('is_paid', false)->whereNull('transaction_id')->delete();
     }
 
     /**

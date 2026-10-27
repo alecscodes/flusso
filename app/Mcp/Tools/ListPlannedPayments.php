@@ -22,7 +22,7 @@ class ListPlannedPayments extends FlussoTool
         $status = $request->get('status');
 
         return $this->json($this->plannedPayments->getRecurringPaymentsForUser($this->user($request))
-            ->when(in_array($status, ['active', 'paused', 'finished'], true), fn ($rules) => $rules->filter(fn ($rule) => $rule->status === $status))
+            ->when(in_array($status, ['active', 'paused', 'finished'], true), fn ($rules) => $rules->filter(fn ($rule) => $rule->status->value === $status))
             ->map(fn ($rule) => $this->plannedPayment($rule))->values()->all());
     }
 

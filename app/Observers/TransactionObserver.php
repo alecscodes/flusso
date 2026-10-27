@@ -44,12 +44,22 @@ class TransactionObserver
         );
     }
 
-    public function saved(Transaction $transaction): void
+    public function created(Transaction $transaction): void
     {
-        $this->recalculate($transaction, [
-            $transaction->getOriginal('account_id'),
-            $transaction->getOriginal('to_account_id'),
-        ]);
+        $this->recalculate($transaction);
+    }
+
+    /**
+     * Only a change to what the ledger sums needs the balances redone, and on the accounts it used to touch as well.
+     */
+    public function updated(Transaction $transaction): void
+    {
+        if ($transaction->wasChanged(['account_id', 'to_account_id', 'type', 'amount', 'to_amount'])) {
+            $this->recalculate($transaction, [
+                $transaction->getOriginal('account_id'),
+                $transaction->getOriginal('to_account_id'),
+            ]);
+        }
     }
 
     /**

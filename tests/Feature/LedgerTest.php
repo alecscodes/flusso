@@ -67,16 +67,18 @@ test('creating, editing and deleting a same-currency transfer updates both accou
         ->and(balanceOf($from))->toBe('700.00')
         ->and(balanceOf($to))->toBe('800.00');
 
-    actingAs($user)->put(route('transactions.update', $transfer), [
+    $payload = [
         'type' => 'transfer',
         'account_id' => $from->id,
         'to_account_id' => $to->id,
         'amount' => 250,
-        'to_amount' => 249.5,
         'date' => now()->toDateString(),
-    ])->assertRedirect(route('transactions.index'));
+    ];
 
-    // Same currency: the given to_amount is ignored, what left arrives.
+    // Same currency: a different amount received is rejected, what left arrives.
+    actingAs($user)->put(route('transactions.update', $transfer), [...$payload, 'to_amount' => 249.5])->assertSessionHasErrors('to_amount');
+    actingAs($user)->put(route('transactions.update', $transfer), [...$payload, 'to_amount' => 250])->assertRedirect(route('transactions.index'));
+
     expect(balanceOf($from))->toBe('750.00')
         ->and(balanceOf($to))->toBe('750.00');
 

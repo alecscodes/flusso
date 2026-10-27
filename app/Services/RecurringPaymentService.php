@@ -8,6 +8,7 @@ use App\Models\RecurringPayment;
 use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 class RecurringPaymentService
 {
@@ -17,6 +18,8 @@ class RecurringPaymentService
 
     /**
      * All rules of the user with their occurrences and a computed `status`.
+     *
+     * @return Collection<int, RecurringPayment>
      */
     public function getRecurringPaymentsForUser(User $user): Collection
     {
@@ -60,19 +63,21 @@ class RecurringPaymentService
      *
      * Paid and skipped occurrences are history and never change. Unpaid ones due
      * today or later follow the rule (an occurrence edited by hand keeps its own
-     * amount, date, account and description); past-due unpaid ones keep their
-     * values; unpaid ones outside the schedule are removed; missing ones are created
-     * from today on (only a new rule backfills past ones, so they can be marked paid).
+     * amount, date, account and description) and are removed when the schedule no
+     * longer has them; past-due unpaid ones are never deleted or moved. Missing
+     * occurrences are created from today on (only a new rule backfills past ones,
+     * so they can be marked paid). A paused rule loses only its untouched upcoming ones.
      */
     public function sync(RecurringPayment $rule, bool $backfill = false): void
     {
         DB::transaction(function () use ($rule, $backfill) {
-            $rule->load(['account', 'category']);
+            $rule->load(['account', 'category', 'payments']);
             $today = now()->toDateString();
-            $occurrences = $rule->payments()->get()->keyBy('occurrence');
+            $occurrences = $rule->payments->keyBy('occurrence');
 
             if ($rule->isPaused()) {
-                $rule->payments()->pending()->where('due_date', '>=', $today)->delete();
+                $rule->payments()->pending()->where('is_overridden', false)->where('due_date', '>=', $today)->delete();
+                $rule->unsetRelation('payments');
 
                 return;
             }
@@ -94,15 +99,24 @@ class RecurringPaymentService
                 'description' => $rule->name,
             ];
 
-            $occurrences->filter(fn (Payment $payment) => $payment->isPending())->each(function (Payment $payment) use ($targets, $today, $shared, $fromRule) {
-                if (! isset($targets[$payment->occurrence])) {
-                    $payment->delete();
-                } elseif ($payment->due_date->toDateString() >= $today) {
-                    $payment->update($payment->is_overridden
-                        ? $shared
-                        : [...$fromRule, 'due_date' => $targets[$payment->occurrence]->toDateString()]);
-                }
-            });
+            $occurrences->filter(fn (Payment $payment) => $payment->isPending() && $payment->due_date->toDateString() >= $today)
+                ->each(function (Payment $payment) use ($targets, $today, $shared, $fromRule) {
+                    if (! isset($targets[$payment->occurrence])) {
+                        $payment->delete();
+
+                        return;
+                    }
+
+                    if ($payment->is_overridden) {
+                        $payment->update($shared);
+
+                        return;
+                    }
+
+                    $date = $targets[$payment->occurrence]->toDateString();
+
+                    $payment->update([...$fromRule, 'due_date' => $date >= $today ? $date : $payment->due_date->toDateString()]);
+                });
 
             foreach ($targets as $n => $date) {
                 if (! $occurrences->has($n) && ($backfill || $date->toDateString() >= $today)) {
@@ -114,19 +128,26 @@ class RecurringPaymentService
                     ]);
                 }
             }
+
+            $rule->unsetRelation('payments');
         });
     }
 
     /**
      * Daily maintenance: extends open-ended rules and applies rule edits to the schedule.
+     * A rule that fails is reported and does not stop the others.
      */
     public function syncAll(): int
     {
         $count = 0;
 
-        RecurringPayment::query()->with(['account', 'category'])->each(function (RecurringPayment $rule) use (&$count) {
-            $this->sync($rule);
-            $count++;
+        RecurringPayment::query()->each(function (RecurringPayment $rule) use (&$count) {
+            try {
+                $this->sync($rule);
+                $count++;
+            } catch (Throwable $e) {
+                report($e);
+            }
         });
 
         return $count;

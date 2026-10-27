@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use Database\Factories\AccountFactory;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -59,28 +58,6 @@ class Account extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);
-    }
-
-    /**
-     * Scope a query to order by name.
-     *
-     * @param  Builder  $query
-     * @return Builder
-     */
-    public function scopeOrderByName($query)
-    {
-        return $query->orderBy('name');
-    }
-
-    /**
-     * Scope a query to exclude savings accounts.
-     *
-     * @param  Builder  $query
-     * @return Builder
-     */
-    public function scopeWhereNotSavings($query)
-    {
-        return $query->where('is_savings', false);
     }
 
     /**

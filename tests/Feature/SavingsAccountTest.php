@@ -65,36 +65,9 @@ test('available balance excludes savings accounts', function () {
         'is_savings' => true,
     ]);
 
-    $accountService = app(AccountService::class);
+    $summary = app(AccountService::class)->getAccountSummary($user);
 
-    $availableBalance = $accountService->getTotalBalanceInPrimaryCurrency($user);
-    $totalBalance = $accountService->getFullBalanceInPrimaryCurrency($user);
-    $savingsBalance = $accountService->getSavingsBalanceInPrimaryCurrency($user);
-
-    expect($availableBalance)->toBe(2000.00);
-    expect($totalBalance)->toBe(7000.00);
-    expect($savingsBalance)->toBe(5000.00);
-});
-
-test('whereNotSavings scope excludes savings accounts', function () {
-    $user = User::factory()->create();
-
-    Account::factory()->create([
-        'user_id' => $user->id,
-        'balance' => 1000.00,
-        'is_savings' => false,
-    ]);
-
-    Account::factory()->create([
-        'user_id' => $user->id,
-        'balance' => 2000.00,
-        'is_savings' => true,
-    ]);
-
-    $nonSavingsAccounts = $user->accounts()->whereNotSavings()->get();
-    $allAccounts = $user->accounts()->get();
-
-    expect($nonSavingsAccounts)->toHaveCount(1);
-    expect($allAccounts)->toHaveCount(2);
-    expect($nonSavingsAccounts->first()->is_savings)->toBe(false);
+    expect($summary['availableBalance'])->toBe(2000.00);
+    expect($summary['totalBalance'])->toBe(7000.00);
+    expect($summary['savingsBalance'])->toBe(5000.00);
 });

@@ -6,7 +6,7 @@ import { index as accountsIndex } from '@/routes/accounts';
 import { index as categoriesIndex } from '@/routes/categories';
 import { index as paymentsIndex } from '@/routes/payments';
 import { edit as profileEdit } from '@/routes/profile';
-import { index as recurringPaymentsIndex } from '@/routes/recurring-payments';
+import { index as recurringPaymentsIndex } from '@/routes/planned-payments';
 import { index as transactionsIndex } from '@/routes/transactions';
 import type { User } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';

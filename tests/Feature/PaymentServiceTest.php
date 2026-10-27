@@ -6,6 +6,8 @@ use App\Models\Payment;
 use App\Models\RecurringPayment;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Services\PaymentService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
 use function Pest\Laravel\actingAs;
@@ -160,9 +162,9 @@ test('another user cannot touch my payments or rules', function () {
     $this->patch(route('payments.unskip', $payment))->assertForbidden();
     $this->patch(route('payments.mark-paid', $payment))->assertForbidden();
     $this->patch(route('payments.mark-unpaid', $payment))->assertForbidden();
-    $this->get(route('recurring-payments.show', $rule))->assertForbidden();
-    $this->put(route('recurring-payments.update', $rule), [])->assertForbidden();
-    $this->delete(route('recurring-payments.destroy', $rule))->assertForbidden();
+    $this->get(route('planned-payments.show', $rule))->assertForbidden();
+    $this->put(route('planned-payments.update', $rule), [])->assertForbidden();
+    $this->delete(route('planned-payments.destroy', $rule))->assertForbidden();
 
     // ...and cannot book into someone else's account.
     actingAs($user)->patch(route('payments.mark-paid', $payment), ['account_id' => $account->id])->assertSessionHasErrors('account_id');
@@ -173,4 +175,54 @@ test('another user cannot touch my payments or rules', function () {
 
 test('the standalone payment creation route is gone', function () {
     expect(Route::has('payments.store'))->toBeFalse();
+});
+
+test('an occurrence needs a Y-m-d date and a sane amount to be edited or paid', function () {
+    $user = User::factory()->create();
+    $payment = plannedPayment($user, ['installments' => 1])->payments()->first();
+    $edit = fn (array $overrides) => ['amount' => 12, 'due_date' => now()->addDay()->toDateString(), 'account_id' => $payment->account_id, ...$overrides];
+
+    actingAs($user)->patch(route('payments.update', $payment), $edit(['due_date' => '15/04/2026']))->assertSessionHasErrors('due_date');
+    actingAs($user)->patch(route('payments.update', $payment), $edit(['amount' => 10000000000]))->assertSessionHasErrors('amount');
+    actingAs($user)->patch(route('payments.mark-paid', $payment), ['date' => '2026-04-15 10:00:00'])->assertSessionHasErrors('date');
+    actingAs($user)->patch(route('payments.mark-paid', $payment), ['amount' => 10000000000])->assertSessionHasErrors('amount');
+
+    expect($payment->fresh())->isPending()->toBeTrue()->is_overridden->toBeFalse();
+});
+
+test('deleting a one-time planned payment says the payment was deleted', function () {
+    $user = User::factory()->create();
+    $payment = plannedPayment($user, ['installments' => 1])->payments()->first();
+
+    actingAs($user)->delete(route('payments.destroy', $payment))->assertRedirect(route('payments.index'))
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Payment deleted.');
+});
+
+test('marking unpaid an occurrence whose transaction is gone fails cleanly', function () {
+    $user = User::factory()->create();
+    $payment = plannedPayment($user, ['installments' => 1])->payments()->first();
+    app(PaymentService::class)->markAsPaid($payment);
+    DB::table('transactions')->update(['deleted_at' => now()]); // behind the observer's back
+
+    actingAs($user)->patch(route('payments.mark-unpaid', $payment))->assertSessionHasErrors('payment');
+});
+
+test('an occurrence takes the currency of its account without asking for it again', function () {
+    $user = User::factory()->create();
+    $eur = Account::factory()->create(['user_id' => $user->id, 'currency' => 'EUR']);
+    $ron = Account::factory()->create(['user_id' => $user->id, 'currency' => 'RON']);
+    $rule = plannedPayment($user, ['installments' => 1], $eur);
+    $payment = $rule->payments()->first();
+
+    app(PaymentService::class)->updatePayment($payment, ['amount' => 20, 'due_date' => now()->toDateString(), 'account_id' => $ron->id]);
+    expect($payment->fresh()->currency)->toBe('RON');
+
+    DB::enableQueryLog();
+    Payment::create([
+        'user_id' => $user->id, 'account_id' => $eur->id, 'category_id' => $rule->category_id, 'recurring_payment_id' => $rule->id,
+        'occurrence' => 5, 'type' => 'expense', 'amount' => 5, 'currency' => 'EUR', 'due_date' => now()->toDateString(),
+    ]);
+    $accountReads = collect(DB::getQueryLog())->filter(fn (array $query) => str_starts_with($query['query'], 'select') && str_contains($query['query'], 'from "accounts"'));
+
+    expect($accountReads)->toBeEmpty();
 });

@@ -35,8 +35,8 @@ class MarkPaymentPaidRequest extends FormRequest
         $needsAmount = filled($accountId) && $user->accounts()->whereKey($accountId)->value('currency') !== $payment->currency;
 
         return [
-            'amount' => [Rule::requiredIf($needsAmount), 'nullable', 'numeric', 'min:0.01', 'decimal:0,2'],
-            'date' => ['nullable', 'date'],
+            'amount' => [Rule::requiredIf($needsAmount), 'nullable', 'numeric', 'min:0.01', 'max:9999999999.99', 'decimal:0,2'],
+            'date' => ['nullable', 'date_format:Y-m-d'],
             'account_id' => ['nullable', 'integer', $user->ownedAccountRule()],
         ];
     }

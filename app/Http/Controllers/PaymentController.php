@@ -2,13 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\PaymentType;
 use App\Http\Requests\MarkPaymentPaidRequest;
 use App\Http\Requests\PaymentUpdateRequest;
 use App\Models\Payment;
 use App\Services\AccountService;
 use App\Services\CategoryService;
-use App\Services\CurrencyService;
 use App\Services\PaymentService;
 use App\Support\FlashToast;
 use Illuminate\Http\RedirectResponse;
@@ -22,7 +20,6 @@ class PaymentController extends Controller
         private PaymentService $paymentService,
         private AccountService $accountService,
         private CategoryService $categoryService,
-        private CurrencyService $currencyService
     ) {}
 
     public function index(Request $request): Response
@@ -30,37 +27,17 @@ class PaymentController extends Controller
         $this->authorize('viewAny', Payment::class);
 
         $user = $request->user();
-        $period = $user->getFinancialPeriod();
-        $overview = $this->paymentService->getOverview($user);
-        $summary = $this->paymentService->getPaymentSummaryForPeriod($user, $period['start'], $period['end']);
-
-        $toPay = fn ($payments) => $this->currencyService->sumInPrimaryCurrency(
-            $payments->filter(fn (Payment $payment) => $payment->isPending() && $payment->type === PaymentType::Expense),
-            'amount',
-            'currency',
-            $user,
-        );
-
-        $availableBalance = $this->accountService->getTotalBalanceInPrimaryCurrency($user);
-        $upcoming = $overview['period']->concat($overview['later']);
+        $balances = $this->accountService->getAccountSummary($user);
+        $overview = $this->paymentService->getOverview($user, $balances['availableBalance']);
 
         return Inertia::render('Payments/Index', [
             'overduePayments' => $overview['overdue'],
             'periodPayments' => $overview['period'],
             'laterPayments' => $overview['later'],
             'monthlyTotals' => $overview['monthly_totals'],
-            'accounts' => $this->accountService->getAccountsForUser($user),
+            'accounts' => $balances['accounts'],
             'categories' => $this->categoryService->getCategoriesForUser($user),
-            'totals' => [
-                'available_balance' => $availableBalance,
-                'overdue_amount' => $toPay($overview['overdue']),
-                'overdue_count' => $overview['overdue']->count(),
-                'upcoming_amount' => $toPay($upcoming),
-                'upcoming_count' => $upcoming->filter->isPending()->count(),
-                'period_amount' => $toPay($overview['period']),
-                'balance_after_planned' => $availableBalance - $summary['total_due'],
-                'primary_currency' => $summary['primary_currency'],
-            ],
+            'totals' => $overview['totals'],
         ]);
     }
 
@@ -79,7 +56,7 @@ class PaymentController extends Controller
 
         $this->paymentService->deletePayment($payment);
 
-        FlashToast::success('Planned payment deleted.');
+        FlashToast::success('Payment deleted.');
 
         return redirect()->route('payments.index');
     }

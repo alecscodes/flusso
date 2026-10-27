@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Prunable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -29,7 +30,7 @@ use Illuminate\Support\Facades\Storage;
 class Transaction extends Model
 {
     /** @use HasFactory<TransactionFactory> */
-    use HasFactory, SoftDeletes;
+    use HasFactory, Prunable, SoftDeletes;
 
     protected $fillable = [
         'user_id',
@@ -64,6 +65,17 @@ class Transaction extends Model
                 $file->delete();
             });
         });
+    }
+
+    /**
+     * Soft-deleted transactions stay restorable for 30 days, then go for good
+     * (pruning force-deletes one by one so their files go with them).
+     *
+     * @return Builder<Transaction>
+     */
+    public function prunable(): Builder
+    {
+        return static::onlyTrashed()->where('deleted_at', '<=', now()->subDays(30));
     }
 
     /** @return BelongsTo<User, $this> */

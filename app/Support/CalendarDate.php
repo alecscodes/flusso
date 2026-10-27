@@ -14,9 +14,4 @@ class CalendarDate extends CarbonImmutable
     {
         return $this->toDateString();
     }
-
-    public function jsonSerialize(): string
-    {
-        return $this->toDateString();
-    }
 }

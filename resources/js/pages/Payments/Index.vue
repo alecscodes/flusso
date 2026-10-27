@@ -12,7 +12,7 @@ import {
     Modal,
 } from '@/components/ui';
 import { useCurrency, useDate } from '@/composables';
-import { store as recurringPaymentStore } from '@/routes/recurring-payments';
+import { store as recurringPaymentStore } from '@/routes/planned-payments';
 import type { Account, Category, Payment } from '@/types';
 import { Head } from '@inertiajs/vue3';
 import {
