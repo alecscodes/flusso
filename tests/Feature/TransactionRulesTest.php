@@ -1,5 +1,7 @@
 <?php
 
+use App\Mcp\Servers\FlussoServer;
+use App\Mcp\Tools;
 use App\Models\Account;
 use App\Models\Category;
 use App\Models\Transaction;
@@ -136,4 +138,75 @@ test('transactions deleted more than 30 days ago are pruned for good, files incl
     expect(Transaction::withTrashed()->pluck('id')->all())->toBe([$recent->id, $live->id])
         ->and(Storage::disk('local')->exists('transactions/receipt.pdf'))->toBeFalse()
         ->and(TransactionFile::count())->toBe(0);
+});
+
+test('a transaction on an archived account can be edited but not moved to another archived account', function () {
+    $user = User::factory()->create();
+    $old = Account::factory()->create(['user_id' => $user->id, 'currency' => 'EUR', 'balance' => 100]);
+    $other = Account::factory()->create(['user_id' => $user->id, 'currency' => 'EUR', 'balance' => 100]);
+    $transaction = app(TransactionService::class)->createTransaction($user, ['type' => 'expense', 'account_id' => $old->id, 'amount' => 10]);
+    $old->delete();
+    $other->delete();
+
+    $payload = fn (array $overrides = []) => ['type' => 'expense', 'account_id' => $old->id, 'amount' => 25, 'date' => now()->toDateString(), ...$overrides];
+
+    actingAs($user)->put(route('transactions.update', $transaction), $payload())->assertSessionHasNoErrors();
+    expect($transaction->fresh()->amount)->toBe('25.00')
+        ->and($old->fresh()->balance)->toBe('75.00');
+
+    actingAs($user)->put(route('transactions.update', $transaction), $payload(['account_id' => $other->id]))->assertSessionHasErrors('account_id');
+    actingAs($user)->post(route('transactions.store'), $payload())->assertSessionHasErrors('account_id');
+});
+
+test('update_transaction works on an archived account too', function () {
+    $user = User::factory()->create();
+    $account = Account::factory()->create(['user_id' => $user->id, 'currency' => 'EUR', 'balance' => 100]);
+    $transaction = app(TransactionService::class)->createTransaction($user, ['type' => 'expense', 'account_id' => $account->id, 'amount' => 10]);
+    $account->delete();
+
+    FlussoServer::actingAs($user)->tool(Tools\UpdateTransaction::class, ['id' => $transaction->id, 'amount' => 30])->assertOk();
+
+    expect($transaction->fresh()->amount)->toBe('30.00');
+});
+
+test('between accounts of one currency exactly what left arrives and a different amount received is rejected', function () {
+    $user = User::factory()->create();
+    $from = Account::factory()->create(['user_id' => $user->id, 'currency' => 'EUR', 'balance' => 100]);
+    $to = Account::factory()->create(['user_id' => $user->id, 'currency' => 'EUR', 'balance' => 0]);
+
+    $viaService = app(TransactionService::class)->createTransaction($user, [
+        'type' => 'transfer', 'account_id' => $from->id, 'to_account_id' => $to->id, 'amount' => 50, 'to_amount' => 500,
+    ]);
+    FlussoServer::actingAs($user)->tool(Tools\CreateTransaction::class, [
+        'type' => 'transfer', 'account_id' => $from->id, 'to_account_id' => $to->id, 'amount' => 20, 'to_amount' => 200,
+    ])->assertHasErrors(['amount received equals the amount sent']);
+    FlussoServer::actingAs($user)->tool(Tools\CreateTransaction::class, [
+        'type' => 'transfer', 'account_id' => $from->id, 'to_account_id' => $to->id, 'amount' => 20, 'to_amount' => 20,
+    ])->assertOk();
+
+    expect($viaService->to_amount)->toBe('50.00')
+        ->and($to->fresh()->balance)->toBe('70.00')
+        ->and($from->fresh()->balance)->toBe('30.00');
+});
+
+test('amounts with more than two decimals are rejected', function () {
+    $this->travelTo('2026-05-10 12:00:00');
+    $user = User::factory()->create();
+    $account = Account::factory()->create(['user_id' => $user->id, 'currency' => 'EUR', 'balance' => 100]);
+    $category = Category::factory()->create(['user_id' => $user->id, 'type' => 'expense']);
+    $rule = plannedPayment($user, ['installments' => 1, 'start_date' => '2026-05-12'], $account);
+    $payment = $rule->payments()->first();
+    $today = now()->toDateString();
+
+    actingAs($user)->post(route('transactions.store'), ['type' => 'expense', 'account_id' => $account->id, 'amount' => 13.705, 'date' => $today])->assertSessionHasErrors('amount');
+    actingAs($user)->patch(route('payments.update', $payment), ['amount' => 13.705, 'due_date' => $today, 'account_id' => $account->id])->assertSessionHasErrors('amount');
+    actingAs($user)->patch(route('payments.mark-paid', $payment), ['amount' => 13.705])->assertSessionHasErrors('amount');
+    actingAs($user)->post(route('planned-payments.store'), [
+        'name' => 'x', 'account_id' => $account->id, 'category_id' => $category->id, 'amount' => 13.705,
+        'interval_type' => 'months', 'interval_value' => 1, 'start_date' => $today,
+    ])->assertSessionHasErrors('amount');
+    actingAs($user)->post(route('accounts.store'), ['name' => 'x', 'currency' => 'EUR', 'balance' => 1.005])->assertSessionHasErrors('balance');
+    FlussoServer::actingAs($user)->tool(Tools\CreateTransaction::class, ['type' => 'expense', 'account_id' => $account->id, 'amount' => 13.705])->assertHasErrors(['amount field must have 0-2 decimal places']);
+
+    actingAs($user)->post(route('transactions.store'), ['type' => 'expense', 'account_id' => $account->id, 'amount' => 14, 'date' => $today])->assertSessionHasNoErrors();
 });

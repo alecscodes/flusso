@@ -24,6 +24,13 @@ class User extends Authenticatable implements OAuthenticatable
     use HasApiTokens, HasFactory, Notifiable, TwoFactorAuthenticatable;
 
     /**
+     * Mirrors the column default, so a freshly created user has the attribute too.
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = ['reset_date' => null];
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>

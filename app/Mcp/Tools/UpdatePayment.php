@@ -5,6 +5,7 @@ namespace App\Mcp\Tools;
 use App\Http\Requests\PaymentUpdateRequest;
 use App\Services\PaymentService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Support\Facades\Validator;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
@@ -31,9 +32,9 @@ class UpdatePayment extends FlussoTool
 
         $input = [
             ...['amount' => $payment->amount, 'due_date' => $payment->due_date->toDateString(), 'account_id' => $payment->account_id, 'description' => $payment->description],
-            ...$this->passed($request, ['amount', 'due_date', 'account_id', 'description']),
+            ...$request->all(['amount', 'due_date', 'account_id', 'description']),
         ];
-        $data = $this->validated($input, PaymentUpdateRequest::rulesFor($user));
+        $data = Validator::validate($input, PaymentUpdateRequest::rulesFor($user));
 
         return $this->json($this->payment($this->payments->updatePayment($payment, $data)->load(['account', 'category'])));
     }

@@ -3,11 +3,16 @@
 namespace App\Services;
 
 use App\Models\Transaction;
+use App\Models\TransactionFile;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 
 class FileUploadService
 {
+    /**
+     * @param  array<int, mixed>  $files
+     * @return Collection<int, TransactionFile>
+     */
     public function handleTransactionFiles(Transaction $transaction, array $files): Collection
     {
         $uploadedFiles = collect();

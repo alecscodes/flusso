@@ -5,6 +5,7 @@ namespace App\Mcp\Tools;
 use App\Http\Requests\MarkPaymentPaidRequest;
 use App\Services\PaymentService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Support\Facades\Validator;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
@@ -27,8 +28,8 @@ class MarkPaymentPaid extends FlussoTool
             return $payment;
         }
 
-        $input = $this->passed($request, ['amount', 'date', 'account_id']);
-        $data = $this->validated($input, MarkPaymentPaidRequest::rulesFor($user, $payment, $input));
+        $input = $request->all(['amount', 'date', 'account_id']);
+        $data = Validator::validate($input, MarkPaymentPaidRequest::rulesFor($user, $payment, $input));
         $transaction = $this->payments->markAsPaid($payment, $data);
 
         return $this->json([

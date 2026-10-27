@@ -17,6 +17,9 @@ class MarkPaymentPaidRequest extends FormRequest
         return $this->user()->can('update', $this->route('payment'));
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function rules(): array
     {
         return self::rulesFor($this->user(), $this->route('payment'), $this->all());

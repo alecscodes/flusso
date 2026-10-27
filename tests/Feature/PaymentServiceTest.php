@@ -1,5 +1,7 @@
 <?php
 
+use App\Mcp\Servers\FlussoServer;
+use App\Mcp\Tools;
 use App\Models\Account;
 use App\Models\Category;
 use App\Models\Payment;
@@ -9,6 +11,7 @@ use App\Models\User;
 use App\Services\PaymentService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Validation\ValidationException;
 
 use function Pest\Laravel\actingAs;
 
@@ -225,4 +228,42 @@ test('an occurrence takes the currency of its account without asking for it agai
     $accountReads = collect(DB::getQueryLog())->filter(fn (array $query) => str_starts_with($query['query'], 'select') && str_contains($query['query'], 'from "accounts"'));
 
     expect($accountReads)->toBeEmpty();
+});
+
+test('paying from an account in another currency needs the amount', function () {
+    $this->travelTo('2026-05-10 12:00:00');
+    $user = User::factory()->create();
+    $ron = Account::factory()->create(['user_id' => $user->id, 'currency' => 'RON', 'balance' => 500]);
+    $payment = plannedPayment($user, ['installments' => 1, 'start_date' => '2026-05-12', 'amount' => 20])->payments()->first();
+
+    actingAs($user)->patch(route('payments.mark-paid', $payment), ['account_id' => $ron->id])->assertSessionHasErrors('amount');
+    FlussoServer::actingAs($user)->tool(Tools\MarkPaymentPaid::class, ['id' => $payment->id, 'account_id' => $ron->id])->assertHasErrors(['amount field is required']);
+    expect(Transaction::count())->toBe(0);
+
+    actingAs($user)->patch(route('payments.mark-paid', $payment), ['account_id' => $ron->id, 'amount' => 100])->assertSessionHasNoErrors();
+    expect($ron->fresh()->balance)->toBe('400.00');
+});
+
+test('paying, skipping and unskipping the same stale payment twice only works once', function () {
+    $user = User::factory()->create();
+    $rule = plannedPayment($user, ['installments' => 2]);
+    $first = Payment::where('occurrence', 0)->sole();
+    $second = Payment::where('occurrence', 1)->sole();
+    $service = app(PaymentService::class);
+
+    $staleCopy = Payment::find($first->id);
+    $service->markAsPaid($first);
+
+    expect(fn () => $service->markAsPaid($staleCopy))->toThrow(ValidationException::class)
+        ->and(Transaction::count())->toBe(1)
+        ->and($rule->account->fresh()->balance)->toBe('990.00');
+
+    $staleCopy = Payment::find($second->id);
+    $service->skip($second);
+    expect(fn () => $service->skip($staleCopy))->toThrow(ValidationException::class);
+
+    $staleCopy = Payment::find($second->id);
+    $service->unskip($second);
+    expect(fn () => $service->unskip($staleCopy))->toThrow(ValidationException::class)
+        ->and($second->fresh()->skipped_at)->toBeNull();
 });

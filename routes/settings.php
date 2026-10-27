@@ -30,14 +30,17 @@ Route::middleware('auth')->group(function () {
     Route::get('settings/two-factor', [TwoFactorAuthenticationController::class, 'show'])
         ->name('two-factor.show');
 
-    Route::get('settings/registration', [RegistrationController::class, 'edit'])->name('registration.edit');
-    Route::patch('settings/registration', [RegistrationController::class, 'update'])->name('registration.update');
+    // Instance-wide settings belong to the owner (the first user), not to everyone who may register later.
+    Route::middleware('can:manage-instance')->group(function () {
+        Route::get('settings/registration', [RegistrationController::class, 'edit'])->name('settings.registration.edit');
+        Route::patch('settings/registration', [RegistrationController::class, 'update'])->name('settings.registration.update');
 
-    Route::get('settings/banned-ips', [BannedIpsController::class, 'index'])->name('banned-ips.index');
-    Route::delete('settings/banned-ips/unban', [BannedIpsController::class, 'destroy'])->name('banned-ips.destroy');
+        Route::get('settings/banned-ips', [BannedIpsController::class, 'index'])->name('settings.banned-ips.index');
+        Route::delete('settings/banned-ips/unban', [BannedIpsController::class, 'destroy'])->name('settings.banned-ips.destroy');
+    });
 
-    Route::get('settings/connected-apps', [ConnectedAppsController::class, 'index'])->name('connected-apps.index');
-    Route::delete('settings/connected-apps/{client}', [ConnectedAppsController::class, 'destroy'])->name('connected-apps.destroy');
+    Route::get('settings/connected-apps', [ConnectedAppsController::class, 'index'])->name('settings.connected-apps.index');
+    Route::delete('settings/connected-apps/{client}', [ConnectedAppsController::class, 'destroy'])->name('settings.connected-apps.destroy');
 
     Route::get('settings/finance', [FinanceController::class, 'edit'])
         ->name('settings.finance.edit');

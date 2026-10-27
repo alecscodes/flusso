@@ -15,6 +15,9 @@ class AccountService
         private RecurringPaymentService $recurringPaymentService,
     ) {}
 
+    /**
+     * @return Collection<int, Account>
+     */
     public function getAccountsForUser(User $user): Collection
     {
         return $user->accounts()
@@ -22,6 +25,9 @@ class AccountService
             ->get();
     }
 
+    /**
+     * @param  array{name: string, currency: string, balance?: numeric|null, is_savings?: bool|null}  $data
+     */
     public function createAccount(User $user, array $data): Account
     {
         $account = $user->accounts()->create([
@@ -36,6 +42,9 @@ class AccountService
         return $account;
     }
 
+    /**
+     * @param  array{name?: string, currency?: string, is_savings?: bool|null}  $data
+     */
     public function updateAccount(Account $account, array $data): Account
     {
         $account->update([
@@ -69,6 +78,8 @@ class AccountService
 
     /**
      * The accounts with their balances in the primary currency (one query for the accounts).
+     *
+     * @return array{accounts: Collection<int, Account>, availableBalance: float, totalBalance: float, savingsBalance: float, primaryCurrency: string}
      */
     public function getAccountSummary(User $user): array
     {
@@ -83,6 +94,9 @@ class AccountService
         ];
     }
 
+    /**
+     * @param  Collection<int, Account>  $accounts
+     */
     private function sumBalances(User $user, Collection $accounts): float
     {
         return $this->currencyService->sumInPrimaryCurrency($accounts, 'balance', 'currency', $user);

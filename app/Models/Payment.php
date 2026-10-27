@@ -86,6 +86,10 @@ class Payment extends Model
         return $this->belongsTo(Transaction::class);
     }
 
+    /**
+     * @param  Builder<Payment>  $query
+     * @return Builder<Payment>
+     */
     public function scopeUnpaid(Builder $query): Builder
     {
         return $query->whereNull('transaction_id');
@@ -93,6 +97,9 @@ class Payment extends Model
 
     /**
      * Still owed: neither paid nor skipped.
+     *
+     * @param  Builder<Payment>  $query
+     * @return Builder<Payment>
      */
     public function scopePending(Builder $query): Builder
     {
@@ -133,6 +140,10 @@ class Payment extends Model
         return $query->visible()->pending()->where('due_date', '<', now()->toDateString());
     }
 
+    /**
+     * @param  Builder<Payment>  $query
+     * @return Builder<Payment>
+     */
     public function scopeDueBetween(Builder $query, string $startDate, string $endDate): Builder
     {
         return $query->where('due_date', '>=', $startDate)->where('due_date', '<=', $endDate);

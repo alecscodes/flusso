@@ -2,8 +2,10 @@
 
 namespace App\Mcp\Tools;
 
+use App\Enums\CategoryType;
 use App\Services\CategoryService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Validation\Rule;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
@@ -19,17 +21,17 @@ class ListCategories extends FlussoTool
 
     public function handle(Request $request): Response
     {
-        $type = $request->get('type');
+        $input = $request->validate(['type' => ['nullable', Rule::enum(CategoryType::class)]]);
 
         return $this->json($this->categories->getCategoriesForUser($this->user($request))
-            ->when(in_array($type, ['income', 'expense'], true), fn ($categories) => $categories->filter(fn ($category) => $category->type->value === $type))
+            ->when($input['type'] ?? null, fn ($categories, $type) => $categories->filter(fn ($category) => $category->type->value === $type))
             ->map(fn ($category) => $this->category($category))->values()->all());
     }
 
     public function schema(JsonSchema $schema): array
     {
         return [
-            'type' => $schema->string()->enum(['income', 'expense'])->description('Only categories of this type.'),
+            'type' => $schema->string()->enum(CategoryType::class)->description('Only categories of this type.'),
         ];
     }
 }

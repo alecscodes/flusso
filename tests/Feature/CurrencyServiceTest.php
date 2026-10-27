@@ -65,3 +65,23 @@ test('the currency service lives for one request only', function () {
 
     expect(app(CurrencyService::class))->not->toBe($first);
 });
+
+test('when the rate API is down the latest stored rate is used and the failure is remembered', function () {
+    Http::fake(['*' => Http::response([], 500)]);
+    $currency = app(CurrencyService::class);
+
+    CurrencyExchangeRate::create(['from_currency' => 'eur', 'to_currency' => 'ron', 'rate' => 4.9, 'date' => '2020-01-01']);
+    CurrencyExchangeRate::create(['from_currency' => 'eur', 'to_currency' => 'ron', 'rate' => 5.0, 'date' => '2020-02-01']);
+
+    expect($currency->getRate('EUR', 'RON'))->toBe(5.0);
+    $calls = count(Http::recorded());
+    expect($calls)->toBe(2)
+        ->and($currency->getRate('EUR', 'RON'))->toBe(5.0)
+        ->and(count(Http::recorded()))->toBe($calls);
+
+    // Nothing stored either: still only one attempt per outage.
+    expect($currency->getRate('EUR', 'USD'))->toBeNull();
+    $calls = count(Http::recorded());
+    expect($currency->getRate('EUR', 'USD'))->toBeNull()
+        ->and(count(Http::recorded()))->toBe($calls);
+});

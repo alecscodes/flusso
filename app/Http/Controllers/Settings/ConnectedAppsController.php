@@ -4,10 +4,13 @@ namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
 use App\Support\FlashToast;
+use Carbon\CarbonInterface;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
+use Laravel\Passport\RefreshToken;
 use Laravel\Passport\Token;
 
 /**
@@ -15,9 +18,13 @@ use Laravel\Passport\Token;
  */
 class ConnectedAppsController extends Controller
 {
+    /**
+     * `last_used_at` is when the app last got a token (every refresh issues one) and
+     * `expires_at` when the connection lapses for good: the refresh token's expiry.
+     */
     public function index(Request $request): Response
     {
-        $apps = $request->user()->tokens()->with(['client', 'refreshToken'])->get()
+        $apps = $request->user()->tokens()->where('revoked', false)->whereHas('client')->with(['client', 'refreshToken'])->get()
             ->filter(fn (Token $token) => $this->isAlive($token))
             ->groupBy('client_id')
             ->map(fn ($tokens) => [
@@ -25,7 +32,7 @@ class ConnectedAppsController extends Controller
                 'name' => $tokens->first()->client->name,
                 'connected_at' => $tokens->min('created_at'),
                 'last_used_at' => $tokens->max('created_at'),
-                'expires_at' => $tokens->max('expires_at'),
+                'expires_at' => $tokens->map(fn (Token $token) => $this->lapsesAt($token))->max(),
             ])
             ->sortBy('name')
             ->values();
@@ -38,16 +45,20 @@ class ConnectedAppsController extends Controller
      */
     public function destroy(Request $request, string $client): RedirectResponse
     {
-        $tokens = $request->user()->tokens()->where('client_id', $client)->with('refreshToken')->get();
+        $ids = $request->user()->tokens()->where('client_id', $client)->where('revoked', false)->pluck('id');
 
-        $tokens->each(function (Token $token) {
-            $token->refreshToken?->revoke();
-            $token->revoke();
+        DB::transaction(function () use ($ids) {
+            RefreshToken::whereIn('access_token_id', $ids)->update(['revoked' => true]);
+            Token::whereIn('id', $ids)->update(['revoked' => true]);
         });
 
-        FlashToast::success('Access revoked.');
+        if ($ids->isEmpty()) {
+            FlashToast::error('That app is not connected.');
+        } else {
+            FlashToast::success('Access revoked.');
+        }
 
-        return redirect()->route('connected-apps.index');
+        return redirect()->route('settings.connected-apps.index');
     }
 
     /**
@@ -55,14 +66,18 @@ class ConnectedAppsController extends Controller
      */
     private function isAlive(Token $token): bool
     {
-        if ($token->revoked) {
-            return false;
-        }
+        return $this->lapsesAt($token)?->isFuture() ?? true;
+    }
 
+    /**
+     * When the app can no longer act for the user without asking again; null if never.
+     */
+    private function lapsesAt(Token $token): ?CarbonInterface
+    {
         $refresh = $token->refreshToken;
 
-        return $token->expires_at === null
-            || $token->expires_at->isFuture()
-            || ($refresh !== null && ! $refresh->revoked && $refresh->expires_at->isFuture());
+        return $refresh !== null && ! $refresh->revoked && $token->expires_at !== null
+            ? max($token->expires_at, $refresh->expires_at)
+            : $token->expires_at;
     }
 }

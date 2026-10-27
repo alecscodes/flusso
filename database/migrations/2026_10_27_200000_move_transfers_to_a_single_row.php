@@ -244,6 +244,8 @@ return new class extends Migration
     /**
      * Writes the merged transfer; the auto-generated "Transfer to/from X" text is dropped
      * because the UI renders "A -> B", and transfers carry no category.
+     *
+     * @param  array<string, mixed>  $values
      */
     private function update(Connection $db, object $leg, array $values): void
     {

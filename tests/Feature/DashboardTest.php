@@ -11,6 +11,7 @@ test('authenticated users can visit the dashboard', function () {
     $user = User::factory()->create();
     $this->actingAs($user);
 
-    $response = $this->get(route('dashboard'));
-    $response->assertStatus(200);
+    $this->get(route('dashboard'))->assertOk()->assertInertia(fn ($page) => $page
+        ->component('Dashboard')
+        ->has('auth.user'));
 });

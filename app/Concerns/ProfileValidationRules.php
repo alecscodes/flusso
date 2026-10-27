@@ -42,6 +42,7 @@ trait ProfileValidationRules
             'required',
             'string',
             'email',
+            'lowercase',
             'max:255',
             $userId === null
                 ? Rule::unique(User::class)

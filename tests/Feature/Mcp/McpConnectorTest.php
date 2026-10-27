@@ -40,9 +40,6 @@ function registerClaude(): Client
 }
 
 /**
- * @return array{url: string, verifier: string}
- */
-/**
  * The consent page's props, as the browser receives them.
  *
  * @return array<string, mixed>
@@ -72,6 +69,9 @@ function assertRedirectsBackTo(TestResponse $response, string $url): void
     expect($location['path'])->toBe($wanted['path'])->and($actual)->toEqual($expected);
 }
 
+/**
+ * @return array{url: string, verifier: string}
+ */
 function authorizeUrl(Client $client, string $state = 'xyz'): array
 {
     $verifier = str_repeat('a1b2c3d4', 8);
@@ -146,6 +146,12 @@ test('client registration is rate limited', function () {
     $this->postJson('/oauth/register', ['redirect_uris' => [CLAUDE_CALLBACK]])->assertStatus(429);
 });
 
+test('the discovery documents are not rate limited, only the registration is', function () {
+    foreach (range(1, 30) as $i) {
+        $this->getJson('/.well-known/oauth-authorization-server', mcpHeaders())->assertOk();
+    }
+});
+
 test('a guest is sent to the login and, after signing in, back to the consent page', function () {
     $user = User::factory()->withoutTwoFactor()->create(['password' => 'secret-password']);
     ['url' => $url] = authorizeUrl(registerClaude());
@@ -157,6 +163,7 @@ test('a guest is sent to the login and, after signing in, back to the consent pa
     $this->get($url, ['User-Agent' => 'Mozilla/5.0'])->assertOk()->assertInertia(fn ($page) => $page
         ->component('Auth/OAuthAuthorize')
         ->where('clientName', 'Claude')
+        ->where('redirectHost', 'claude.ai')
         ->where('state', 'xyz')
         ->where('scopes', ['View and change your accounts, transactions and planned payments'])
         ->has('authToken')
@@ -252,4 +259,10 @@ test('the MCP server answers initialize and lists the tools for a signed-in user
     $list = $this->postJson('/mcp', ['jsonrpc' => '2.0', 'id' => 2, 'method' => 'tools/list', 'params' => ['limit' => 100]], mcpHeaders())->assertOk();
 
     expect($list->getContent())->toContain('create_transaction')->toContain('mark_payment_paid');
+});
+
+test('a token without the mcp:use scope cannot call the MCP server', function () {
+    Passport::actingAs(User::factory()->create(), ['something-else'], 'api');
+
+    $this->postJson('/mcp', ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list'], mcpHeaders())->assertForbidden();
 });

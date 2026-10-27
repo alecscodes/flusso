@@ -11,8 +11,6 @@ use App\Models\User;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
-use Illuminate\Support\Arr;
-use Illuminate\Support\Facades\Validator;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Tool;
@@ -30,24 +28,13 @@ abstract class FlussoTool extends Tool
     }
 
     /**
-     * @param  array<string, mixed>  $input
-     * @param  array<string, mixed>  $rules
-     * @return array<string, mixed>
-     */
-    protected function validated(array $input, array $rules): array
-    {
-        return Validator::validate($input, $rules);
-    }
-
-    /**
-     * The tool arguments that were actually passed (an explicit null counts).
+     * Every tool only touches the owner's own data, never anything outside the app.
      *
-     * @param  list<string>  $keys
      * @return array<string, mixed>
      */
-    protected function passed(Request $request, array $keys): array
+    public function annotations(): array
     {
-        return Arr::only($request->all(), $keys);
+        return [...parent::annotations(), 'openWorldHint' => false];
     }
 
     protected function notFound(string $what): Response

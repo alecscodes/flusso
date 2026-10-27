@@ -122,6 +122,9 @@ class Transaction extends Model
 
     /**
      * Transactions that touch the account: its own rows and incoming transfers.
+     *
+     * @param  Builder<Transaction>  $query
+     * @return Builder<Transaction>
      */
     public function scopeForAccount(Builder $query, int $accountId): Builder
     {
@@ -130,13 +133,20 @@ class Transaction extends Model
             ->orWhere('to_account_id', $accountId));
     }
 
-    public function scopeForCategory($query, int $categoryId)
+    /**
+     * @param  Builder<Transaction>  $query
+     * @return Builder<Transaction>
+     */
+    public function scopeForCategory(Builder $query, int $categoryId): Builder
     {
         return $query->where('category_id', $categoryId);
     }
 
     /**
      * Both bounds are inclusive; dates are compared as 'Y-m-d' strings.
+     *
+     * @param  Builder<Transaction>  $query
+     * @return Builder<Transaction>
      */
     public function scopeInPeriod(Builder $query, CarbonInterface|string|null $startDate, CarbonInterface|string|null $endDate): Builder
     {
@@ -150,6 +160,7 @@ class Transaction extends Model
      *
      * @param  Builder<Transaction>  $query
      * @param  array{search?: string|null, account_id?: int|string|null, category_id?: int|string|null, type?: string|null, date_start?: string|null, date_end?: string|null}  $filters
+     * @return Builder<Transaction>
      */
     public function scopeFilter(Builder $query, array $filters): Builder
     {

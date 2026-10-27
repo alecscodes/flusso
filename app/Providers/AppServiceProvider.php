@@ -2,12 +2,17 @@
 
 namespace App\Providers;
 
+use App\Models\User;
 use App\Services\CurrencyService;
 use Carbon\CarbonImmutable;
 use DateInterval;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
@@ -34,6 +39,11 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->configureDefaults();
         $this->configurePassport();
+
+        // The first user owns the instance: registration and banned IPs are theirs to manage.
+        Gate::define('manage-instance', fn (User $user) => $user->id === User::min('id'));
+
+        RateLimiter::for('oauth-register', fn (Request $request) => Limit::perMinute(20)->by($request->ip()));
     }
 
     /**
@@ -43,7 +53,7 @@ class AppServiceProvider extends ServiceProvider
     {
         Date::use(CarbonImmutable::class);
 
-        Model::preventLazyLoading(! app()->isProduction());
+        Model::shouldBeStrict(! app()->isProduction());
 
         DB::prohibitDestructiveCommands(
             app()->isProduction(),
@@ -52,7 +62,6 @@ class AppServiceProvider extends ServiceProvider
         Password::defaults(fn (): ?Password => app()->isProduction()
             ? Password::min(12)
                 ->mixedCase()
-                ->letters()
                 ->numbers()
                 ->symbols()
                 ->uncompromised()
@@ -73,6 +82,7 @@ class AppServiceProvider extends ServiceProvider
 
         Passport::authorizationView(fn (array $parameters) => Inertia::render('Auth/OAuthAuthorize', [
             'clientName' => $parameters['client']->name,
+            'redirectHost' => parse_url((string) $parameters['request']->query('redirect_uri'), PHP_URL_HOST) ?: null,
             'scopes' => array_map(fn ($scope) => $scope->description, $parameters['scopes']),
             'authToken' => $parameters['authToken'],
             'clientId' => $parameters['client']->getKey(),

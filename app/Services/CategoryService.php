@@ -10,6 +10,9 @@ use Illuminate\Support\Facades\DB;
 
 class CategoryService
 {
+    /**
+     * @return Collection<int, Category>
+     */
     public function getCategoriesForUser(User $user): Collection
     {
         return $user->categories()
@@ -18,6 +21,9 @@ class CategoryService
             ->get();
     }
 
+    /**
+     * @param  array{name: string, type: string|CategoryType, icon?: string|null, color?: string|null}  $data
+     */
     public function createCategory(User $user, array $data): Category
     {
         return $user->categories()->create([

@@ -34,6 +34,6 @@ class RegistrationController extends Controller
 
         FlashToast::success('Registration settings updated successfully.');
 
-        return redirect()->route('registration.edit');
+        return redirect()->route('settings.registration.edit');
     }
 }

@@ -171,6 +171,9 @@ class CurrencyService
     /**
      * Fetch from a specific endpoint
      */
+    /**
+     * @return array<string, mixed>|null
+     */
     private function fetchFromEndpoint(string $url): ?array
     {
         try {
@@ -228,6 +231,11 @@ class CurrencyService
 
     /**
      * Convert a collection of amounts with different currencies to primary currency
+     *
+     * @template TItem of object
+     *
+     * @param  Collection<int, TItem>  $items
+     * @return Collection<int, mixed>
      */
     public function convertCollectionToPrimaryCurrency(Collection $items, string $amountField, string $currencyField, User $user): Collection
     {
@@ -247,6 +255,10 @@ class CurrencyService
 
     /**
      * Sum amounts in different currencies by converting to primary currency first
+     *
+     * @template TItem of object
+     *
+     * @param  Collection<int, TItem>  $items
      */
     public function sumInPrimaryCurrency(Collection $items, string $amountField, string $currencyField, User $user): float
     {

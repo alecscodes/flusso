@@ -11,7 +11,7 @@ use Laravel\Mcp\Server\Tools\Annotations\IsDestructive;
 use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 
 #[Name('resume_planned_payment')]
-#[Description('Resume a paused planned payment')]
+#[Description('Resume a paused planned payment: its upcoming payments are scheduled again from today on and it shows up in the payment lists and totals again.')]
 #[IsDestructive(false)]
 #[IsIdempotent]
 class ResumePlannedPayment extends PlannedPaymentTool

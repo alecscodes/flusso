@@ -3,9 +3,11 @@
 use App\Mcp\Servers\FlussoServer;
 use Illuminate\Support\Facades\Route;
 use Laravel\Mcp\Facades\Mcp;
+use Laravel\Passport\Http\Middleware\CheckToken;
 
-// Dynamic client registration is open by design (Claude registers itself); keep it from being spammed.
-// These routes are only the discovery documents and the registration endpoint.
-Route::middleware('throttle:20,1')->group(fn () => Mcp::oauthRoutes());
+// Dynamic client registration is open by design (Claude registers itself); only that POST is throttled,
+// the discovery documents are cheap GETs that clients poll.
+Mcp::oauthRoutes();
+collect(Route::getRoutes()->getRoutes())->first(fn ($route) => $route->getName() === 'mcp.oauth.register')?->middleware('throttle:oauth-register');
 
-Mcp::web('/mcp', FlussoServer::class)->middleware(['auth:api', 'throttle:120,1']);
+Mcp::web('/mcp', FlussoServer::class)->middleware(['auth:api', CheckToken::using('mcp:use'), 'throttle:120,1']);

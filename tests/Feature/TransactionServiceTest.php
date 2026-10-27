@@ -4,9 +4,11 @@ use App\Enums\TransactionType;
 use App\Models\Account;
 use App\Models\Category;
 use App\Models\Transaction;
+use App\Models\TransactionFile;
 use App\Models\User;
 use App\Services\CurrencyService;
 use App\Services\TransactionService;
+use Illuminate\Support\Facades\Storage;
 
 test('transaction service creates income transaction and updates balance', function () {
     $user = User::factory()->create();
@@ -160,4 +162,22 @@ test('transaction service calculates period summary correctly', function () {
         ->and(abs($summary['expenses'] - $expectedExpenses))->toBeLessThan(0.01)
         ->and(abs($summary['net'] - $expectedNet))->toBeLessThan(0.01)
         ->and($summary['transaction_count'])->toBe(2);
+});
+
+test('attached files are removed only when a transaction is deleted for good', function () {
+    Storage::fake('local');
+    $user = User::factory()->create();
+    $account = Account::factory()->create(['user_id' => $user->id, 'currency' => 'EUR']);
+    $transaction = app(TransactionService::class)->createTransaction($user, ['type' => 'expense', 'account_id' => $account->id, 'amount' => 5]);
+    Storage::disk('local')->put('receipts/a.pdf', 'x');
+    TransactionFile::create(['transaction_id' => $transaction->id, 'filename' => 'a.pdf', 'original_filename' => 'a.pdf', 'mime_type' => 'application/pdf', 'size' => 1, 'path' => 'receipts/a.pdf']);
+
+    app(TransactionService::class)->deleteTransaction($transaction);
+    expect(Storage::disk('local')->exists('receipts/a.pdf'))->toBeTrue()
+        ->and(TransactionFile::count())->toBe(1);
+
+    $transaction->restore();
+    $transaction->forceDelete();
+    expect(Storage::disk('local')->exists('receipts/a.pdf'))->toBeFalse()
+        ->and(TransactionFile::count())->toBe(0);
 });

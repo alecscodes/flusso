@@ -20,9 +20,9 @@ class SearchTransactions extends FlussoTool
     {
         $user = $this->user($request);
 
-        $input = $this->validated($request->all(), [
-            'date_from' => ['nullable', 'date'],
-            'date_to' => ['nullable', 'date'],
+        $input = $request->validate([
+            'date_from' => ['nullable', 'date_format:Y-m-d'],
+            'date_to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:date_from'],
             'account_id' => ['nullable', 'integer'],
             'category_id' => ['nullable', 'integer'],
             'type' => ['nullable', Rule::enum(TransactionType::class)],
@@ -58,7 +58,7 @@ class SearchTransactions extends FlussoTool
             'date_to' => $schema->string()->description('Last day, YYYY-MM-DD (inclusive).'),
             'account_id' => $schema->integer()->description('Only transactions touching this account.'),
             'category_id' => $schema->integer(),
-            'type' => $schema->string()->enum(['expense', 'income', 'transfer']),
+            'type' => $schema->string()->enum(TransactionType::class),
             'search' => $schema->string()->description('Text in the description, or an exact amount.'),
             'limit' => $schema->integer()->min(1)->max(200)->description('Default 50, at most 200.'),
         ];

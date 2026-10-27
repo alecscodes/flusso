@@ -10,7 +10,7 @@ use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Tools\Annotations\IsDestructive;
 
 #[Name('delete_category')]
-#[Description('Delete a category. Existing transactions stay but lose it from the category lists. Confirm with the user first.')]
+#[Description('Delete a category. Existing transactions stay but show no category; planned payments keep it. It is no longer offered for new entries. Confirm with the user first.')]
 #[IsDestructive]
 class DeleteCategory extends FlussoTool
 {

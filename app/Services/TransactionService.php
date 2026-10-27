@@ -71,6 +71,7 @@ class TransactionService
      * same-currency destination amounts are normalised by the TransactionObserver;
      * what is left here is looking up the accounts and, between currencies, the amount received.
      *
+     * @param  array{account_id: int, type: string|TransactionType, amount: numeric, date?: string|null, description?: string|null, category_id?: int|null, to_account_id?: int|null, to_amount?: numeric|null}  $data
      * @return array<string, mixed>
      */
     private function attributes(User $user, array $data): array

@@ -5,6 +5,7 @@ namespace App\Mcp\Tools;
 use App\Http\Requests\AccountStoreRequest;
 use App\Services\AccountService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Support\Facades\Validator;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
@@ -23,7 +24,7 @@ class CreateAccount extends FlussoTool
         $input = $request->all();
         $input['currency'] = strtoupper((string) ($input['currency'] ?? ''));
 
-        $data = $this->validated($input, (new AccountStoreRequest)->rules());
+        $data = Validator::validate($input, (new AccountStoreRequest)->rules());
 
         return $this->json($this->account($this->accounts->createAccount($this->user($request), $data)));
     }

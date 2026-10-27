@@ -14,6 +14,8 @@ class DashboardService
 
     /**
      * Get comprehensive dashboard data for a user.
+     *
+     * @return array<string, mixed>
      */
     public function getDashboardData(User $user): array
     {

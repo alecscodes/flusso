@@ -2,8 +2,10 @@
 
 namespace App\Mcp\Tools;
 
+use App\Enums\PlannedPaymentStatus;
 use App\Services\RecurringPaymentService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Validation\Rule;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
@@ -19,17 +21,17 @@ class ListPlannedPayments extends FlussoTool
 
     public function handle(Request $request): Response
     {
-        $status = $request->get('status');
+        $input = $request->validate(['status' => ['nullable', Rule::enum(PlannedPaymentStatus::class)]]);
 
         return $this->json($this->plannedPayments->getRecurringPaymentsForUser($this->user($request))
-            ->when(in_array($status, ['active', 'paused', 'finished'], true), fn ($rules) => $rules->filter(fn ($rule) => $rule->status->value === $status))
+            ->when($input['status'] ?? null, fn ($rules, $status) => $rules->filter(fn ($rule) => $rule->status->value === $status))
             ->map(fn ($rule) => $this->plannedPayment($rule))->values()->all());
     }
 
     public function schema(JsonSchema $schema): array
     {
         return [
-            'status' => $schema->string()->enum(['active', 'paused', 'finished'])->description('Only planned payments with this status.'),
+            'status' => $schema->string()->enum(PlannedPaymentStatus::class)->description('Only planned payments with this status.'),
         ];
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Mcp\Tools;
 
+use App\Enums\IntervalType;
 use App\Http\Requests\RecurringPaymentRequest;
 use App\Models\RecurringPayment;
 use App\Models\User;
@@ -9,6 +10,7 @@ use App\Services\RecurringPaymentService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Validator;
 
 /**
  * Create/update/pause/resume of a planned payment share how tool arguments become
@@ -53,8 +55,9 @@ abstract class PlannedPaymentTool extends FlussoTool
             } else {
                 $input['interval_type'] = $args['repeat'];
 
-                // Turning a one-time payment into a repeating one: it no longer ends after one.
-                if (($current['installments'] ?? null) === 1 && ! isset($args['installments'], $args['end_date'])) {
+                // Turning a one-time payment into a repeating one: it no longer ends after one,
+                // unless the caller says how long it runs.
+                if (($current['installments'] ?? null) === 1 && ! isset($args['installments']) && ! isset($args['end_date'])) {
                     $input['installments'] = null;
                 }
             }
@@ -79,7 +82,7 @@ abstract class PlannedPaymentTool extends FlussoTool
      */
     protected function validatedInput(User $user, array $input): array
     {
-        return $this->validated($input, RecurringPaymentRequest::rulesFor($user));
+        return Validator::validate($input, RecurringPaymentRequest::rulesFor($user));
     }
 
     /**
@@ -100,7 +103,7 @@ abstract class PlannedPaymentTool extends FlussoTool
             'account_id' => $schema->integer()->description('The account it is paid from (or received on).'),
             'category_id' => $schema->integer()->description('Its category; an income category makes it an expected income.'),
             'amount' => $schema->number()->min(0.01)->description('Per payment, in the account\'s currency.'),
-            'repeat' => $schema->string()->enum(['once', 'days', 'weeks', 'months', 'years'])->description('"once" or the unit of the repetition.'),
+            'repeat' => $schema->string()->enum(['once', ...array_column(IntervalType::cases(), 'value')])->description('"once" or the unit of the repetition.'),
             'every' => $schema->integer()->min(1)->description('Repeat every N units (default 1), e.g. every 3 months.'),
             'start_date' => $schema->string()->description('YYYY-MM-DD of the first payment.'),
             'end_date' => $schema->string()->nullable()->description('YYYY-MM-DD of the last possible payment. Exclusive with installments.'),

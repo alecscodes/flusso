@@ -11,7 +11,7 @@ use Laravel\Mcp\Server\Tools\Annotations\IsDestructive;
 use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 
 #[Name('pause_planned_payment')]
-#[Description('Pause a planned payment')]
+#[Description('Pause a planned payment: its untouched unpaid payments due today or later are removed and it disappears from the payment lists and totals while paused. Payments edited individually, paid and skipped ones are kept. Undo with resume_planned_payment, which schedules the payments again.')]
 #[IsDestructive(false)]
 #[IsIdempotent]
 class PausePlannedPayment extends PlannedPaymentTool

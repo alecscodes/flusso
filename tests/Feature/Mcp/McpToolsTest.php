@@ -8,6 +8,8 @@ use App\Models\Payment;
 use App\Models\RecurringPayment;
 use App\Models\Transaction;
 use App\Models\User;
+use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Http;
 use Laravel\Mcp\Server\Transport\FakeTransporter;
 
 beforeEach(function () {
@@ -316,4 +318,51 @@ test('payments can be edited, skipped, unskipped, paid and unpaid again', functi
     expect($this->ron->fresh()->balance)->toBe('486.00')
         ->and(Transaction::first()->date->toDateString())->toBe('2026-05-03');
     mcp(Tools\MarkPaymentUnpaid::class, ['id' => $first->id])->assertHasErrors(['not paid']);
+});
+
+test('a one-time planned payment can become a payment in 6 monthly installments', function () {
+    $rule = plannedPayment($this->user, ['installments' => 1, 'start_date' => '2026-05-20'], $this->eur);
+
+    mcp(Tools\UpdatePlannedPayment::class, ['id' => $rule->id, 'repeat' => 'months', 'installments' => 6])->assertOk()->assertSee(['"repeat":"every 1 months"', '"installments":6']);
+
+    expect($rule->fresh()->installments)->toBe(6)->and($rule->payments()->count())->toBe(6);
+
+    mcp(Tools\UpdatePlannedPayment::class, ['id' => $rule->id, 'end_date' => '2026-07-31'])->assertOk();
+
+    expect($rule->fresh())->installments->toBeNull()->and($rule->payments()->count())->toBe(3);
+});
+
+test('every tool says it only touches the owner\'s own data', function () {
+    $server = app(FlussoServer::class, ['transport' => new FakeTransporter]);
+    $tools = collect((fn () => $this->tools)->call($server))->map(fn ($class) => app($class)->toArray());
+
+    expect($tools->pluck('annotations.openWorldHint')->unique()->all())->toBe([false]);
+});
+
+test('filters and dates are validated instead of silently ignored', function () {
+    mcp(Tools\ListCategories::class, ['type' => 'transfer'])->assertHasErrors(['selected type is invalid']);
+    mcp(Tools\ListPlannedPayments::class, ['status' => 'archived'])->assertHasErrors(['selected status is invalid']);
+    mcp(Tools\SearchTransactions::class, ['date_from' => '10/05/2026'])->assertHasErrors(['date from field must match the format Y-m-d']);
+    mcp(Tools\ListPayments::class, ['scope' => 'range', 'date_from' => '2026-5-1', 'date_to' => '2026-05-12'])->assertHasErrors(['date from field must match the format Y-m-d']);
+});
+
+test('update_transaction keeps what arrived in a cross-currency transfer when only the date or description changes', function () {
+    Http::fake(['*' => Http::response(['eur' => ['ron' => 5.0]])]);
+    mcp(Tools\CreateTransaction::class, ['type' => 'transfer', 'account_id' => $this->eur->id, 'to_account_id' => $this->ron->id, 'amount' => 10, 'to_amount' => 49])->assertOk();
+    $transfer = Transaction::first();
+
+    mcp(Tools\UpdateTransaction::class, ['id' => $transfer->id, 'date' => '2026-05-01', 'description' => 'Rent share'])->assertOk();
+
+    expect($transfer->fresh())->to_amount->toBe('49.00')->description->toBe('Rent share')
+        ->and($this->ron->fresh()->balance)->toBe('549.00');
+
+    mcp(Tools\UpdateTransaction::class, ['id' => $transfer->id, 'amount' => 20])->assertOk();
+
+    expect($transfer->fresh()->to_amount)->not->toBe('49.00');
+});
+
+test('without a date a transaction is booked on the owner\'s day, not the UTC one', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-05-10 23:30:00', 'UTC'));
+
+    mcp(Tools\CreateTransaction::class, ['type' => 'expense', 'account_id' => $this->eur->id, 'amount' => 5])->assertOk()->assertSee('"date":"2026-05-11"');
 });

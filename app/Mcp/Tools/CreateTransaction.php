@@ -2,9 +2,11 @@
 
 namespace App\Mcp\Tools;
 
+use App\Enums\TransactionType;
 use App\Http\Requests\TransactionRequest;
 use App\Services\TransactionService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Support\Facades\Validator;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
@@ -25,7 +27,7 @@ class CreateTransaction extends FlussoTool
         $input = $request->all();
         $input['date'] ??= now()->toDateString();
 
-        $data = $this->validated($input, TransactionRequest::rulesFor($user, $input));
+        $data = Validator::validate($input, TransactionRequest::rulesFor($user, $input));
         $transaction = $this->transactions->createTransaction($user, $data);
 
         return $this->json([
@@ -37,7 +39,7 @@ class CreateTransaction extends FlussoTool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'type' => $schema->string()->enum(['expense', 'income', 'transfer'])->required(),
+            'type' => $schema->string()->enum(TransactionType::class)->required(),
             'account_id' => $schema->integer()->description('The account the money is booked on (for a transfer: the source).')->required(),
             'amount' => $schema->number()->min(0.01)->description('Positive amount, exactly as the user said.')->required(),
             'date' => $schema->string()->description('YYYY-MM-DD. Defaults to today.'),

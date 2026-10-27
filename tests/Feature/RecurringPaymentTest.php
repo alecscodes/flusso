@@ -8,25 +8,11 @@ use App\Models\User;
 
 use function Pest\Laravel\actingAs;
 
-function ruleInput(User $user, array $overrides = []): array
-{
-    return [
-        'name' => 'Netflix',
-        'account_id' => Account::factory()->create(['user_id' => $user->id, 'currency' => 'EUR'])->id,
-        'category_id' => Category::factory()->create(['user_id' => $user->id, 'type' => 'expense'])->id,
-        'amount' => 15.99,
-        'interval_type' => 'months',
-        'interval_value' => 1,
-        'start_date' => now()->addDays(3)->toDateString(),
-        ...$overrides,
-    ];
-}
-
 test('a planned payment that runs once is a rule with a single installment', function () {
     $user = User::factory()->create();
 
     actingAs($user)->from(route('payments.index'))
-        ->post(route('planned-payments.store'), ruleInput($user, ['name' => 'Taxe', 'installments' => 1]))
+        ->post(route('planned-payments.store'), plannedPaymentInput($user, ['name' => 'Taxe', 'installments' => 1]))
         ->assertRedirect(route('payments.index'));
 
     $rule = RecurringPayment::where('name', 'Taxe')->first();
@@ -39,7 +25,7 @@ test('a planned payment that runs once is a rule with a single installment', fun
 test('a repeating planned payment is generated a year ahead', function () {
     $user = User::factory()->create();
 
-    actingAs($user)->post(route('planned-payments.store'), ruleInput($user))->assertRedirect();
+    actingAs($user)->post(route('planned-payments.store'), plannedPaymentInput($user))->assertRedirect();
 
     expect(RecurringPayment::first()->payments()->count())->toBeGreaterThanOrEqual(12);
 });
@@ -47,9 +33,9 @@ test('a repeating planned payment is generated a year ahead', function () {
 test('it ends never, on a date or after a number of payments but not two at once', function () {
     $user = User::factory()->create();
 
-    actingAs($user)->post(route('planned-payments.store'), ruleInput($user, ['end_date' => now()->addMonths(6)->toDateString(), 'installments' => 3]))
+    actingAs($user)->post(route('planned-payments.store'), plannedPaymentInput($user, ['end_date' => now()->addMonths(6)->toDateString(), 'installments' => 3]))
         ->assertSessionHasErrors('end_date');
-    actingAs($user)->post(route('planned-payments.store'), ruleInput($user, ['end_date' => now()->subDay()->toDateString()]))
+    actingAs($user)->post(route('planned-payments.store'), plannedPaymentInput($user, ['end_date' => now()->subDay()->toDateString()]))
         ->assertSessionHasErrors('end_date');
 
     expect(RecurringPayment::count())->toBe(0);
@@ -75,10 +61,10 @@ test('the currency cannot be set by the client and accounts and categories must 
     $foreignAccount = Account::factory()->create(['user_id' => $stranger->id]);
     $foreignCategory = Category::factory()->create(['user_id' => $stranger->id]);
 
-    actingAs($user)->post(route('planned-payments.store'), ruleInput($user, ['account_id' => $foreignAccount->id, 'category_id' => $foreignCategory->id]))
+    actingAs($user)->post(route('planned-payments.store'), plannedPaymentInput($user, ['account_id' => $foreignAccount->id, 'category_id' => $foreignCategory->id]))
         ->assertSessionHasErrors(['account_id', 'category_id']);
 
-    actingAs($user)->post(route('planned-payments.store'), ruleInput($user, ['currency' => 'USD']))->assertRedirect();
+    actingAs($user)->post(route('planned-payments.store'), plannedPaymentInput($user, ['currency' => 'USD']))->assertRedirect();
     expect(RecurringPayment::first()->currency)->toBe('EUR');
 });
 
@@ -86,7 +72,7 @@ test('a rule can use an income category', function () {
     $user = User::factory()->create();
     $salary = Category::factory()->create(['user_id' => $user->id, 'type' => 'income']);
 
-    actingAs($user)->post(route('planned-payments.store'), ruleInput($user, ['category_id' => $salary->id, 'installments' => 1]))->assertRedirect();
+    actingAs($user)->post(route('planned-payments.store'), plannedPaymentInput($user, ['category_id' => $salary->id, 'installments' => 1]))->assertRedirect();
 
     expect(RecurringPayment::first()->payments()->first()->type->value)->toBe('income');
 });
@@ -105,7 +91,7 @@ test('deleting a transaction booked by a rule leaves the rule alone', function (
 test('a planned payment needs Y-m-d dates, a sane amount and a last payment before 2101', function (array $overrides, string $field) {
     $user = User::factory()->create();
 
-    actingAs($user)->post(route('planned-payments.store'), ruleInput($user, $overrides))->assertSessionHasErrors($field);
+    actingAs($user)->post(route('planned-payments.store'), plannedPaymentInput($user, $overrides))->assertSessionHasErrors($field);
 
     expect(RecurringPayment::count())->toBe(0);
 })->with([

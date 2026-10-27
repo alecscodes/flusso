@@ -4,14 +4,7 @@ use App\Models\Account;
 use App\Models\User;
 use App\Services\TransactionService;
 use Carbon\CarbonImmutable;
-
-test('dates are immutable by default', function () {
-    expect(now())->toBeInstanceOf(CarbonImmutable::class);
-
-    $tomorrow = now()->addDay();
-
-    expect($tomorrow->isSameDay(now()))->toBeFalse();
-});
+use Illuminate\Database\Eloquent\Model;
 
 test('today is the owner\'s day: after 23:00 UTC it is already tomorrow', function () {
     $this->travelTo(CarbonImmutable::parse('2026-03-10 23:30:00', 'UTC'));
@@ -26,4 +19,10 @@ test('today is the owner\'s day: after 23:00 UTC it is already tomorrow', functi
 
 test('SQLite takes the write lock when a transaction starts', function () {
     expect(config('database.connections.sqlite.transaction_mode'))->toBe('IMMEDIATE');
+});
+
+test('models are strict outside production: a missing attribute is an error, not null', function () {
+    expect(Model::preventsAccessingMissingAttributes())->toBeTrue()
+        ->and(Model::preventsSilentlyDiscardingAttributes())->toBeTrue()
+        ->and(User::factory()->create()->reset_date)->toBeNull();
 });

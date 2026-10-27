@@ -1,75 +1,35 @@
 <?php
 
-use App\Models\Account;
-use App\Models\Category;
-use App\Models\RecurringPayment;
-use App\Models\Transaction;
 use App\Models\User;
+use Illuminate\Support\Facades\Http;
 
 use function Pest\Laravel\actingAs;
 
-test('dashboard route is accessible', function () {
-    $user = User::factory()->create();
-    actingAs($user)->get(route('dashboard'))->assertSuccessful();
+// The app's own pages are rendered with data in PageRenderingTest.
+test('every settings page renders for the owner', function (string $route) {
+    actingAs(User::factory()->create())->get(route($route))->assertSuccessful();
+})->with([
+    'profile.edit',
+    'user-password.edit',
+    'appearance.edit',
+    'settings.finance.edit',
+    'settings.registration.edit',
+    'settings.banned-ips.index',
+    'settings.connected-apps.index',
+]);
+
+test('the currency rate route returns today\'s rate', function () {
+    Http::fake(['*' => Http::response(['usd' => ['eur' => 0.9]])]);
+
+    actingAs(User::factory()->create())->get(route('currency.rates', ['from' => 'usd', 'to' => 'eur']))
+        ->assertSuccessful()
+        ->assertJsonPath('from', 'USD')
+        ->assertJsonPath('to', 'EUR')
+        ->assertJsonPath('rate', 0.9);
 });
 
-test('accounts routes are accessible', function () {
-    $user = User::factory()->create();
-    $account = Account::factory()->create(['user_id' => $user->id]);
+test('the currency rate route is a 404 when no rate can be found', function () {
+    Http::fake(['*' => Http::response([], 500)]);
 
-    actingAs($user)->get(route('accounts.index'))->assertSuccessful();
-    actingAs($user)->get(route('accounts.show', $account))->assertSuccessful();
-});
-
-test('categories routes are accessible', function () {
-    $user = User::factory()->create();
-    $category = Category::factory()->create(['user_id' => $user->id]);
-
-    actingAs($user)->get(route('categories.index'))->assertSuccessful();
-    actingAs($user)->get(route('categories.show', $category))->assertSuccessful();
-});
-
-test('transactions routes are accessible', function () {
-    $user = User::factory()->create();
-    $account = Account::factory()->create(['user_id' => $user->id]);
-    $transaction = Transaction::factory()->create(['user_id' => $user->id, 'account_id' => $account->id]);
-
-    actingAs($user)->get(route('transactions.index'))->assertSuccessful();
-});
-
-test('recurring payments routes are accessible', function () {
-    $user = User::factory()->create();
-    $account = Account::factory()->create(['user_id' => $user->id]);
-    $category = Category::factory()->create(['user_id' => $user->id]);
-    $recurringPayment = RecurringPayment::factory()->create([
-        'user_id' => $user->id,
-        'account_id' => $account->id,
-        'category_id' => $category->id,
-    ]);
-
-    actingAs($user)->get(route('planned-payments.index'))->assertSuccessful();
-    actingAs($user)->get(route('planned-payments.show', $recurringPayment))->assertSuccessful();
-});
-
-test('payments route is accessible', function () {
-    $user = User::factory()->create();
-    actingAs($user)->get(route('payments.index'))->assertSuccessful();
-});
-
-test('settings routes are accessible', function () {
-    $user = User::factory()->create();
-
-    actingAs($user)->get(route('profile.edit'))->assertSuccessful();
-    actingAs($user)->get(route('user-password.edit'))->assertSuccessful();
-    actingAs($user)->get(route('appearance.edit'))->assertSuccessful();
-    actingAs($user)->get(route('settings.finance.edit'))->assertSuccessful();
-    // Two-factor route may require password confirmation, so we check for redirect or success
-    $response = actingAs($user)->get(route('two-factor.show'));
-    expect($response->status())->toBeIn([200, 302]);
-});
-
-test('currency rates route is accessible', function () {
-    $user = User::factory()->create();
-    // Currency rates route requires query parameters
-    actingAs($user)->get(route('currency.rates', ['from' => 'USD', 'to' => 'EUR']))->assertSuccessful();
+    actingAs(User::factory()->create())->get(route('currency.rates', ['from' => 'USD', 'to' => 'XYZ']))->assertNotFound();
 });

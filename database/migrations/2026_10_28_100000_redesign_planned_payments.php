@@ -260,20 +260,26 @@ return new class extends Migration
     /**
      * The occurrence number of each payment when it sits on the schedule, else null.
      *
-     * @return Collection<array-key, int|float|null>
+     * @param  Collection<int, stdClass>  $payments
+     * @return Collection<int, int<0, max>|null>
      */
     private function number(RecurringPayment $rule, Collection $payments): Collection
     {
         $last = -1;
+        $numbers = [];
 
-        return $payments->map(function ($payment) use ($rule, &$last) {
+        foreach ($payments as $key => $payment) {
+            $numbers[$key] = null;
+
             for ($n = $last + 1; ($date = $rule->dateFor($n))->toDateString() <= $payment->due_date; $n++) {
                 if ($date->toDateString() === $payment->due_date) {
-                    return $last = $n;
+                    $numbers[$key] = $last = $n;
+
+                    break;
                 }
             }
+        }
 
-            return null;
-        });
+        return collect($numbers);
     }
 };

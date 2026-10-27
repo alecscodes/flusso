@@ -13,13 +13,10 @@ class ProfileUpdateRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
-     * @return array<string, ValidationRule|array<mixed>|string>
+     * @return array<string, array<int, ValidationRule|array<mixed>|string>>
      */
     public function rules(): array
     {
-        $rules = $this->profileRules($this->user()->id);
-        $rules['email'][] = 'lowercase';
-
-        return $rules;
+        return $this->profileRules($this->user()->id);
     }
 }

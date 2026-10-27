@@ -26,6 +26,9 @@ class RecurringPaymentRequest extends FormRequest
             : $this->user()->can('create', RecurringPayment::class);
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function rules(): array
     {
         return self::rulesFor($this->user(), $this->route('recurring_payment'));
@@ -69,6 +72,9 @@ class RecurringPaymentRequest extends FormRequest
             /** @var array<string, mixed> */
             private array $data = [];
 
+            /**
+             * @param  array<string, mixed>  $data
+             */
             public function setData(array $data): static
             {
                 $this->data = $data;

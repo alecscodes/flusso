@@ -2,9 +2,11 @@
 
 namespace App\Mcp\Tools;
 
+use App\Enums\CategoryType;
 use App\Http\Requests\CategoryUpdateRequest;
 use App\Services\CategoryService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Support\Facades\Validator;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
@@ -30,9 +32,9 @@ class UpdateCategory extends FlussoTool
 
         $input = [
             ...['name' => $category->name, 'type' => $category->type->value, 'icon' => $category->icon, 'color' => $category->color],
-            ...$this->passed($request, ['name', 'type', 'icon', 'color']),
+            ...$request->all(['name', 'type', 'icon', 'color']),
         ];
-        $data = $this->validated($input, (new CategoryUpdateRequest)->rules());
+        $data = Validator::validate($input, (new CategoryUpdateRequest)->rules());
 
         return $this->json($this->category($this->categories->updateCategory($category, $data)));
     }
@@ -42,7 +44,7 @@ class UpdateCategory extends FlussoTool
         return [
             'id' => $schema->integer()->required(),
             'name' => $schema->string(),
-            'type' => $schema->string()->enum(['expense', 'income']),
+            'type' => $schema->string()->enum(CategoryType::class),
             'icon' => $schema->string(),
             'color' => $schema->string(),
         ];

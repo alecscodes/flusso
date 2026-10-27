@@ -24,6 +24,9 @@ class TransactionRequest extends FormRequest
             : $this->user()->can('create', Transaction::class);
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function rules(): array
     {
         return self::rulesFor($this->user(), $this->all(), $this->route('transaction'));

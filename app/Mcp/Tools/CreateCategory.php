@@ -2,6 +2,7 @@
 
 namespace App\Mcp\Tools;
 
+use App\Enums\CategoryType;
 use App\Http\Requests\CategoryStoreRequest;
 use App\Services\CategoryService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -20,7 +21,7 @@ class CreateCategory extends FlussoTool
 
     public function handle(Request $request): Response
     {
-        $data = $this->validated($request->all(), (new CategoryStoreRequest)->rules());
+        $data = $request->validate((new CategoryStoreRequest)->rules());
 
         return $this->json($this->category($this->categories->createCategory($this->user($request), $data)));
     }
@@ -29,7 +30,7 @@ class CreateCategory extends FlussoTool
     {
         return [
             'name' => $schema->string()->required(),
-            'type' => $schema->string()->enum(['expense', 'income'])->required(),
+            'type' => $schema->string()->enum(CategoryType::class)->required(),
             'icon' => $schema->string()->description('Optional icon name.'),
             'color' => $schema->string()->description('Optional hex color like #7C3AED.'),
         ];

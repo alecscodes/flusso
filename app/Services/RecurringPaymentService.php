@@ -46,6 +46,8 @@ class RecurringPaymentService
 
     /**
      * Replace the rule's settings; an absent end date or installment count means "never ends".
+     *
+     * @param  array{account_id: int, category_id: int, name: string, amount: numeric, interval_type: string, interval_value: int, start_date: string, end_date?: string|null, installments?: int|null, is_active?: bool}  $data
      */
     public function updateRecurringPayment(RecurringPayment $rule, array $data): RecurringPayment
     {
@@ -155,6 +157,8 @@ class RecurringPaymentService
 
     /**
      * Statistics for a rule, in the user's primary currency.
+     *
+     * @return array{total_payments: int, paid_payments: int, unpaid_payments: int, total_paid_amount: float, total_pending_amount: float, next_due_date: string|null}
      */
     public function getStatistics(RecurringPayment $rule): array
     {

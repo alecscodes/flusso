@@ -5,6 +5,7 @@ namespace App\Mcp\Tools;
 use App\Http\Requests\AccountUpdateRequest;
 use App\Services\AccountService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Support\Facades\Validator;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
@@ -30,11 +31,11 @@ class UpdateAccount extends FlussoTool
 
         $input = [
             ...['name' => $account->name, 'currency' => $account->currency, 'is_savings' => $account->is_savings],
-            ...$this->passed($request, ['name', 'currency', 'is_savings']),
+            ...$request->all(['name', 'currency', 'is_savings']),
         ];
         $input['currency'] = strtoupper((string) $input['currency']);
 
-        $data = $this->validated($input, AccountUpdateRequest::rulesFor($account));
+        $data = Validator::validate($input, AccountUpdateRequest::rulesFor($account));
 
         return $this->json($this->account($this->accounts->updateAccount($account, $data)));
     }

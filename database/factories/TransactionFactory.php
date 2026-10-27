@@ -27,7 +27,6 @@ class TransactionFactory extends Factory
             'category_id' => Category::factory(),
             'type' => TransactionType::Expense,
             'amount' => 100,
-            'description' => fake()->optional()->sentence(),
             'date' => now()->toDateString(),
         ];
     }

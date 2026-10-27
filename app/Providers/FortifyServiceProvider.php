@@ -14,7 +14,6 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
 use Laravel\Fortify\Fortify;
@@ -22,32 +21,22 @@ use Laravel\Fortify\Fortify;
 class FortifyServiceProvider extends ServiceProvider
 {
     /**
-     * Register any application services.
-     */
-    public function register(): void
-    {
-        //
-    }
-
-    /**
      * Bootstrap any application services.
      */
     public function boot(): void
     {
-        $this->configureActions();
+        Fortify::resetUserPasswordsUsing(ResetUserPassword::class);
+        Fortify::createUsersUsing(CreateNewUser::class);
+
         $this->configureViews();
         $this->configureRateLimiting();
-        $this->configureSecurity();
+        $this->banRepeatedFailedLogins();
     }
 
-    /**
-     * Configure security features.
-     */
-    private function configureSecurity(): void
+    private function banRepeatedFailedLogins(): void
     {
         Event::listen(Failed::class, function () {
-            $ipBanService = app(IpBanService::class);
-            $banned = $ipBanService->recordFailedLogin(request());
+            $banned = app(IpBanService::class)->recordFailedLogin(request());
 
             if ($banned) {
                 Log::alert('Login blocked due to IP ban', [
@@ -59,18 +48,6 @@ class FortifyServiceProvider extends ServiceProvider
         });
     }
 
-    /**
-     * Configure Fortify actions.
-     */
-    private function configureActions(): void
-    {
-        Fortify::resetUserPasswordsUsing(ResetUserPassword::class);
-        Fortify::createUsersUsing(CreateNewUser::class);
-    }
-
-    /**
-     * Configure Fortify views.
-     */
     private function configureViews(): void
     {
         Fortify::loginView(fn (Request $request) => Inertia::render('Auth/Login', [
@@ -82,26 +59,16 @@ class FortifyServiceProvider extends ServiceProvider
         Fortify::resetPasswordView(fn (Request $request) => Inertia::render('Auth/ResetPassword', [
             'email' => $request->email,
             'token' => $request->route('token'),
-            'passwordRules' => Password::defaults()->toPasswordRulesString(),
         ]));
 
         Fortify::requestPasswordResetLinkView(fn (Request $request) => Inertia::render('Auth/ForgotPassword', [
             'status' => $request->session()->get('status'),
         ]));
 
-        Fortify::verifyEmailView(fn (Request $request) => Inertia::render('Auth/VerifyEmail', [
-            'status' => $request->session()->get('status'),
-        ]));
+        Fortify::registerView(function () {
+            abort_unless(Setting::isRegistrationAllowed(), 403, 'Registration is currently disabled.');
 
-        Fortify::registerView(function (Request $request) {
-            // Block access to registration view if registration is disabled
-            if (! Setting::isRegistrationAllowed()) {
-                abort(403, 'Registration is currently disabled.');
-            }
-
-            return Inertia::render('Auth/Register', [
-                'passwordRules' => Password::defaults()->toPasswordRulesString(),
-            ]);
+            return Inertia::render('Auth/Register');
         });
 
         Fortify::twoFactorChallengeView(fn () => Inertia::render('Auth/TwoFactorChallenge'));
@@ -109,14 +76,9 @@ class FortifyServiceProvider extends ServiceProvider
         Fortify::confirmPasswordView(fn () => Inertia::render('Auth/ConfirmPassword'));
     }
 
-    /**
-     * Configure rate limiting.
-     */
     private function configureRateLimiting(): void
     {
-        RateLimiter::for('two-factor', function (Request $request) {
-            return Limit::perMinute(5)->by($request->session()->get('login.id'));
-        });
+        RateLimiter::for('two-factor', fn (Request $request) => Limit::perMinute(5)->by($request->session()->get('login.id')));
 
         RateLimiter::for('login', function (Request $request) {
             $throttleKey = Str::transliterate(Str::lower($request->input(Fortify::username())).'|'.$request->ip());

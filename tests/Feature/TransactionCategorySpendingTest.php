@@ -3,9 +3,6 @@
 use App\Models\Category;
 use App\Models\Transaction;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-
-uses(RefreshDatabase::class);
 
 it('filters out transactions without categories when calculating category spending', function () {
     $user = User::factory()->create();

@@ -21,17 +21,17 @@ class ListPayments extends FlussoTool
     {
         $user = $this->user($request);
 
-        $input = $this->validated($request->all(), [
+        $input = $request->validate([
             'scope' => ['required', 'in:overdue,upcoming,range'],
             'days' => ['nullable', 'integer', 'min:1', 'max:730'],
-            'date_from' => ['required_if:scope,range', 'nullable', 'date'],
-            'date_to' => ['required_if:scope,range', 'nullable', 'date', 'after_or_equal:date_from'],
+            'date_from' => ['required_if:scope,range', 'nullable', 'date_format:Y-m-d'],
+            'date_to' => ['required_if:scope,range', 'nullable', 'date_format:Y-m-d', 'after_or_equal:date_from'],
         ]);
 
         $payments = match ($input['scope']) {
             'overdue' => $this->payments->getOverduePayments($user),
             'upcoming' => $this->payments->getUpcomingPayments($user, now()->addDays($input['days'] ?? 30)),
-            default => $this->payments->getPaymentsBetween($user, date('Y-m-d', strtotime($input['date_from'])), date('Y-m-d', strtotime($input['date_to']))),
+            default => $this->payments->getPaymentsBetween($user, $input['date_from'], $input['date_to']),
         };
 
         return $this->json($payments->map(fn ($payment) => $this->payment($payment))->all());
