@@ -17,7 +17,7 @@ import {
 } from '@/routes/recurring-payments';
 import type { Account, Category, RecurringPayment } from '@/types';
 import { Head, router } from '@inertiajs/vue3';
-import { Calendar, Plus, RefreshCw } from 'lucide-vue-next';
+import { Calendar, Plus, RefreshCw } from '@lucide/vue';
 import { ref } from 'vue';
 
 interface Props {

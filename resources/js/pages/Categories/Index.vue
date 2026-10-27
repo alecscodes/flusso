@@ -17,7 +17,7 @@ import {
 } from '@/routes/categories';
 import type { Category } from '@/types';
 import { Head, router } from '@inertiajs/vue3';
-import { ArrowUp, Plus, Tag } from 'lucide-vue-next';
+import { ArrowUp, Plus, Tag } from '@lucide/vue';
 import { computed, ref } from 'vue';
 
 interface Props {

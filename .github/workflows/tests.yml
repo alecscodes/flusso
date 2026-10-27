@@ -53,5 +53,8 @@ jobs:
       - name: Build Assets
         run: npm run build
 
+      - name: Check Types
+        run: npm run types:check
+
       - name: Tests
         run: php artisan test

@@ -4,7 +4,7 @@ namespace App\Services;
 
 use App\Enums\PaymentType;
 use App\Models\User;
-use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 
 class DashboardService
@@ -60,7 +60,7 @@ class DashboardService
     /**
      * Get upcoming payments for a specific period.
      */
-    public function getUpcomingPaymentsForPeriod(User $user, Carbon $startDate, Carbon $endDate): Collection
+    public function getUpcomingPaymentsForPeriod(User $user, CarbonInterface $startDate, CarbonInterface $endDate): Collection
     {
         return $user->payments()
             ->unpaid()

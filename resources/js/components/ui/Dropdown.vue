@@ -17,7 +17,7 @@ const props = withDefaults(defineProps<Props>(), {
     placement: 'above',
 });
 
-const openModel = defineModel<boolean>('open', { default: undefined });
+const openModel = defineModel<boolean | undefined>('open', { default: undefined });
 const internalOpen = ref(false);
 const isControlled = computed(() => openModel.value !== undefined);
 const open = computed({

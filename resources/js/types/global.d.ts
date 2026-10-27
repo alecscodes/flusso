@@ -1,16 +1,12 @@
-import type { PageProps as InertiaPageProps } from '@inertiajs/core';
-import type { PageProps as AppPageProps } from './';
+import type { User } from '@/types';
 
 declare module '@inertiajs/core' {
-    interface PageProps extends InertiaPageProps, AppPageProps {}
-}
-
-declare module '@vue/runtime-core' {
-    interface ComponentCustomProperties {
-        $page: {
-            props: AppPageProps;
+    export interface InertiaConfig {
+        sharedPageProps: {
+            name: string;
+            auth: { user: User | null };
+            sidebarOpen: boolean;
+            [key: string]: unknown;
         };
     }
 }
-
-export {};

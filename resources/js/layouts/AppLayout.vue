@@ -24,7 +24,7 @@ import {
     Tag,
     Wallet,
     X,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { computed, ref } from 'vue';
 import { Toaster } from 'vue-sonner';
 

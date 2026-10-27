@@ -2,7 +2,7 @@
 import { Button, Input, Label } from '@/components/ui';
 import { store } from '@/routes/two-factor/login';
 import { Form, Head } from '@inertiajs/vue3';
-import { Shield } from 'lucide-vue-next';
+import { Shield } from '@lucide/vue';
 import { ref } from 'vue';
 
 const recovery = ref(false);

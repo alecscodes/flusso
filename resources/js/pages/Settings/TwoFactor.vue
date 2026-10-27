@@ -8,7 +8,7 @@ import {
     regenerateRecoveryCodes,
 } from '@/routes/two-factor';
 import { Form, Head } from '@inertiajs/vue3';
-import { Shield, ShieldCheck, ShieldOff } from 'lucide-vue-next';
+import { Shield, ShieldCheck, ShieldOff } from '@lucide/vue';
 import { onUnmounted, ref } from 'vue';
 
 interface Props {

@@ -10,7 +10,10 @@ test('password update page is displayed', function () {
         ->actingAs($user)
         ->get(route('user-password.edit'));
 
-    $response->assertStatus(200);
+    $response->assertStatus(200)
+        ->assertInertia(fn ($page) => $page
+            ->component('Settings/Password')
+            ->has('passwordRules'));
 });
 
 test('password can be updated', function () {

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\IntervalType;
 use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Database\Factories\RecurringPaymentFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -128,7 +129,7 @@ class RecurringPayment extends Model
         return false;
     }
 
-    public function getNextDueDate(): ?Carbon
+    public function getNextDueDate(): ?CarbonInterface
     {
         $latestPayment = $this->payments()->latest('due_date')->first();
 
@@ -139,7 +140,7 @@ class RecurringPayment extends Model
         return Carbon::parse($this->start_date);
     }
 
-    public function calculateNextDate(Carbon $fromDate): Carbon
+    public function calculateNextDate(CarbonInterface $fromDate): CarbonInterface
     {
         $intervalValue = (int) $this->interval_value;
 

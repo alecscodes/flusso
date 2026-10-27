@@ -2,7 +2,7 @@
 import { useAppearance } from '@/composables';
 import { home } from '@/routes';
 import { Link } from '@inertiajs/vue3';
-import { CreditCard, Moon, Sun } from 'lucide-vue-next';
+import { CreditCard, Moon, Sun } from '@lucide/vue';
 import { computed } from 'vue';
 import { Toaster } from 'vue-sonner';
 

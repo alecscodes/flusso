@@ -9,7 +9,7 @@ import {
 import { useCurrency, useDate } from '@/composables';
 import type { Account } from '@/types';
 import { Form } from '@inertiajs/vue3';
-import { ArrowRight } from 'lucide-vue-next';
+import { ArrowRight } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 
 interface Props {

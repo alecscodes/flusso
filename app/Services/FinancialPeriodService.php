@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use Carbon\Carbon;
+use Carbon\CarbonInterface;
 
 class FinancialPeriodService
 {
@@ -63,7 +63,7 @@ class FinancialPeriodService
     /**
      * Check if a date falls within the current period
      */
-    public function isInCurrentPeriod(Carbon $date, ?int $resetDate): bool
+    public function isInCurrentPeriod(CarbonInterface $date, ?int $resetDate): bool
     {
         $period = $this->getCurrentPeriod($resetDate);
 

@@ -2,7 +2,7 @@
 import { Badge, Button } from '@/components/ui';
 import { destroy as unbanIpRoute } from '@/routes/banned-ips';
 import { Head, router } from '@inertiajs/vue3';
-import { ShieldOff, Trash2 } from 'lucide-vue-next';
+import { ShieldOff, Trash2 } from '@lucide/vue';
 
 interface BannedIp {
     ip: string;

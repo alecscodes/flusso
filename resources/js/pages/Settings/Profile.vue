@@ -4,7 +4,7 @@ import { Button, Input, Label } from '@/components/ui';
 import { Form, Head, usePage } from '@inertiajs/vue3';
 
 const page = usePage();
-const user = page.props.auth.user;
+const user = page.props.auth.user!;
 </script>
 
 <template>

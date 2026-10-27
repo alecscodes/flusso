@@ -11,6 +11,7 @@ use App\Models\RecurringPayment;
 use App\Models\Transaction;
 use App\Models\User;
 use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -31,7 +32,7 @@ class PaymentService
             ->get();
     }
 
-    public function getUpcomingPayments(User $user, ?Carbon $until = null): Collection
+    public function getUpcomingPayments(User $user, ?CarbonInterface $until = null): Collection
     {
         $until = $until ?? now()->addMonths(self::DEFAULT_MONTHS_AHEAD);
 
@@ -53,7 +54,7 @@ class PaymentService
             ->get();
     }
 
-    public function getPaymentsForPeriod(User $user, Carbon $startDate, Carbon $endDate): Collection
+    public function getPaymentsForPeriod(User $user, CarbonInterface $startDate, CarbonInterface $endDate): Collection
     {
         return $user->payments()
             ->dueBetween($startDate->toDateString(), $endDate->toDateString())
@@ -80,7 +81,7 @@ class PaymentService
 
     public function generatePaymentsForRecurringPayment(
         RecurringPayment $recurringPayment,
-        ?Carbon $until = null
+        ?CarbonInterface $until = null
     ): Collection {
         if (! $recurringPayment->is_active || $recurringPayment->hasEnded()) {
             return collect();
@@ -136,7 +137,7 @@ class PaymentService
         return $payments;
     }
 
-    public function generateAllPaymentsForUser(User $user, ?Carbon $until = null): Collection
+    public function generateAllPaymentsForUser(User $user, ?CarbonInterface $until = null): Collection
     {
         $until = $until ?? now()->addMonths(self::DEFAULT_MONTHS_AHEAD);
         $allPayments = collect();
@@ -155,7 +156,7 @@ class PaymentService
         return $allPayments;
     }
 
-    public function markAsPaid(Payment $payment, ?Carbon $paidDate = null): Transaction
+    public function markAsPaid(Payment $payment, ?CarbonInterface $paidDate = null): Transaction
     {
         if ($payment->is_paid) {
             throw new \RuntimeException('Payment is already marked as paid');
@@ -237,7 +238,7 @@ class PaymentService
         });
     }
 
-    public function getPaymentSummaryForPeriod(User $user, Carbon $startDate, Carbon $endDate): array
+    public function getPaymentSummaryForPeriod(User $user, CarbonInterface $startDate, CarbonInterface $endDate): array
     {
         $payments = $this->getPaymentsForPeriod($user, $startDate, $endDate);
 

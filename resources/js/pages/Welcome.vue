@@ -3,7 +3,7 @@ import { Button } from '@/components/ui';
 import { GITHUB_REPO_URL } from '@/lib/constants';
 import { dashboard, login, register } from '@/routes';
 import { Head, Link } from '@inertiajs/vue3';
-import { AlertCircle, CreditCard, Github } from 'lucide-vue-next';
+import { AlertCircle, CreditCard, GitFork } from '@lucide/vue';
 
 withDefaults(
     defineProps<{
@@ -90,7 +90,7 @@ withDefaults(
                         rel="noopener noreferrer"
                     >
                         <Button class="w-full sm:w-auto">
-                            <Github class="mr-2 h-4 w-4" />
+                            <GitFork class="mr-2 h-4 w-4" />
                             Clone Repository
                         </Button>
                     </a>

@@ -1,4 +1,4 @@
-import { icons } from 'lucide-vue-next';
+import { icons } from '@lucide/vue';
 import type { Component } from 'vue';
 
 function pascalToKebab(str: string): string {

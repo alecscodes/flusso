@@ -6,7 +6,7 @@ use App\Enums\TransactionType;
 use App\Models\Account;
 use App\Models\Transaction;
 use App\Models\User;
-use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -33,7 +33,7 @@ class TransactionService
     /**
      * Get transactions for a specific period.
      */
-    public function getTransactionsForPeriod(User $user, Carbon $startDate, Carbon $endDate): Collection
+    public function getTransactionsForPeriod(User $user, CarbonInterface $startDate, CarbonInterface $endDate): Collection
     {
         return $user->transactions()
             ->with(['account', 'category', 'from_account', 'to_account'])
@@ -240,7 +240,7 @@ class TransactionService
     /**
      * Get transaction summary for a period with currency conversion.
      */
-    public function getTransactionSummaryForPeriod(User $user, Carbon $startDate, Carbon $endDate): array
+    public function getTransactionSummaryForPeriod(User $user, CarbonInterface $startDate, CarbonInterface $endDate): array
     {
         $transactions = $this->getTransactionsForPeriod($user, $startDate, $endDate);
 
@@ -261,7 +261,7 @@ class TransactionService
     /**
      * Get category spending for a period with currency conversion.
      */
-    public function getCategorySpendingForPeriod(User $user, Carbon $startDate, Carbon $endDate, int $limit = 10): Collection
+    public function getCategorySpendingForPeriod(User $user, CarbonInterface $startDate, CarbonInterface $endDate, int $limit = 10): Collection
     {
         $transactions = $this->getTransactionsForPeriod($user, $startDate, $endDate);
         $expenseTransactions = $transactions->where('type', TransactionType::Expense);

@@ -3,7 +3,10 @@
 test('registration screen can be rendered', function () {
     $response = $this->get(route('register'));
 
-    $response->assertStatus(200);
+    $response->assertStatus(200)
+        ->assertInertia(fn ($page) => $page
+            ->component('Auth/Register')
+            ->has('passwordRules'));
 });
 
 test('new users can register', function () {

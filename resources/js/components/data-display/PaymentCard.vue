@@ -5,7 +5,7 @@ import { Badge, Button } from '@/components/ui';
 import { useDate } from '@/composables';
 import { cn } from '@/lib/utils';
 import type { Payment } from '@/types';
-import { Calendar, Check, Clock, RefreshCw } from 'lucide-vue-next';
+import { Calendar, Check, Clock, RefreshCw } from '@lucide/vue';
 import { computed } from 'vue';
 
 interface Props {

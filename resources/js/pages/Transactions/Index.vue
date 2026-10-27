@@ -21,7 +21,7 @@ import {
 } from '@/routes/transactions';
 import type { Account, Category, PaginatedData, Transaction } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { ArrowLeftRight, Filter, Plus, Search, X } from 'lucide-vue-next';
+import { ArrowLeftRight, Filter, Plus, Search, X } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 
 interface Props {

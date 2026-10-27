@@ -2,7 +2,7 @@
 import { Button, Input, Label } from '@/components/ui';
 import { store } from '@/routes/password/confirm';
 import { Form, Head } from '@inertiajs/vue3';
-import { Lock } from 'lucide-vue-next';
+import { Lock } from '@lucide/vue';
 </script>
 
 <template>

@@ -11,7 +11,7 @@ import {
 } from '@/routes/accounts';
 import type { Account } from '@/types';
 import { Head, router } from '@inertiajs/vue3';
-import { Plus, Wallet } from 'lucide-vue-next';
+import { Plus, Wallet } from '@lucide/vue';
 import { ref } from 'vue';
 
 interface Props {

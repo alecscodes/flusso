@@ -3,7 +3,7 @@ import { Button } from '@/components/ui';
 import { logout } from '@/routes';
 import { send } from '@/routes/verification';
 import { Form, Head, Link } from '@inertiajs/vue3';
-import { Mail } from 'lucide-vue-next';
+import { Mail } from '@lucide/vue';
 
 interface Props {
     status?: string;

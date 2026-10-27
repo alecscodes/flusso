@@ -10,7 +10,7 @@ import {
 import { index as categoriesIndex } from '@/routes/categories';
 import type { Category } from '@/types';
 import { Head, Link } from '@inertiajs/vue3';
-import { ArrowLeft, Tag } from 'lucide-vue-next';
+import { ArrowLeft, Tag } from '@lucide/vue';
 
 interface Props {
     category: Category;

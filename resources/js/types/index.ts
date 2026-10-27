@@ -163,11 +163,3 @@ export interface CategorySpending {
     total: number;
     count: number;
 }
-
-export type PageProps<
-    T extends Record<string, unknown> = Record<string, unknown>,
-> = T & {
-    auth: {
-        user: User;
-    };
-};

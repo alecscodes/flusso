@@ -12,6 +12,7 @@ setLayoutProps({
 interface Props {
     email: string;
     token: string;
+    passwordRules: string;
 }
 
 const props = defineProps<Props>();
@@ -51,6 +52,7 @@ const inputEmail = ref(props.email);
                 type="password"
                 placeholder="••••••••"
                 autocomplete="new-password"
+                :passwordrules="passwordRules"
                 :error="errors.password"
                 required
                 autofocus
@@ -65,6 +67,7 @@ const inputEmail = ref(props.email);
                 type="password"
                 placeholder="••••••••"
                 autocomplete="new-password"
+                :passwordrules="passwordRules"
                 :error="errors.password_confirmation"
                 required
             />

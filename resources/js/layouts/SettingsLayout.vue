@@ -16,7 +16,7 @@ import {
     User,
     UserPlus,
     Wallet,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 const page = usePage();
 
