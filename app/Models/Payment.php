@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\DateOnly;
 use App\Enums\PaymentType;
 use Database\Factories\PaymentFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -34,7 +35,7 @@ class Payment extends Model
         return [
             'type' => PaymentType::class,
             'amount' => 'decimal:2',
-            'due_date' => 'date',
+            'due_date' => DateOnly::class,
             'is_paid' => 'boolean',
             'paid_at' => 'datetime',
         ];
@@ -47,7 +48,7 @@ class Payment extends Model
 
     public function account(): BelongsTo
     {
-        return $this->belongsTo(Account::class);
+        return $this->belongsTo(Account::class)->withTrashed();
     }
 
     public function category(): BelongsTo

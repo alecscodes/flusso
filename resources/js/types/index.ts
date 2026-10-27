@@ -46,15 +46,14 @@ export interface Transaction {
     currency: string;
     description: string | null;
     date: string;
-    exchange_rate: string | null;
-    from_account_id: number | null;
     to_account_id: number | null;
+    /** What arrived in the destination account (transfers only), in its currency. */
+    to_amount: string | null;
     created_at: string;
     updated_at: string;
     deleted_at: string | null;
     account?: Account;
     category?: Category;
-    from_account?: Account;
     to_account?: Account;
     files?: TransactionFile[];
 }

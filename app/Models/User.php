@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\CarbonImmutable;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -56,31 +57,31 @@ class User extends Authenticatable
         return $this->hasMany(Payment::class);
     }
 
+    /**
+     * The current financial period, from the reset day to the day before the next
+     * one. The reset day is clamped to the month's length (31 -> Feb 28/29).
+     *
+     * @return array{start: CarbonImmutable, end: CarbonImmutable}
+     */
     public function getFinancialPeriod(): array
     {
-        $resetDate = $this->reset_date;
+        $month = now()->startOfMonth();
 
-        if ($resetDate === null) {
-            return [
-                'start' => now()->startOfMonth(),
-                'end' => now()->endOfMonth(),
-            ];
+        if ($this->reset_date === null) {
+            return ['start' => $month, 'end' => $month->endOfMonth()];
         }
 
-        $today = now();
-        $currentDay = $today->day;
+        $resetDayIn = fn (CarbonImmutable $m): CarbonImmutable => $m->addDays(min((int) $this->reset_date, $m->daysInMonth) - 1);
 
-        if ($currentDay >= $resetDate) {
-            $start = $today->copy()->day($resetDate)->startOfDay();
-            $end = $today->copy()->addMonth()->day($resetDate)->subDay()->endOfDay();
+        $start = $resetDayIn($month);
+
+        if (now()->lt($start)) {
+            $start = $resetDayIn($month->subMonth());
+            $nextStart = $resetDayIn($month);
         } else {
-            $start = $today->copy()->subMonth()->day($resetDate)->startOfDay();
-            $end = $today->copy()->day($resetDate)->subDay()->endOfDay();
+            $nextStart = $resetDayIn($month->addMonth());
         }
 
-        return [
-            'start' => $start,
-            'end' => $end,
-        ];
+        return ['start' => $start, 'end' => $nextStart->subDay()->endOfDay()];
     }
 }

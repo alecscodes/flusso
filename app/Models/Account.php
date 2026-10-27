@@ -2,8 +2,6 @@
 
 namespace App\Models;
 
-use App\Enums\TransactionType;
-use App\Services\CurrencyService;
 use Database\Factories\AccountFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -22,7 +20,6 @@ class Account extends Model
         'user_id',
         'name',
         'currency',
-        'balance',
         'initial_balance',
         'is_savings',
     ];
@@ -43,30 +40,6 @@ class Account extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
-    }
-
-    /**
-     * Get the transactions for the account.
-     */
-    public function transactions(): HasMany
-    {
-        return $this->hasMany(Transaction::class);
-    }
-
-    /**
-     * Get the transfer transactions where this account is the source.
-     */
-    public function fromTransactions(): HasMany
-    {
-        return $this->hasMany(Transaction::class, 'from_account_id');
-    }
-
-    /**
-     * Get the transfer transactions where this account is the destination.
-     */
-    public function toTransactions(): HasMany
-    {
-        return $this->hasMany(Transaction::class, 'to_account_id');
     }
 
     /**
@@ -119,34 +92,27 @@ class Account extends Model
     }
 
     /**
-     * Recalculate the account balance by converting all transaction amounts
-     * to the account's currency before summing them.
+     * The balance the ledger dictates: initial balance + income - expenses
+     * - transfers out + amounts received by transfers in (soft-deleted rows excluded).
+     */
+    public function ledgerBalance(): string
+    {
+        $total = Transaction::query()
+            ->forAccount($this->id)
+            ->selectRaw(
+                "coalesce(sum(case when to_account_id = ? then to_amount when type = 'income' then amount else -amount end), 0) as total",
+                [$this->id],
+            )
+            ->value('total');
+
+        return number_format(round((float) $this->initial_balance + (float) $total, 2), 2, '.', '');
+    }
+
+    /**
+     * The only writer of `accounts.balance`.
      */
     public function recalculateBalance(): void
     {
-        $currencyService = app(CurrencyService::class);
-
-        $incomeTransactions = $this->transactions()
-            ->where('type', TransactionType::Income)
-            ->get();
-
-        $expenseTransactions = $this->transactions()
-            ->where('type', TransactionType::Expense)
-            ->get();
-
-        $income = $incomeTransactions->sum(function (Transaction $transaction) use ($currencyService) {
-            return $transaction->currency === $this->currency
-                ? $transaction->amount
-                : $currencyService->convert($transaction->amount, $transaction->currency, $this->currency, $transaction->date) ?? 0;
-        });
-
-        $expenses = $expenseTransactions->sum(function (Transaction $transaction) use ($currencyService) {
-            return $transaction->currency === $this->currency
-                ? $transaction->amount
-                : $currencyService->convert($transaction->amount, $transaction->currency, $this->currency, $transaction->date) ?? 0;
-        });
-
-        $this->balance = $this->initial_balance + $income - $expenses;
-        $this->save();
+        $this->forceFill(['balance' => $this->ledgerBalance()])->saveQuietly();
     }
 }

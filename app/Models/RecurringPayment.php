@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\DateOnly;
 use App\Enums\IntervalType;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
@@ -48,8 +49,8 @@ class RecurringPayment extends Model
             'interval_type' => IntervalType::class,
             'interval_value' => 'integer',
             'amount' => 'decimal:2',
-            'start_date' => 'date',
-            'end_date' => 'date',
+            'start_date' => DateOnly::class,
+            'end_date' => DateOnly::class,
             'installments' => 'integer',
             'is_active' => 'boolean',
         ];
@@ -62,7 +63,7 @@ class RecurringPayment extends Model
 
     public function account(): BelongsTo
     {
-        return $this->belongsTo(Account::class);
+        return $this->belongsTo(Account::class)->withTrashed();
     }
 
     public function category(): BelongsTo

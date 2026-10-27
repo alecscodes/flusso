@@ -23,7 +23,8 @@ class AccountFactory extends Factory
             'name' => fake()->words(2, true),
             'currency' => fake()->randomElement(['EUR', 'RON', 'USD', 'GBP']),
             'balance' => fake()->randomFloat(2, 0, 10000),
-            'initial_balance' => fake()->randomFloat(2, 0, 10000),
+            // A fresh account has no transactions, so its ledger balance is its initial balance.
+            'initial_balance' => fn (array $attributes) => $attributes['balance'],
         ];
     }
 }

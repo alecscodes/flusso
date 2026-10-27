@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
-use App\Services\FinancialPeriodService;
 use App\Support\FlashToast;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -12,17 +11,13 @@ use Inertia\Response;
 
 class FinanceController extends Controller
 {
-    public function __construct(
-        private FinancialPeriodService $financialPeriodService
-    ) {}
-
     /**
      * Show the finance settings page
      */
     public function edit(Request $request): Response
     {
         $user = $request->user();
-        $currentPeriod = $this->financialPeriodService->getCurrentPeriod($user->reset_date);
+        $currentPeriod = $user->getFinancialPeriod();
 
         return Inertia::render('Settings/Finance', [
             'resetDate' => $user->reset_date,

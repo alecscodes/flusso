@@ -131,7 +131,7 @@ const gradientClass = computed(() => {
                         "
                     >
                         <Trash2 class="h-4 w-4" />
-                        Delete
+                        Archive
                     </DropdownItem>
                 </template>
             </Dropdown>

@@ -68,7 +68,6 @@ test('payment service can mark payment as unpaid and revert transaction', functi
     ]);
 
     $payment->update(['transaction_id' => $transaction->id]);
-    $account->decrement('balance', 100.00);
 
     expect($account->fresh()->balance)->toBe('900.00');
 

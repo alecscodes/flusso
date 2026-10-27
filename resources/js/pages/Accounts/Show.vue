@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { AmountDisplay, TransactionRow } from '@/components/data-display';
-import { TransactionForm, TransferForm } from '@/components/forms';
+import { TransactionForm } from '@/components/forms';
 import TransactionModal from '@/components/modals/TransactionModal.vue';
 import {
     Button,
@@ -20,7 +20,6 @@ import {
     destroy as destroyTransaction,
     index as transactionsIndex,
     store as transactionStore,
-    transfer as transactionTransfer,
     update as transactionUpdate,
 } from '@/routes/transactions';
 import type { Account, Category, Transaction } from '@/types';
@@ -49,7 +48,7 @@ const { formatDate } = useDate();
 
 const showViewModal = ref(false);
 const showCreateModal = ref(false);
-const showTransferModal = ref(false);
+const createType = ref<Transaction['type']>('expense');
 const showEditModal = ref(false);
 const selectedTransaction = ref<Transaction | null>(null);
 const editingTransaction = ref<Transaction | null>(null);
@@ -74,12 +73,13 @@ function closeEditModal() {
     editingTransaction.value = null;
 }
 
-function handleCreateSuccess() {
-    showCreateModal.value = false;
+function openCreateModal(type: Transaction['type'] = 'expense') {
+    createType.value = type;
+    showCreateModal.value = true;
 }
 
-function handleTransferSuccess() {
-    showTransferModal.value = false;
+function handleCreateSuccess() {
+    showCreateModal.value = false;
 }
 
 function handleEditSuccess() {
@@ -120,7 +120,7 @@ const gradientClass = computed(() => {
 function deleteAccount() {
     if (
         confirm(
-            `Are you sure you want to delete "${props.account.name}"? All transactions and related data for this account will be removed.`,
+            `Archive "${props.account.name}"? Its history stays, but it disappears from your accounts and its planned payments stop.`,
         )
     ) {
         router.delete(destroyAccount.url(props.account));
@@ -243,7 +243,7 @@ function deleteAccount() {
                             @click="deleteAccount"
                         >
                             <Trash2 class="mr-2 h-4 w-4" />
-                            Delete Account
+                            Archive Account
                         </Button>
                     </div>
                 </CardContent>
@@ -256,7 +256,7 @@ function deleteAccount() {
                         <Button
                             variant="outline"
                             size="sm"
-                            @click="showTransferModal = true"
+                            @click="openCreateModal('transfer')"
                         >
                             <ArrowLeftRight class="mr-2 h-4 w-4" />
                             Transfer
@@ -264,7 +264,7 @@ function deleteAccount() {
                         <Button
                             variant="ghost"
                             size="sm"
-                            @click="showCreateModal = true"
+                            @click="openCreateModal()"
                         >
                             <Plus class="mr-2 h-4 w-4" />
                             Add Transaction
@@ -289,6 +289,7 @@ function deleteAccount() {
                             :key="transaction.id"
                             :transaction="transaction"
                             :show-account="false"
+                            :context-account-id="account.id"
                             @view="openViewModal"
                             @edit="openEditModal"
                             @delete="deleteTransaction"
@@ -309,31 +310,18 @@ function deleteAccount() {
     <Modal
         :open="showCreateModal"
         title="Add Transaction"
-        description="Record a new income or expense"
+        description="Record an expense, an income or a transfer"
         size="lg"
         @close="showCreateModal = false"
     >
         <TransactionForm
+            :initial-type="createType"
+            :account-id="account.id"
             :accounts="accounts"
             :categories="categories"
             :action="transactionStore.url()"
             @success="handleCreateSuccess"
             @cancel="showCreateModal = false"
-        />
-    </Modal>
-
-    <Modal
-        :open="showTransferModal"
-        title="Transfer Money"
-        description="Move money between your accounts"
-        size="lg"
-        @close="showTransferModal = false"
-    >
-        <TransferForm
-            :accounts="accounts"
-            :action="transactionTransfer.url()"
-            @success="handleTransferSuccess"
-            @cancel="showTransferModal = false"
         />
     </Modal>
 

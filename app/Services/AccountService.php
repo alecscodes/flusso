@@ -30,15 +30,16 @@ class AccountService
 
     public function createAccount(User $user, array $data): Account
     {
-        $balance = $data['balance'] ?? 0;
-
-        return $user->accounts()->create([
+        $account = $user->accounts()->create([
             'name' => $data['name'],
             'currency' => strtoupper($data['currency']),
-            'balance' => $balance,
-            'initial_balance' => $balance,
+            'initial_balance' => $data['balance'] ?? 0,
             'is_savings' => $data['is_savings'] ?? false,
         ]);
+
+        $account->recalculateBalance();
+
+        return $account;
     }
 
     public function updateAccount(Account $account, array $data): Account
@@ -52,52 +53,18 @@ class AccountService
         return $account->fresh();
     }
 
+    /**
+     * Archive the account: only the account itself is soft-deleted, so its history
+     * and every other account's balance stay untouched. Its rules are paused and
+     * its unpaid occurrences removed.
+     */
     public function deleteAccount(Account $account): void
     {
         DB::transaction(function () use ($account) {
-            $account->transactions()->delete();
-            $account->payments()->delete();
-            $account->recurringPayments()->delete();
+            $account->recurringPayments()->update(['is_active' => false]);
+            $account->payments()->unpaid()->delete();
             $account->delete();
         });
-    }
-
-    public function adjustBalance(Account $account, float $amount, string $operation): void
-    {
-        match ($operation) {
-            'add', 'increment' => $account->increment('balance', $amount),
-            'subtract', 'decrement' => $account->decrement('balance', $amount),
-            default => throw new \InvalidArgumentException("Invalid operation: {$operation}"),
-        };
-    }
-
-    public function recalculateBalance(Account $account): void
-    {
-        $account->recalculateBalance();
-    }
-
-    public function recalculateAllBalances(User $user): void
-    {
-        $user->accounts->each(fn (Account $account) => $account->recalculateBalance());
-    }
-
-    public function getTotalBalance(User $user, ?string $currency = null): float
-    {
-        $query = $user->accounts();
-
-        if ($currency) {
-            $query->where('currency', strtoupper($currency));
-        }
-
-        return (float) $query->sum('balance');
-    }
-
-    public function getAccountsByCurrency(User $user): Collection
-    {
-        return $user->accounts()
-            ->orderByName()
-            ->get()
-            ->groupBy('currency');
     }
 
     public function getTotalBalanceInPrimaryCurrency(User $user): float

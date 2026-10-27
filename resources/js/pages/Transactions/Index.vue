@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { AmountDisplay, TransactionRow } from '@/components/data-display';
-import { TransactionForm, TransferForm } from '@/components/forms';
+import { TransactionForm } from '@/components/forms';
 import TransactionModal from '@/components/modals/TransactionModal.vue';
 import {
     Button,
@@ -16,7 +16,6 @@ import {
     destroy as destroyTransaction,
     index as transactionsIndex,
     store as transactionStore,
-    transfer as transactionTransfer,
     update as transactionUpdate,
 } from '@/routes/transactions';
 import type { Account, Category, PaginatedData, Transaction } from '@/types';
@@ -31,7 +30,7 @@ interface Props {
     categorySpending: Array<{
         category: Category;
         total: number;
-        total_in_primary: number;
+        count: number;
     }>;
     hasDateFilters: boolean;
     primaryCurrency: string;
@@ -45,7 +44,7 @@ const DEBOUNCE_MS = 350;
 
 // State
 const showCreateModal = ref(false);
-const showTransferModal = ref(false);
+const createType = ref<Transaction['type']>('expense');
 const showEditModal = ref(false);
 const showViewModal = ref(false);
 const showFilters = ref(false);
@@ -61,10 +60,7 @@ const hasActiveFilters = computed(() =>
 );
 
 const totalCategorySpending = computed(() =>
-    props.categorySpending.reduce(
-        (sum, item) => sum + item.total_in_primary,
-        0,
-    ),
+    props.categorySpending.reduce((sum, item) => sum + item.total, 0),
 );
 
 const accountFilterOptions = computed(() => [
@@ -137,12 +133,13 @@ function closeViewModal() {
     selectedTransaction.value = null;
 }
 
-function handleCreateSuccess() {
-    showCreateModal.value = false;
+function openCreateModal(type: Transaction['type'] = 'expense') {
+    createType.value = type;
+    showCreateModal.value = true;
 }
 
-function handleTransferSuccess() {
-    showTransferModal.value = false;
+function handleCreateSuccess() {
+    showCreateModal.value = false;
 }
 
 function handleEditSuccess() {
@@ -184,11 +181,11 @@ const debouncedApplyFilters = debounce(applyFilters, DEBOUNCE_MS);
                 </p>
             </div>
             <div class="flex justify-between gap-3">
-                <Button variant="outline" @click="showTransferModal = true">
+                <Button variant="outline" @click="openCreateModal('transfer')">
                     <ArrowLeftRight class="h-4 w-4" />
                     Transfer
                 </Button>
-                <Button @click="showCreateModal = true">
+                <Button @click="openCreateModal()">
                     <Plus class="h-4 w-4" />
                     Add Transaction
                 </Button>
@@ -355,7 +352,7 @@ const debouncedApplyFilters = debounce(applyFilters, DEBOUNCE_MS);
                                 </span>
                             </div>
                             <AmountDisplay
-                                :amount="item.total_in_primary"
+                                :amount="item.total"
                                 :currency="primaryCurrency"
                                 type="expense"
                                 size="sm"
@@ -366,7 +363,7 @@ const debouncedApplyFilters = debounce(applyFilters, DEBOUNCE_MS);
                             <div
                                 class="h-full rounded-full transition-all duration-500"
                                 :style="{
-                                    width: `${(item.total_in_primary / totalCategorySpending) * 100}%`,
+                                    width: `${(item.total / totalCategorySpending) * 100}%`,
                                     backgroundColor:
                                         item.category.color || '#7c3aed',
                                 }"
@@ -416,7 +413,7 @@ const debouncedApplyFilters = debounce(applyFilters, DEBOUNCE_MS);
                     <template #action>
                         <Button
                             v-if="!hasActiveFilters"
-                            @click="showCreateModal = true"
+                            @click="openCreateModal()"
                         >
                             <Plus class="h-4 w-4" />
                             Add Transaction
@@ -466,31 +463,17 @@ const debouncedApplyFilters = debounce(applyFilters, DEBOUNCE_MS);
     <Modal
         :open="showCreateModal"
         title="Add Transaction"
-        description="Record a new income or expense"
+        description="Record an expense, an income or a transfer"
         size="lg"
         @close="showCreateModal = false"
     >
         <TransactionForm
+            :initial-type="createType"
             :accounts="accounts"
             :categories="categories"
             :action="transactionStore.url()"
             @success="handleCreateSuccess"
             @cancel="showCreateModal = false"
-        />
-    </Modal>
-
-    <Modal
-        :open="showTransferModal"
-        title="Transfer Money"
-        description="Move money between your accounts"
-        size="lg"
-        @close="showTransferModal = false"
-    >
-        <TransferForm
-            :accounts="accounts"
-            :action="transactionTransfer.url()"
-            @success="handleTransferSuccess"
-            @cancel="showTransferModal = false"
         />
     </Modal>
 

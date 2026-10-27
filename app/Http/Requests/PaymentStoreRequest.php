@@ -2,10 +2,8 @@
 
 namespace App\Http\Requests;
 
-use App\Models\Account;
-use App\Models\Category;
-use App\Rules\BelongsToUser;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class PaymentStoreRequest extends FormRequest
 {
@@ -17,18 +15,8 @@ class PaymentStoreRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'account_id' => [
-                'required',
-                'integer',
-                'exists:accounts,id',
-                new BelongsToUser(Account::class),
-            ],
-            'category_id' => [
-                'required',
-                'integer',
-                'exists:categories,id',
-                new BelongsToUser(Category::class),
-            ],
+            'account_id' => ['required', 'integer', Rule::exists('accounts', 'id')->where('user_id', $this->user()->id)->whereNull('deleted_at')],
+            'category_id' => ['required', 'integer', Rule::exists('categories', 'id')->where('user_id', $this->user()->id)->whereNull('deleted_at')],
             'amount' => ['required', 'numeric', 'min:0.01'],
             'currency' => ['required', 'string', 'size:3'],
             'description' => ['nullable', 'string', 'max:1000'],

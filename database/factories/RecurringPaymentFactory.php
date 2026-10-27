@@ -30,8 +30,8 @@ class RecurringPaymentFactory extends Factory
             'currency' => fake()->randomElement(['EUR', 'RON', 'USD', 'GBP']),
             'interval_type' => fake()->randomElement([IntervalType::Days, IntervalType::Weeks, IntervalType::Months, IntervalType::Years]),
             'interval_value' => fake()->numberBetween(1, 12),
-            'start_date' => fake()->dateTimeBetween('-6 months', 'now'),
-            'end_date' => fake()->optional()->dateTimeBetween('now', '+1 year'),
+            'start_date' => fake()->dateTimeBetween('-6 months', 'now')->format('Y-m-d'),
+            'end_date' => fake()->optional()->dateTimeBetween('now', '+1 year')?->format('Y-m-d'),
             'installments' => fake()->optional()->numberBetween(1, 12),
             'is_active' => true,
         ];

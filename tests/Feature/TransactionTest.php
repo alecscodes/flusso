@@ -79,7 +79,6 @@ test('deleting transaction reverts account balance', function () {
         'amount' => 500.00,
     ]);
 
-    $account->increment('balance', 500.00);
     expect($account->fresh()->balance)->toBe('1500.00');
 
     actingAs($user)
@@ -199,41 +198,44 @@ test('transactions index filter by search returns only matching transactions', f
         );
 });
 
-test('transfer transactions include from and to account relationships', function () {
+test('a transfer is listed once with its source and destination accounts', function () {
     $user = User::factory()->create();
     $fromAccount = Account::factory()->create([
         'user_id' => $user->id,
         'name' => 'Checking Account',
+        'currency' => 'EUR',
         'balance' => 1000.00,
     ]);
     $toAccount = Account::factory()->create([
         'user_id' => $user->id,
         'name' => 'Savings Account',
+        'currency' => 'EUR',
         'balance' => 500.00,
     ]);
 
-    // Create a transfer transaction
-    $transfer = Transaction::factory()->create([
+    $transfer = Transaction::factory()->transfer($toAccount)->create([
         'user_id' => $user->id,
         'account_id' => $fromAccount->id,
-        'from_account_id' => $fromAccount->id,
-        'to_account_id' => $toAccount->id,
-        'type' => TransactionType::Transfer,
         'amount' => 200.00,
-        'description' => 'Transfer to savings',
     ]);
 
-    $response = actingAs($user)->get(route('transactions.index'));
-
-    $response->assertSuccessful()
+    actingAs($user)->get(route('transactions.index'))
+        ->assertSuccessful()
         ->assertInertia(fn ($page) => $page
             ->component('Transactions/Index')
             ->has('transactions.data', 1)
             ->where('transactions.data.0.id', $transfer->id)
             ->where('transactions.data.0.type', 'transfer')
-            ->where('transactions.data.0.from_account.name', 'Checking Account')
+            ->where('transactions.data.0.account.name', 'Checking Account')
             ->where('transactions.data.0.to_account.name', 'Savings Account')
+            ->where('transactions.data.0.to_amount', '200.00')
         );
+
+    // The account filter finds it from either side; the destination sees it too.
+    foreach ([$fromAccount, $toAccount] as $account) {
+        actingAs($user)->get(route('transactions.index', ['account_id' => $account->id]))
+            ->assertInertia(fn ($page) => $page->where('transactions.total', 1));
+    }
 });
 
 test('transactions index shares the primary currency from the backend', function () {

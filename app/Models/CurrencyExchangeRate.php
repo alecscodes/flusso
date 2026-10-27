@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\DateOnly;
 use Illuminate\Database\Eloquent\Model;
 
 class CurrencyExchangeRate extends Model
@@ -17,7 +18,7 @@ class CurrencyExchangeRate extends Model
     {
         return [
             'rate' => 'decimal:6',
-            'date' => 'date',
+            'date' => DateOnly::class,
         ];
     }
 }

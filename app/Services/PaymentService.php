@@ -185,11 +185,6 @@ class PaymentService
                 'transaction_id' => $transaction->id,
             ]);
 
-            match ($payment->type) {
-                PaymentType::Income => $payment->account->increment('balance', $payment->amount),
-                PaymentType::Expense => $payment->account->decrement('balance', $payment->amount),
-            };
-
             if ($payment->recurring_payment_id) {
                 $recurringPayment = $payment->recurringPayment;
                 if ($recurringPayment && $recurringPayment->is_active) {
@@ -209,14 +204,7 @@ class PaymentService
 
         DB::transaction(function () use ($payment, $deleteTransaction) {
             if ($payment->transaction_id && $deleteTransaction) {
-                $transaction = $payment->transaction;
-
-                match ($payment->type) {
-                    PaymentType::Income => $payment->account->decrement('balance', $payment->amount),
-                    PaymentType::Expense => $payment->account->increment('balance', $payment->amount),
-                };
-
-                $transaction->delete();
+                $payment->transaction->delete();
             }
 
             $payment->update([

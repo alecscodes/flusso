@@ -2,16 +2,28 @@
 
 namespace App\Models;
 
+use App\Casts\DateOnly;
 use App\Enums\TransactionType;
+use App\Observers\TransactionObserver;
+use Carbon\CarbonInterface;
 use Database\Factories\TransactionFactory;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Storage;
 
+/**
+ * A transfer is ONE row: `account_id` is the source (amount in its currency),
+ * `to_account_id` the destination and `to_amount` what arrived there (in the
+ * destination's currency).
+ */
+#[ObservedBy(TransactionObserver::class)]
 class Transaction extends Model
 {
     /** @use HasFactory<TransactionFactory> */
@@ -27,10 +39,8 @@ class Transaction extends Model
         'currency',
         'description',
         'date',
-        'exchange_rate',
-        'from_account_id',
         'to_account_id',
-        'linked_transaction_id',
+        'to_amount',
     ];
 
     protected function casts(): array
@@ -38,8 +48,8 @@ class Transaction extends Model
         return [
             'type' => TransactionType::class,
             'amount' => 'decimal:2',
-            'exchange_rate' => 'decimal:6',
-            'date' => 'date',
+            'to_amount' => 'decimal:2',
+            'date' => DateOnly::class,
         ];
     }
 
@@ -63,7 +73,12 @@ class Transaction extends Model
 
     public function account(): BelongsTo
     {
-        return $this->belongsTo(Account::class);
+        return $this->belongsTo(Account::class)->withTrashed();
+    }
+
+    public function toAccount(): BelongsTo
+    {
+        return $this->belongsTo(Account::class, 'to_account_id')->withTrashed();
     }
 
     public function category(): BelongsTo
@@ -76,19 +91,14 @@ class Transaction extends Model
         return $this->belongsTo(RecurringPayment::class);
     }
 
-    public function from_account(): BelongsTo
-    {
-        return $this->belongsTo(Account::class, 'from_account_id');
-    }
-
-    public function to_account(): BelongsTo
-    {
-        return $this->belongsTo(Account::class, 'to_account_id');
-    }
-
     public function payment(): HasOne
     {
         return $this->hasOne(Payment::class);
+    }
+
+    public function files(): HasMany
+    {
+        return $this->hasMany(TransactionFile::class);
     }
 
     public function scopeIncome($query)
@@ -106,9 +116,14 @@ class Transaction extends Model
         return $query->where('type', TransactionType::Transfer);
     }
 
-    public function scopeForAccount($query, int $accountId)
+    /**
+     * Transactions that touch the account: its own rows and incoming transfers.
+     */
+    public function scopeForAccount(Builder $query, int $accountId): Builder
     {
-        return $query->where('account_id', $accountId);
+        return $query->where(fn (Builder $q) => $q
+            ->where('account_id', $accountId)
+            ->orWhere('to_account_id', $accountId));
     }
 
     public function scopeForCategory($query, int $categoryId)
@@ -116,24 +131,19 @@ class Transaction extends Model
         return $query->where('category_id', $categoryId);
     }
 
-    public function scopeInPeriod($query, $startDate, $endDate)
+    /**
+     * Both bounds are inclusive; dates are compared as 'Y-m-d' strings.
+     */
+    public function scopeInPeriod(Builder $query, CarbonInterface|string|null $startDate, CarbonInterface|string|null $endDate): Builder
     {
-        return $query->whereBetween('date', [$startDate, $endDate]);
+        return $query
+            ->when($startDate, fn (Builder $q) => $q->where('date', '>=', Date::parse($startDate)->toDateString()))
+            ->when($endDate, fn (Builder $q) => $q->where('date', '<=', Date::parse($endDate)->toDateString()));
     }
 
     public function scopeForUser($query, int $userId)
     {
         return $query->where('user_id', $userId);
-    }
-
-    public function linkedTransaction(): BelongsTo
-    {
-        return $this->belongsTo(Transaction::class, 'linked_transaction_id');
-    }
-
-    public function files(): HasMany
-    {
-        return $this->hasMany(TransactionFile::class);
     }
 
     public function isTransfer(): bool

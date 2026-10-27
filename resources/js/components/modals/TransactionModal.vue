@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { AmountDisplay, CategoryBadge } from '@/components/data-display';
 import { Button, Modal } from '@/components/ui';
-import { useDate } from '@/composables';
+import { useCurrency, useDate } from '@/composables';
 import { download as downloadTransactionFile } from '@/routes/transactions/files';
 import type { Transaction } from '@/types';
 import {
@@ -27,6 +27,7 @@ const emit = defineEmits<{
 }>();
 
 const { formatDate } = useDate();
+const { formatCurrency } = useCurrency();
 
 const types: Record<
     string,
@@ -120,7 +121,7 @@ const downloadFile = (file: { id: number }) => {
         <div class="grid gap-3 sm:grid-cols-2">
             <template v-if="isTransfer">
                 <div
-                    v-if="transaction.from_account"
+                    v-if="transaction.account"
                     class="flex items-center justify-between gap-3 rounded-xl bg-muted/50 p-3"
                 >
                     <span
@@ -130,7 +131,7 @@ const downloadFile = (file: { id: number }) => {
                         From
                     </span>
                     <span class="text-sm text-foreground">
-                        {{ transaction.from_account.name }}
+                        {{ transaction.account.name }}
                     </span>
                 </div>
                 <div
@@ -145,6 +146,29 @@ const downloadFile = (file: { id: number }) => {
                     </span>
                     <span class="text-sm text-foreground">
                         {{ transaction.to_account.name }}
+                    </span>
+                </div>
+                <div
+                    v-if="
+                        transaction.to_amount &&
+                        transaction.to_account &&
+                        transaction.to_account.currency !== transaction.currency
+                    "
+                    class="flex items-center justify-between gap-3 rounded-xl bg-muted/50 p-3"
+                >
+                    <span
+                        class="flex items-center gap-2 text-sm font-medium text-muted-foreground"
+                    >
+                        <ArrowLeftRight class="h-4 w-4" />
+                        Received
+                    </span>
+                    <span class="text-sm text-foreground">
+                        {{
+                            formatCurrency(
+                                transaction.to_amount,
+                                transaction.to_account.currency,
+                            )
+                        }}
                     </span>
                 </div>
             </template>

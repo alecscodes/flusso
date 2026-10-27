@@ -33,10 +33,10 @@ class CurrencyService
     private ?string $primaryCurrencyCache = null;
 
     /**
-     * Get exchange rate from base currency to target currency
-     * Uses cached rate if available and fresh, otherwise fetches from API
+     * Get today's exchange rate from base currency to target currency
+     * Uses the rate cached for today if available, otherwise fetches it from the API
      */
-    public function getRate(string $fromCurrency, string $toCurrency, ?string $date = null): ?float
+    public function getRate(string $fromCurrency, string $toCurrency): ?float
     {
         // Normalize currencies to lowercase
         $fromCurrency = strtolower($fromCurrency);
@@ -47,8 +47,7 @@ class CurrencyService
             return 1.0;
         }
 
-        // Use today's date if not specified
-        $date = $date ?? now()->format('Y-m-d');
+        $date = now()->toDateString();
 
         // Create cache key
         $cacheKey = "currency_rate_{$fromCurrency}_{$toCurrency}_{$date}";
@@ -73,7 +72,7 @@ class CurrencyService
         }
 
         // Fetch from API
-        $rate = $this->fetchRate($fromCurrency, $toCurrency, $date);
+        $rate = $this->fetchRate($fromCurrency, $toCurrency);
 
         if ($rate === null) {
             return null;
@@ -108,7 +107,7 @@ class CurrencyService
     /**
      * Fetch exchange rate from API
      */
-    private function fetchRate(string $fromCurrency, string $toCurrency, string $date): ?float
+    private function fetchRate(string $fromCurrency, string $toCurrency): ?float
     {
         // Try primary endpoint first
         $response = $this->fetchFromEndpoint(sprintf(self::PRIMARY_ENDPOINT, $fromCurrency));
@@ -122,7 +121,6 @@ class CurrencyService
             Log::warning('Failed to fetch currency rate', [
                 'from' => $fromCurrency,
                 'to' => $toCurrency,
-                'date' => $date,
             ]);
 
             return null;
@@ -170,9 +168,9 @@ class CurrencyService
     /**
      * Convert amount from one currency to another
      */
-    public function convert(float $amount, string $fromCurrency, string $toCurrency, ?string $date = null): ?float
+    public function convert(float $amount, string $fromCurrency, string $toCurrency): ?float
     {
-        $rate = $this->getRate($fromCurrency, $toCurrency, $date);
+        $rate = $this->getRate($fromCurrency, $toCurrency);
 
         if ($rate === null) {
             return null;
@@ -215,21 +213,21 @@ class CurrencyService
     /**
      * Convert amount to user's primary currency
      */
-    public function convertToPrimaryCurrency(float $amount, string $fromCurrency, User $user, ?string $date = null): ?float
+    public function convertToPrimaryCurrency(float $amount, string $fromCurrency, User $user): ?float
     {
         $primaryCurrency = $this->getPrimaryCurrency($user);
 
-        return $this->convert($amount, $fromCurrency, $primaryCurrency, $date);
+        return $this->convert($amount, $fromCurrency, $primaryCurrency);
     }
 
     /**
      * Convert a collection of amounts with different currencies to primary currency
      */
-    public function convertCollectionToPrimaryCurrency(Collection $items, string $amountField, string $currencyField, User $user, ?string $date = null): Collection
+    public function convertCollectionToPrimaryCurrency(Collection $items, string $amountField, string $currencyField, User $user): Collection
     {
         $primaryCurrency = $this->getPrimaryCurrency($user);
 
-        return $items->map(function ($item) use ($amountField, $currencyField, $primaryCurrency, $date) {
+        return $items->map(function ($item) use ($amountField, $currencyField, $primaryCurrency) {
             $amount = $item->{$amountField};
             $currency = $item->{$currencyField};
 
@@ -237,15 +235,15 @@ class CurrencyService
                 return $amount;
             }
 
-            return $this->convert($amount, $currency, $primaryCurrency, $date) ?? 0;
+            return $this->convert($amount, $currency, $primaryCurrency) ?? 0;
         });
     }
 
     /**
      * Sum amounts in different currencies by converting to primary currency first
      */
-    public function sumInPrimaryCurrency(Collection $items, string $amountField, string $currencyField, User $user, ?string $date = null): float
+    public function sumInPrimaryCurrency(Collection $items, string $amountField, string $currencyField, User $user): float
     {
-        return $this->convertCollectionToPrimaryCurrency($items, $amountField, $currencyField, $user, $date)->sum();
+        return $this->convertCollectionToPrimaryCurrency($items, $amountField, $currencyField, $user)->sum();
     }
 }

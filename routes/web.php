@@ -30,7 +30,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('accounts', AccountController::class)->except(['create', 'edit']);
     Route::resource('categories', CategoryController::class)->except(['create', 'edit']);
     Route::resource('transactions', TransactionController::class)->except(['create', 'edit', 'show']);
-    Route::post('transactions/transfer', [TransactionController::class, 'transfer'])->name('transactions.transfer');
     Route::get('transactions/{transaction}/files/{file}/download', [TransactionController::class, 'downloadFile'])->name('transactions.files.download');
     Route::resource('recurring-payments', RecurringPaymentController::class)->except(['create', 'edit']);
     Route::get('payments', [PaymentController::class, 'index'])->name('payments.index');

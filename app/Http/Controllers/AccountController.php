@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\AccountStoreRequest;
 use App\Http\Requests\AccountUpdateRequest;
 use App\Models\Account;
+use App\Models\Transaction;
 use App\Services\AccountService;
 use App\Services\CategoryService;
 use App\Support\FlashToast;
@@ -47,9 +48,12 @@ class AccountController extends Controller
         $user = $request->user();
 
         return Inertia::render('Accounts/Show', [
-            'account' => $account->load(['transactions' => fn ($q) => $q->with(['account', 'category', 'linkedTransaction', 'from_account', 'to_account', 'files'])
-                ->latest('date')->limit(10),
-            ]),
+            'account' => $account->setRelation(
+                'transactions',
+                Transaction::forAccount($account->id)
+                    ->with(['account', 'category', 'toAccount', 'files'])
+                    ->latest('date')->latest('id')->limit(10)->get(),
+            ),
             'accounts' => $this->accountService->getAccountsForUser($user),
             'categories' => $this->categoryService->getCategoriesForUser($user),
         ]);

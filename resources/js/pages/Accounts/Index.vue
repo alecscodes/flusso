@@ -49,7 +49,11 @@ function handleEditSuccess() {
 }
 
 function deleteAccount(account: Account) {
-    if (confirm(`Are you sure you want to delete "${account.name}"?`)) {
+    if (
+        confirm(
+            `Archive "${account.name}"? Its history stays, but it disappears from your accounts and its planned payments stop.`,
+        )
+    ) {
         router.delete(destroyAccount.url(account));
     }
 }

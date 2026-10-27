@@ -31,7 +31,7 @@ class PaymentFactory extends Factory
             'amount' => fake()->randomFloat(2, 10, 500),
             'currency' => fake()->randomElement(['EUR', 'RON', 'USD', 'GBP']),
             'description' => fake()->optional()->sentence(),
-            'due_date' => fake()->dateTimeBetween('-1 month', '+1 month'),
+            'due_date' => fake()->dateTimeBetween('-1 month', '+1 month')->format('Y-m-d'),
             'is_paid' => false,
             'paid_at' => null,
         ];

@@ -1,0 +1,73 @@
+<?php
+
+namespace App\Observers;
+
+use App\Enums\TransactionType;
+use App\Models\Account;
+use App\Models\Transaction;
+use RuntimeException;
+
+/**
+ * Keeps the ledger invariant: every create/update/delete/restore recalculates the
+ * balance of each account the transaction touches (now and before the change).
+ */
+class TransactionObserver
+{
+    public function saving(Transaction $transaction): void
+    {
+        $account = Account::withTrashed()->findOrFail($transaction->account_id);
+        $transaction->currency = $account->currency;
+
+        if ($transaction->type !== TransactionType::Transfer) {
+            $transaction->to_account_id = null;
+            $transaction->to_amount = null;
+
+            return;
+        }
+
+        $transaction->category_id = null;
+
+        if ($transaction->to_amount !== null) {
+            return;
+        }
+
+        $toAccount = Account::withTrashed()->findOrFail($transaction->to_account_id);
+
+        throw_if(
+            $toAccount->currency !== $account->currency,
+            RuntimeException::class,
+            'A cross-currency transfer needs the amount received.',
+        );
+
+        $transaction->to_amount = $transaction->amount;
+    }
+
+    public function saved(Transaction $transaction): void
+    {
+        $this->recalculate($transaction, [
+            $transaction->getOriginal('account_id'),
+            $transaction->getOriginal('to_account_id'),
+        ]);
+    }
+
+    public function deleted(Transaction $transaction): void
+    {
+        $this->recalculate($transaction);
+    }
+
+    public function restored(Transaction $transaction): void
+    {
+        $this->recalculate($transaction);
+    }
+
+    /**
+     * @param  array<int, int|null>  $previousAccountIds
+     */
+    private function recalculate(Transaction $transaction, array $previousAccountIds = []): void
+    {
+        $ids = array_filter([$transaction->account_id, $transaction->to_account_id, ...$previousAccountIds]);
+
+        Account::withTrashed()->whereKey(array_unique($ids))->get()
+            ->each(fn (Account $account) => $account->recalculateBalance());
+    }
+}

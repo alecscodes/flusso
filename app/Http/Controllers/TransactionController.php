@@ -2,12 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\TransactionStoreRequest;
-use App\Http\Requests\TransactionUpdateRequest;
-use App\Http\Requests\TransferRequest;
+use App\Http\Requests\TransactionRequest;
 use App\Models\Transaction;
 use App\Models\TransactionFile;
-use App\Models\User;
 use App\Services\AccountService;
 use App\Services\CategoryService;
 use App\Services\CurrencyService;
@@ -35,25 +32,32 @@ class TransactionController extends Controller
 
         $user = $request->user();
 
-        // Base query with relationships
+        $request->validate([
+            'date_start' => ['nullable', 'date'],
+            'date_end' => ['nullable', 'date'],
+        ]);
+
         $query = $user->transactions()
-            ->with(['account', 'category', 'linkedTransaction', 'from_account', 'to_account', 'files'])
+            ->with(['account', 'category', 'toAccount', 'files'])
             ->orderBy('date', 'desc')
             ->orderBy('created_at', 'desc');
 
-        // Apply filters
         $this->applyTransactionFilters($query, $request);
 
-        $transactions = $query->paginate(50)->withQueryString();
-
-        // Get category spending for filtered period
-        [$categorySpending, $hasDateFilters] = $this->getCategorySpending($user, $request);
+        $hasDateFilters = $request->filled('date_start') || $request->filled('date_end');
 
         return Inertia::render('Transactions/Index', [
-            'transactions' => $transactions,
+            'transactions' => $query->paginate(50)->withQueryString(),
             'accounts' => $this->accountService->getAccountsForUser($user),
             'categories' => $this->categoryService->getCategoriesForUser($user),
-            'categorySpending' => $categorySpending,
+            'categorySpending' => $hasDateFilters
+                ? $this->transactionService->getCategorySpendingForPeriod(
+                    $user,
+                    $request->date('date_start'),
+                    $request->date('date_end'),
+                    limit: 100,
+                )
+                : [],
             'hasDateFilters' => $hasDateFilters,
             'primaryCurrency' => $this->currencyService->getPrimaryCurrency($user),
         ]);
@@ -61,87 +65,36 @@ class TransactionController extends Controller
 
     private function applyTransactionFilters($query, Request $request): void
     {
-        // Search filter
         if ($request->filled('search')) {
-            $search = $request->input('search');
+            $search = $request->string('search')->toString();
+
             $query->where(function ($q) use ($search) {
-                $q->where('description', 'like', '%'.$search.'%')
-                    ->orWhere('amount', 'like', '%'.$search.'%');
+                $q->where('description', 'like', '%'.$search.'%');
+
+                if (is_numeric($search)) {
+                    $q->orWhere('amount', $search)->orWhere('to_amount', $search);
+                }
             });
         }
 
-        // Account filter
         if ($request->filled('account_id')) {
             $query->forAccount((int) $request->input('account_id'));
         }
 
-        // Category filter
         if ($request->filled('category_id')) {
             $query->forCategory((int) $request->input('category_id'));
         }
 
-        // Type filter
         $type = $request->input('type');
-        if (is_string($type) && $type !== '' && in_array($type, ['income', 'expense', 'transfer'], true)) {
+        if (is_string($type) && in_array($type, ['income', 'expense', 'transfer'], true)) {
             $query->where('type', $type);
         }
 
-        // Date range filters
-        if ($request->filled('date_start')) {
-            $query->where('date', '>=', $request->input('date_start'));
-        }
-
-        if ($request->filled('date_end')) {
-            $query->where('date', '<=', $request->input('date_end'));
-        }
+        $query->inPeriod($request->input('date_start'), $request->input('date_end'));
     }
 
-    private function getCategorySpending(User $user, Request $request): array
+    public function store(TransactionRequest $request): RedirectResponse
     {
-        $hasDateFilters = $request->filled('date_start') || $request->filled('date_end');
-
-        if (! $hasDateFilters) {
-            return [[], false];
-        }
-
-        $categoryQuery = $user->transactions()
-            ->where('type', 'expense')
-            ->with('category');
-
-        // Apply same date filters
-        if ($request->filled('date_start')) {
-            $categoryQuery->where('date', '>=', $request->input('date_start'));
-        }
-
-        if ($request->filled('date_end')) {
-            $categoryQuery->where('date', '<=', $request->input('date_end'));
-        }
-
-        $categorySpending = $categoryQuery
-            ->get()
-            ->filter(fn ($transaction) => $transaction->category_id !== null)
-            ->groupBy('category_id')
-            ->map(function ($transactions) use ($user) {
-                $category = $transactions->first()->category;
-                $total = $transactions->sum('amount');
-
-                return [
-                    'category' => $category,
-                    'total' => $total,
-                    'total_in_primary' => $this->currencyService->convertToPrimaryCurrency($total, $transactions->first()->currency, $user) ?? $total,
-                ];
-            })
-            ->sortByDesc('total_in_primary')
-            ->values()
-            ->toArray();
-
-        return [$categorySpending, true];
-    }
-
-    public function store(TransactionStoreRequest $request): RedirectResponse
-    {
-        $this->authorize('create', Transaction::class);
-
         $this->transactionService->createTransaction($request->user(), $request->validated());
 
         FlashToast::success('Transaction created successfully.');
@@ -149,10 +102,8 @@ class TransactionController extends Controller
         return redirect()->route('transactions.index');
     }
 
-    public function update(TransactionUpdateRequest $request, Transaction $transaction): RedirectResponse
+    public function update(TransactionRequest $request, Transaction $transaction): RedirectResponse
     {
-        $this->authorize('update', $transaction);
-
         $this->transactionService->updateTransaction($transaction, $request->validated());
 
         FlashToast::success('Transaction updated successfully.');
@@ -169,22 +120,6 @@ class TransactionController extends Controller
         FlashToast::success('Transaction deleted successfully.');
 
         return redirect()->route('transactions.index');
-    }
-
-    public function transfer(TransferRequest $request): RedirectResponse
-    {
-        $this->authorize('create', Transaction::class);
-
-        try {
-            $this->transactionService->createTransfer($request->user(), $request->validated());
-
-            FlashToast::success('Transfer completed successfully.');
-
-            return redirect()->route('transactions.index');
-        } catch (\Exception $e) {
-            return redirect()->back()
-                ->withErrors(['error' => $e->getMessage()]);
-        }
     }
 
     public function downloadFile(Transaction $transaction, TransactionFile $file): BinaryFileResponse

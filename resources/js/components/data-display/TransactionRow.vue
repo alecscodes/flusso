@@ -2,8 +2,7 @@
 import AmountDisplay from '@/components/data-display/AmountDisplay.vue';
 import CategoryBadge from '@/components/data-display/CategoryBadge.vue';
 import { Dropdown, DropdownItem } from '@/components/ui';
-import { useDate } from '@/composables';
-import { useTransferTransaction } from '@/composables/useTransferTransaction';
+import { useCurrency, useDate } from '@/composables';
 import { cn } from '@/lib/utils';
 import type { Transaction } from '@/types';
 import {
@@ -21,6 +20,8 @@ import { computed } from 'vue';
 interface Props {
     transaction: Transaction;
     showAccount?: boolean;
+    /** The account whose page this row is on: transfers are then signed from its perspective. */
+    contextAccountId?: number;
     class?: string;
 }
 
@@ -35,12 +36,52 @@ const emit = defineEmits<{
 }>();
 
 const { formatDate } = useDate();
-const {
-    isTransferSource,
-    isTransferDestination,
-    transferDescription,
-    transferAccountInfo,
-} = useTransferTransaction(() => props.transaction);
+const { formatCurrency } = useCurrency();
+
+const isTransfer = computed(() => props.transaction.type === 'transfer');
+const isTransferSource = computed(
+    () =>
+        isTransfer.value &&
+        props.contextAccountId === props.transaction.account_id,
+);
+const isTransferDestination = computed(
+    () =>
+        isTransfer.value &&
+        props.contextAccountId === props.transaction.to_account_id,
+);
+
+const title = computed(() =>
+    isTransfer.value
+        ? `${props.transaction.account?.name ?? 'Unknown'} → ${props.transaction.to_account?.name ?? 'Unknown'}`
+        : props.transaction.description || 'No description',
+);
+
+// An incoming transfer is worth what arrived, in the destination's currency.
+const amount = computed(() =>
+    isTransferDestination.value
+        ? (props.transaction.to_amount ?? props.transaction.amount)
+        : props.transaction.amount,
+);
+const currency = computed(() =>
+    isTransferDestination.value
+        ? (props.transaction.to_account?.currency ?? props.transaction.currency)
+        : props.transaction.currency,
+);
+const amountType = computed(() => {
+    if (isTransferSource.value) return 'expense';
+    if (isTransferDestination.value) return 'income';
+    return props.transaction.type;
+});
+
+const receivedNote = computed(() =>
+    isTransfer.value &&
+    !props.contextAccountId &&
+    props.transaction.to_amount &&
+    props.transaction.to_account &&
+    props.transaction.to_account.currency !== props.transaction.currency
+        ? `→ ${formatCurrency(props.transaction.to_amount, props.transaction.to_account.currency)}`
+        : null,
+);
 
 const typeIcon = computed(() => {
     switch (props.transaction.type) {
@@ -102,11 +143,7 @@ const rowClasses = computed(() =>
         <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2">
                 <p class="truncate font-medium text-foreground">
-                    {{
-                        transferDescription ||
-                        transaction.description ||
-                        'No description'
-                    }}
+                    {{ title }}
                 </p>
                 <CategoryBadge
                     v-if="transaction.category"
@@ -119,33 +156,34 @@ const rowClasses = computed(() =>
             >
                 <span>{{ formatDate(transaction.date) }}</span>
                 <span
-                    v-if="
-                        showAccount &&
-                        transaction.account &&
-                        !transferDescription
-                    "
+                    v-if="showAccount && transaction.account && !isTransfer"
                     class="flex items-center gap-1"
                 >
                     <span class="text-border">•</span>
                     {{ transaction.account.name }}
                 </span>
                 <span
-                    v-if="showAccount && transferAccountInfo"
-                    class="flex items-center gap-1"
+                    v-if="isTransfer && transaction.description"
+                    class="flex items-center gap-1 truncate"
                 >
                     <span class="text-border">•</span>
-                    {{ transferAccountInfo }}
+                    {{ transaction.description }}
                 </span>
             </div>
         </div>
 
-        <AmountDisplay
-            :amount="transaction.amount"
-            :currency="transaction.currency"
-            :type="transaction.type"
-            size="md"
-            class="font-semibold"
-        />
+        <div class="text-right">
+            <AmountDisplay
+                :amount="amount"
+                :currency="currency"
+                :type="amountType"
+                size="md"
+                class="font-semibold"
+            />
+            <p v-if="receivedNote" class="text-xs text-muted-foreground">
+                {{ receivedNote }}
+            </p>
+        </div>
 
         <Dropdown align="right" placement="below">
             <template #trigger>
