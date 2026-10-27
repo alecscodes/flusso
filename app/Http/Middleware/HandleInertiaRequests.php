@@ -32,6 +32,7 @@ class HandleInertiaRequests extends Middleware
             'passwordRules' => Password::defaults()->toPasswordRulesString(),
             'auth' => [
                 'user' => $request->user(),
+                'canManageInstance' => (bool) $request->user()?->can('manage-instance'),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];

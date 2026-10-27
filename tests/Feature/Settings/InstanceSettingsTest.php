@@ -3,6 +3,7 @@
 use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Inertia\Testing\AssertableInertia as Assert;
 
 use function Pest\Laravel\actingAs;
 
@@ -43,4 +44,12 @@ test('an IP can be unbanned from the settings, and the address is validated', fu
 
     actingAs($this->owner)->delete(route('settings.banned-ips.destroy'), ['ip' => '203.0.113.9'])->assertRedirect(route('settings.banned-ips.index'));
     expect(DB::table('banned_ips')->count())->toBe(0);
+});
+
+test('only the owner is told they can manage the instance', function () {
+    actingAs($this->owner)->get(route('profile.edit'))
+        ->assertInertia(fn (Assert $page) => $page->where('auth.canManageInstance', true));
+
+    actingAs($this->member)->get(route('profile.edit'))
+        ->assertInertia(fn (Assert $page) => $page->where('auth.canManageInstance', false));
 });

@@ -28,11 +28,21 @@ const navigation = [
     { name: 'Password', href: passwordEdit.url(), icon: KeyRound },
     { name: 'Appearance', href: appearanceEdit.url(), icon: Palette },
     { name: 'Two-Factor Auth', href: twoFactorShow.url(), icon: Shield },
-    { name: 'Registration', href: registrationEdit.url(), icon: UserPlus },
+    {
+        name: 'Registration',
+        href: registrationEdit.url(),
+        icon: UserPlus,
+        ownerOnly: true,
+    },
     { name: 'Connected apps', href: connectedAppsIndex.url(), icon: Plug },
-    { name: 'Banned IPs', href: bannedIpsIndex.url(), icon: ShieldOff },
+    {
+        name: 'Banned IPs',
+        href: bannedIpsIndex.url(),
+        icon: ShieldOff,
+        ownerOnly: true,
+    },
     { name: 'Finance', href: financeEdit.url(), icon: Wallet },
-];
+].filter((item) => !item.ownerOnly || page.props.auth.canManageInstance);
 
 const isActive = (href: string) => page.url.split('?')[0] === href;
 
