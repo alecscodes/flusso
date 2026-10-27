@@ -14,6 +14,7 @@ import {
     EmptyState,
 } from '@/components/ui';
 import { useDate } from '@/composables';
+import { intervalLabel } from '@/lib/utils';
 import {
     markPaid as markPaidRoute,
     markUnpaid as markUnpaidRoute,
@@ -37,25 +38,6 @@ interface Props {
 const props = defineProps<Props>();
 
 const { formatDate } = useDate();
-
-function getIntervalLabel(): string {
-    const value = props.recurringPayment.interval_value;
-    const type = props.recurringPayment.interval_type;
-
-    if (value === 1) {
-        switch (type) {
-            case 'days':
-                return 'Daily';
-            case 'weeks':
-                return 'Weekly';
-            case 'months':
-                return 'Monthly';
-            case 'years':
-                return 'Yearly';
-        }
-    }
-    return `Every ${value} ${type}`;
-}
 
 const paidPayments = computed(() => {
     return props.recurringPayment.payments?.filter((p) => p.is_paid) || [];
@@ -149,7 +131,12 @@ function markUnpaidPayment(payment: { id: number }) {
                                 :show-sign="false"
                             />
                             <p class="text-sm text-muted-foreground">
-                                {{ getIntervalLabel() }}
+                                {{
+                                    intervalLabel(
+                                        recurringPayment.interval_value,
+                                        recurringPayment.interval_type,
+                                    )
+                                }}
                             </p>
                         </div>
 

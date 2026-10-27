@@ -317,7 +317,6 @@ function deleteAccount() {
             :accounts="accounts"
             :categories="categories"
             :action="transactionStore.url()"
-            method="post"
             @success="handleCreateSuccess"
             @cancel="showCreateModal = false"
         />
@@ -351,7 +350,6 @@ function deleteAccount() {
             :accounts="accounts"
             :categories="categories"
             :action="transactionUpdate.url(editingTransaction)"
-            method="patch"
             @success="handleEditSuccess"
             @cancel="closeEditModal"
         />

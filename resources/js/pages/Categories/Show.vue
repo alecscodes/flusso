@@ -24,10 +24,13 @@ defineProps<Props>();
 
     <div class="space-y-6">
         <div class="flex items-center gap-4">
-            <Button variant="ghost" size="icon" as-child>
-                <Link :href="categoriesIndex().url">
-                    <ArrowLeft class="size-4" />
-                </Link>
+            <Button
+                :as="Link"
+                :href="categoriesIndex().url"
+                variant="ghost"
+                size="icon"
+            >
+                <ArrowLeft class="size-4" />
             </Button>
             <div>
                 <h1 class="text-2xl font-semibold tracking-tight">

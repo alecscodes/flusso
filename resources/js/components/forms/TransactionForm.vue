@@ -3,25 +3,23 @@ import {
     Button,
     Input,
     Label,
+    ModalFooter,
     SearchableSelect,
     Textarea,
 } from '@/components/ui';
 import { useDate } from '@/composables';
 import type { Account, Category, Transaction } from '@/types';
 import { useForm } from '@inertiajs/vue3';
-import { computed, watch } from 'vue';
+import { computed, useId, watch } from 'vue';
 
 interface Props {
     transaction?: Transaction | null;
     accounts: Account[];
     categories: Category[];
     action: string;
-    method?: 'post' | 'put' | 'patch';
 }
 
-const props = withDefaults(defineProps<Props>(), {
-    method: 'post',
-});
+const props = defineProps<Props>();
 
 const emit = defineEmits<{
     success: [];
@@ -29,6 +27,7 @@ const emit = defineEmits<{
 }>();
 
 const { toInputFormat } = useDate();
+const formId = useId();
 
 const isEditing = computed(() => !!props.transaction);
 
@@ -104,7 +103,7 @@ function removeFile(index: number) {
 </script>
 
 <template>
-    <form @submit.prevent="submit" class="space-y-6">
+    <form :id="formId" class="space-y-6" @submit.prevent="submit">
         <div class="space-y-4">
             <div class="space-y-2">
                 <Label required>Transaction Type</Label>
@@ -171,11 +170,6 @@ function removeFile(index: number) {
                             {{ selectedAccount?.currency || 'EUR' }}
                         </span>
                     </div>
-                    <input
-                        type="hidden"
-                        name="currency"
-                        :value="selectedAccount?.currency || 'EUR'"
-                    />
                 </div>
             </div>
 
@@ -238,13 +232,13 @@ function removeFile(index: number) {
             </div>
         </div>
 
-        <div class="flex justify-end gap-3">
+        <ModalFooter>
             <Button type="button" variant="outline" @click="emit('cancel')">
                 Cancel
             </Button>
-            <Button type="submit" :disabled="form.processing">
+            <Button type="submit" :form="formId" :disabled="form.processing">
                 {{ isEditing ? 'Update Transaction' : 'Add Transaction' }}
             </Button>
-        </div>
+        </ModalFooter>
     </form>
 </template>

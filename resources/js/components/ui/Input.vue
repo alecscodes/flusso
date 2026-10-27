@@ -18,11 +18,13 @@ const emit = defineEmits<{
     'update:modelValue': [value: string | number];
 }>();
 
+defineOptions({ inheritAttrs: false });
+
 const attrs = useAttrs();
 
 const inputClasses = computed(() =>
     cn(
-        'flex h-11 w-full rounded-xl border bg-background px-4 py-2 text-sm transition-all duration-200',
+        'flex h-11 w-full rounded-xl border bg-background px-4 py-2 text-base md:text-sm transition-all duration-200',
         'placeholder:text-muted-foreground',
         'focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary',
         'disabled:cursor-not-allowed disabled:opacity-50',

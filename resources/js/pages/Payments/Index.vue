@@ -67,11 +67,6 @@ const groupedUpcoming = computed(() => {
     return groups;
 });
 
-const totalByMonth = computed(() => {
-    // Use backend-calculated monthly totals instead of client-side currency mixing
-    return props.monthlyTotals;
-});
-
 function markPaidPayment(payment: Payment) {
     router.patch(
         markPaidRoute.url(payment),
@@ -273,7 +268,7 @@ function markUnpaidPayment(payment: Payment) {
                         >
                             {{
                                 formatCurrency(
-                                    totalByMonth[month],
+                                    monthlyTotals[month] ?? 0,
                                     totals.primary_currency,
                                 )
                             }}

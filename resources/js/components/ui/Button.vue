@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { cn } from '@/lib/utils';
 import { cva, type VariantProps } from 'class-variance-authority';
-import { computed } from 'vue';
+import { computed, type Component } from 'vue';
 
 const buttonVariants = cva(
     'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
@@ -41,7 +41,7 @@ type ButtonVariants = VariantProps<typeof buttonVariants>;
 interface Props {
     variant?: ButtonVariants['variant'];
     size?: ButtonVariants['size'];
-    as?: string;
+    as?: string | Component;
     disabled?: boolean;
     loading?: boolean;
     class?: string;

@@ -82,18 +82,9 @@ export function useCurrency() {
         }
     }
 
-    const getSymbol = (currency: string) =>
-        currencySymbols[currency] || currency;
-
-    const parseAmount = (value: string) =>
-        parseFloat(value.replace(/[^\d.-]/g, '')) || 0;
-
     return {
         formatCurrency,
         formatCompact,
-        getSymbol,
-        parseAmount,
         supportedCurrencies,
-        currencySymbols,
     };
 }

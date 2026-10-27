@@ -14,11 +14,13 @@ const emit = defineEmits<{
     'update:modelValue': [value: string];
 }>();
 
+defineOptions({ inheritAttrs: false });
+
 const attrs = useAttrs();
 
 const textareaClasses = computed(() =>
     cn(
-        'flex min-h-[100px] w-full rounded-xl border bg-background px-4 py-3 text-sm transition-all duration-200',
+        'flex min-h-[100px] w-full rounded-xl border bg-background px-4 py-3 text-base md:text-sm transition-all duration-200',
         'placeholder:text-muted-foreground',
         'focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary',
         'disabled:cursor-not-allowed disabled:opacity-50',

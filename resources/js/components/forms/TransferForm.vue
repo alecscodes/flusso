@@ -3,6 +3,7 @@ import {
     Button,
     Input,
     Label,
+    ModalFooter,
     SearchableSelect,
     Textarea,
 } from '@/components/ui';
@@ -10,7 +11,7 @@ import { useCurrency, useDate } from '@/composables';
 import type { Account } from '@/types';
 import { Form } from '@inertiajs/vue3';
 import { ArrowRight } from '@lucide/vue';
-import { computed, ref, watch } from 'vue';
+import { computed, ref, useId, watch } from 'vue';
 
 interface Props {
     accounts: Account[];
@@ -26,6 +27,7 @@ const emit = defineEmits<{
 
 const { formatCurrency } = useCurrency();
 const { toInputFormat } = useDate();
+const formId = useId();
 
 const formData = ref({
     from_account_id: '',
@@ -97,6 +99,8 @@ watch(
 
 <template>
     <Form
+        v-slot="{ processing }"
+        :id="formId"
         :action="action"
         method="post"
         class="space-y-6"
@@ -208,11 +212,13 @@ watch(
             </div>
         </div>
 
-        <div class="flex justify-end gap-3">
+        <ModalFooter>
             <Button type="button" variant="outline" @click="emit('cancel')">
                 Cancel
             </Button>
-            <Button type="submit"> Complete Transfer </Button>
-        </div>
+            <Button type="submit" :form="formId" :disabled="processing">
+                Complete Transfer
+            </Button>
+        </ModalFooter>
     </Form>
 </template>

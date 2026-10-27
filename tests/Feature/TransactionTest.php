@@ -235,3 +235,16 @@ test('transfer transactions include from and to account relationships', function
             ->where('transactions.data.0.to_account.name', 'Savings Account')
         );
 });
+
+test('transactions index shares the primary currency from the backend', function () {
+    $user = User::factory()->create();
+    Account::factory()->create(['user_id' => $user->id, 'currency' => 'RON', 'balance' => 10]);
+    Account::factory()->create(['user_id' => $user->id, 'currency' => 'EUR', 'balance' => 5000]);
+
+    actingAs($user)->get(route('transactions.index'))
+        ->assertSuccessful()
+        ->assertInertia(fn ($page) => $page
+            ->component('Transactions/Index')
+            ->where('primaryCurrency', 'EUR')
+        );
+});

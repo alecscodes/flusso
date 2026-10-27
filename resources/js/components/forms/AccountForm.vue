@@ -1,9 +1,15 @@
 <script setup lang="ts">
-import { Button, Input, Label, SearchableSelect } from '@/components/ui';
+import {
+    Button,
+    Input,
+    Label,
+    ModalFooter,
+    SearchableSelect,
+} from '@/components/ui';
 import { useCurrency } from '@/composables';
 import type { Account } from '@/types';
 import { Form } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, ref, useId } from 'vue';
 
 interface Props {
     account?: Account | null;
@@ -21,6 +27,7 @@ const emit = defineEmits<{
 }>();
 
 const { supportedCurrencies } = useCurrency();
+const formId = useId();
 
 const isEditing = computed(() => !!props.account);
 
@@ -53,6 +60,8 @@ const currencyOptions = computed(() => {
 
 <template>
     <Form
+        v-slot="{ processing }"
+        :id="formId"
         :action="action"
         :method="method"
         class="space-y-6"
@@ -127,13 +136,13 @@ const currencyOptions = computed(() => {
             </div>
         </div>
 
-        <div class="flex justify-end gap-3">
+        <ModalFooter>
             <Button type="button" variant="outline" @click="emit('cancel')">
                 Cancel
             </Button>
-            <Button type="submit">
+            <Button type="submit" :form="formId" :disabled="processing">
                 {{ isEditing ? 'Update Account' : 'Create Account' }}
             </Button>
-        </div>
+        </ModalFooter>
     </Form>
 </template>

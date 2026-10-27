@@ -31,6 +31,11 @@ export default defineConfig({
             formVariants: true,
         }),
     ],
+    build: {
+        // Only the lazily loaded lucide icon set (categoryIcons, ~600 kB) exceeds the
+        // default 500 kB; app and page chunks stay far below it.
+        chunkSizeWarningLimit: 650,
+    },
     server: {
         watch: {
             ignored: [

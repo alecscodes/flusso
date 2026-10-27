@@ -10,6 +10,7 @@ import {
     Modal,
 } from '@/components/ui';
 import { useDate } from '@/composables';
+import { intervalLabel } from '@/lib/utils';
 import {
     destroy as destroyRecurringPayment,
     store as recurringPaymentStore,
@@ -33,25 +34,6 @@ const { formatDate } = useDate();
 const showCreateModal = ref(false);
 const showEditModal = ref(false);
 const editingPayment = ref<RecurringPayment | null>(null);
-
-function getIntervalLabel(payment: RecurringPayment): string {
-    const value = payment.interval_value;
-    const type = payment.interval_type;
-
-    if (value === 1) {
-        switch (type) {
-            case 'days':
-                return 'Daily';
-            case 'weeks':
-                return 'Weekly';
-            case 'months':
-                return 'Monthly';
-            case 'years':
-                return 'Yearly';
-        }
-    }
-    return `Every ${value} ${type}`;
-}
 
 function openEditModal(payment: RecurringPayment) {
     editingPayment.value = payment;
@@ -131,7 +113,12 @@ function deletePayment(payment: RecurringPayment) {
                                     {{ payment.name }}
                                 </h3>
                                 <p class="text-sm text-muted-foreground">
-                                    {{ getIntervalLabel(payment) }}
+                                    {{
+                                        intervalLabel(
+                                            payment.interval_value,
+                                            payment.interval_type,
+                                        )
+                                    }}
                                 </p>
                             </div>
                         </div>

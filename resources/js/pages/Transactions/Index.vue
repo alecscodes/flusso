@@ -34,6 +34,7 @@ interface Props {
         total_in_primary: number;
     }>;
     hasDateFilters: boolean;
+    primaryCurrency: string;
 }
 
 const props = defineProps<Props>();
@@ -58,8 +59,6 @@ const filters = ref(getFiltersFromUrl());
 const hasActiveFilters = computed(() =>
     Object.values(filters.value).some((v) => v !== ''),
 );
-
-const primaryCurrency = computed(() => props.accounts[0]?.currency || 'EUR');
 
 const totalCategorySpending = computed(() =>
     props.categorySpending.reduce(
@@ -438,22 +437,26 @@ const debouncedApplyFilters = debounce(applyFilters, DEBOUNCE_MS);
                         {{ transactions.total }} transactions
                     </p>
                     <div class="flex gap-2">
-                        <Link
+                        <Button
                             v-if="transactions.prev_page_url"
+                            :as="Link"
                             :href="transactions.prev_page_url"
                             preserve-scroll
+                            variant="outline"
+                            size="sm"
                         >
-                            <Button variant="outline" size="sm">
-                                Previous
-                            </Button>
-                        </Link>
-                        <Link
+                            Previous
+                        </Button>
+                        <Button
                             v-if="transactions.next_page_url"
+                            :as="Link"
                             :href="transactions.next_page_url"
                             preserve-scroll
+                            variant="outline"
+                            size="sm"
                         >
-                            <Button variant="outline" size="sm"> Next </Button>
-                        </Link>
+                            Next
+                        </Button>
                     </div>
                 </div>
             </CardContent>
@@ -471,7 +474,6 @@ const debouncedApplyFilters = debounce(applyFilters, DEBOUNCE_MS);
             :accounts="accounts"
             :categories="categories"
             :action="transactionStore.url()"
-            method="post"
             @success="handleCreateSuccess"
             @cancel="showCreateModal = false"
         />
@@ -505,7 +507,6 @@ const debouncedApplyFilters = debounce(applyFilters, DEBOUNCE_MS);
             :accounts="accounts"
             :categories="categories"
             :action="transactionUpdate.url(editingTransaction)"
-            method="patch"
             @success="handleEditSuccess"
             @cancel="closeEditModal"
         />

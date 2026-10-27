@@ -1,12 +1,9 @@
 <script setup lang="ts">
-import { Button, Input, Label } from '@/components/ui';
-import {
-    categoryIconsList,
-    getCategoryIconComponent,
-} from '@/lib/categoryIcons';
+import { Button, Input, Label, ModalFooter } from '@/components/ui';
+import { useCategoryIcons } from '@/composables/useCategoryIcons';
 import type { Category } from '@/types';
 import { Form } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, ref, useId } from 'vue';
 
 interface Props {
     category?: Category | null;
@@ -25,6 +22,7 @@ const emit = defineEmits<{
     cancel: [];
 }>();
 
+const formId = useId();
 const isEditing = computed(() => !!props.category);
 
 const formData = ref({
@@ -36,10 +34,13 @@ const formData = ref({
 
 const iconSearch = ref('');
 
+const categoryIcons = useCategoryIcons();
+
 const filteredIcons = computed(() => {
+    const list = categoryIcons.value?.categoryIconsList ?? [];
     const q = iconSearch.value.trim().toLowerCase();
-    if (!q) return categoryIconsList;
-    return categoryIconsList.filter(({ name }) => name.includes(q));
+    if (!q) return list;
+    return list.filter(({ name }) => name.includes(q));
 });
 
 const customColorInputRef = ref<HTMLInputElement | null>(null);
@@ -65,6 +66,8 @@ const colors = [
 
 <template>
     <Form
+        v-slot="{ processing }"
+        :id="formId"
         :action="action"
         :method="method"
         class="space-y-6"
@@ -115,7 +118,13 @@ const colors = [
                         />
                     </button>
                     <p
-                        v-if="filteredIcons.length === 0"
+                        v-if="!categoryIcons"
+                        class="col-span-full animate-pulse text-center text-sm text-muted-foreground"
+                    >
+                        Loading icons...
+                    </p>
+                    <p
+                        v-else-if="filteredIcons.length === 0"
                         class="col-span-full text-center text-sm text-muted-foreground"
                     >
                         No icons match "{{ iconSearch }}".
@@ -175,21 +184,27 @@ const colors = [
                     }"
                 >
                     <component
-                        :is="getCategoryIconComponent(formData.icon)"
+                        :is="
+                            categoryIcons.getCategoryIconComponent(
+                                formData.icon,
+                            )
+                        "
+                        v-if="categoryIcons"
                         class="h-4 w-4"
                     />
+                    <span v-else class="h-4 w-4" aria-hidden="true" />
                     {{ formData.name || 'Category Name' }}
                 </span>
             </div>
         </div>
 
-        <div class="flex justify-end gap-3">
+        <ModalFooter>
             <Button type="button" variant="outline" @click="emit('cancel')">
                 Cancel
             </Button>
-            <Button type="submit">
+            <Button type="submit" :form="formId" :disabled="processing">
                 {{ isEditing ? 'Update Category' : 'Create Category' }}
             </Button>
-        </div>
+        </ModalFooter>
     </Form>
 </template>

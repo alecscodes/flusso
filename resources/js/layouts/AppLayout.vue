@@ -158,14 +158,16 @@ const isActive = (href: string) =>
 
         <!-- Main Content -->
         <main class="flex min-h-screen flex-col lg:pl-72">
-            <div class="flex-1 p-4 pb-20 lg:p-8 lg:pb-8">
+            <div
+                class="flex-1 p-4 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:p-8 lg:pb-8"
+            >
                 <slot />
             </div>
         </main>
 
         <!-- Mobile Bottom Navigation -->
         <nav
-            class="fixed right-0 bottom-0 left-0 z-50 border-t border-border bg-card/95 backdrop-blur supports-backdrop-filter:bg-card/80 lg:hidden"
+            class="fixed right-0 bottom-0 left-0 z-50 border-t border-border bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur supports-backdrop-filter:bg-card/80 lg:hidden"
         >
             <div class="grid h-16 grid-cols-5">
                 <Link
@@ -214,7 +216,7 @@ const isActive = (href: string) =>
             <!-- More Menu Panel -->
             <div
                 v-if="showMoreMenu"
-                class="fixed right-0 bottom-16 left-0 z-50 rounded-t-2xl border-t border-border bg-card shadow-lg lg:hidden"
+                class="fixed right-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] left-0 z-50 rounded-t-2xl border-t border-border bg-card shadow-lg lg:hidden"
             >
                 <div class="p-4">
                     <div class="mb-4 flex items-center justify-between">

@@ -1,7 +1,31 @@
-export function useDate() {
-    const toDate = (date: string | Date) =>
-        typeof date === 'string' ? new Date(date) : date;
+const DATE_ONLY =
+    /^(\d{4})-(\d{2})-(\d{2})(?:[T ]00:00:00(?:\.0+)?(?:Z|[+-]00:00)?)?$/;
 
+/**
+ * Date-only values ("2026-10-27", or the backend's midnight timestamps) are
+ * parsed as local dates so they never shift a day. Date arguments are copied,
+ * never mutated.
+ */
+function toDate(date: string | Date): Date {
+    if (date instanceof Date) {
+        return new Date(date);
+    }
+
+    const match = DATE_ONLY.exec(date);
+
+    return match
+        ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+        : new Date(date);
+}
+
+function startOfToday(): Date {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return today;
+}
+
+export function useDate() {
     const formatDate = (
         date: string | Date,
         options?: Intl.DateTimeFormatOptions,
@@ -13,28 +37,13 @@ export function useDate() {
             ...options,
         }).format(toDate(date));
 
-    const formatDateShort = (date: string | Date) =>
-        new Intl.DateTimeFormat('en-US', {
-            month: 'short',
-            day: 'numeric',
-        }).format(toDate(date));
-
-    const formatDateLong = (date: string | Date) =>
-        new Intl.DateTimeFormat('en-US', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-        }).format(toDate(date));
-
     const formatRelative = (date: string | Date) => {
-        const now = new Date();
-        now.setHours(0, 0, 0, 0);
         const target = toDate(date);
         target.setHours(0, 0, 0, 0);
 
         const diffDays = Math.round(
-            (target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+            (target.getTime() - startOfToday().getTime()) /
+                (1000 * 60 * 60 * 24),
         );
 
         if (diffDays === 0) return 'Today';
@@ -55,15 +64,15 @@ export function useDate() {
 
     const isOverdue = (date: string | Date) => {
         const d = toDate(date);
-        const now = new Date();
-        now.setHours(0, 0, 0, 0);
         d.setHours(0, 0, 0, 0);
-        return d < now;
+
+        return d < startOfToday();
     };
 
     const isDueToday = (date: string | Date) => {
         const d = toDate(date);
         const now = new Date();
+
         return (
             d.getDate() === now.getDate() &&
             d.getMonth() === now.getMonth() &&
@@ -73,32 +82,30 @@ export function useDate() {
 
     const isDueSoon = (date: string | Date, days = 7) => {
         const d = toDate(date);
-        const now = new Date();
-        const future = new Date();
+        d.setHours(0, 0, 0, 0);
+        const today = startOfToday();
+        const future = new Date(today);
         future.setDate(future.getDate() + days);
-        return d >= now && d <= future;
+
+        return d >= today && d <= future;
     };
 
-    const toInputFormat = (date: string | Date) =>
-        toDate(date).toISOString().split('T')[0];
+    /** "YYYY-MM-DD" in the user's local timezone, for <input type="date">. */
+    const toInputFormat = (date: string | Date) => {
+        const d = toDate(date);
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
 
-    const getMonthStart = (date = new Date()) =>
-        new Date(date.getFullYear(), date.getMonth(), 1);
-
-    const getMonthEnd = (date = new Date()) =>
-        new Date(date.getFullYear(), date.getMonth() + 1, 0);
+        return `${d.getFullYear()}-${month}-${day}`;
+    };
 
     return {
         formatDate,
-        formatDateShort,
-        formatDateLong,
         formatRelative,
         formatMonthYear,
         isOverdue,
         isDueToday,
         isDueSoon,
         toInputFormat,
-        getMonthStart,
-        getMonthEnd,
     };
 }

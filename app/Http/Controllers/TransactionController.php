@@ -55,6 +55,7 @@ class TransactionController extends Controller
             'categories' => $this->categoryService->getCategoriesForUser($user),
             'categorySpending' => $categorySpending,
             'hasDateFilters' => $hasDateFilters,
+            'primaryCurrency' => $this->currencyService->getPrimaryCurrency($user),
         ]);
     }
 

@@ -3,13 +3,15 @@ import {
     Button,
     Input,
     Label,
+    ModalFooter,
     SearchableSelect,
     Switch,
 } from '@/components/ui';
 import { useDate } from '@/composables';
+import { intervalLabel } from '@/lib/utils';
 import type { Account, Category, RecurringPayment } from '@/types';
 import { Form } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, ref, useId } from 'vue';
 
 interface Props {
     recurringPayment?: RecurringPayment | null;
@@ -29,6 +31,7 @@ const emit = defineEmits<{
 }>();
 
 const { toInputFormat } = useDate();
+const formId = useId();
 
 const isEditing = computed(() => !!props.recurringPayment);
 
@@ -80,28 +83,18 @@ const intervalOptions = [
     { value: 'years', label: 'Years' },
 ];
 
-const frequencyPreview = computed(() => {
-    const value = parseInt(formData.value.interval_value) || 1;
-    const type = formData.value.interval_type;
-
-    if (value === 1) {
-        switch (type) {
-            case 'days':
-                return 'Daily';
-            case 'weeks':
-                return 'Weekly';
-            case 'months':
-                return 'Monthly';
-            case 'years':
-                return 'Yearly';
-        }
-    }
-    return `Every ${value} ${type}`;
-});
+const frequencyPreview = computed(() =>
+    intervalLabel(
+        parseInt(formData.value.interval_value) || 1,
+        formData.value.interval_type,
+    ),
+);
 </script>
 
 <template>
     <Form
+        v-slot="{ processing }"
+        :id="formId"
         :action="action"
         :method="method"
         class="space-y-6"
@@ -257,17 +250,17 @@ const frequencyPreview = computed(() => {
             </div>
         </div>
 
-        <div class="flex justify-end gap-3">
+        <ModalFooter>
             <Button type="button" variant="outline" @click="emit('cancel')">
                 Cancel
             </Button>
-            <Button type="submit">
+            <Button type="submit" :form="formId" :disabled="processing">
                 {{
                     isEditing
                         ? 'Update Planned Payment'
                         : 'Create Planned Payment'
                 }}
             </Button>
-        </div>
+        </ModalFooter>
     </Form>
 </template>

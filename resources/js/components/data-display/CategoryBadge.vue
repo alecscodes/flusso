@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { getCategoryIconComponent } from '@/lib/categoryIcons';
+import { useCategoryIcons } from '@/composables/useCategoryIcons';
 import { cn } from '@/lib/utils';
 import type { Category } from '@/types';
 import { computed } from 'vue';
@@ -16,8 +16,12 @@ const props = withDefaults(defineProps<Props>(), {
     showIcon: true,
 });
 
+const categoryIcons = useCategoryIcons();
+
+const hasIcon = computed(() => props.showIcon && !!props.category.icon);
+
 const iconComponent = computed(() =>
-    getCategoryIconComponent(props.category.icon),
+    categoryIcons.value?.getCategoryIconComponent(props.category.icon),
 );
 
 const sizeClasses = {
@@ -52,10 +56,11 @@ const badgeStyle = computed(() => {
 <template>
     <span :class="badgeClasses" :style="badgeStyle">
         <component
-            v-if="showIcon && iconComponent"
             :is="iconComponent"
+            v-if="hasIcon && iconComponent"
             :class="iconSizes[size]"
         />
+        <span v-else-if="hasIcon" :class="iconSizes[size]" aria-hidden="true" />
         {{ category.name }}
     </span>
 </template>
