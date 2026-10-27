@@ -62,17 +62,6 @@ class Account extends Model
     }
 
     /**
-     * Scope a query to only include accounts for the given user.
-     *
-     * @param  Builder  $query
-     * @return Builder
-     */
-    public function scopeForUser($query, int $userId)
-    {
-        return $query->where('user_id', $userId);
-    }
-
-    /**
      * Scope a query to order by name.
      *
      * @param  Builder  $query

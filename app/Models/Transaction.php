@@ -55,12 +55,10 @@ class Transaction extends Model
         ];
     }
 
-    protected static function boot(): void
+    protected static function booted(): void
     {
-        parent::boot();
-
+        // A deleted transaction takes its attached files with it.
         static::deleting(function (Transaction $transaction) {
-            // Delete all associated files from storage and database
             $transaction->files->each(function (TransactionFile $file) {
                 Storage::disk('local')->delete($file->path);
                 $file->delete();
@@ -110,21 +108,6 @@ class Transaction extends Model
         return $this->hasMany(TransactionFile::class);
     }
 
-    public function scopeIncome($query)
-    {
-        return $query->where('type', TransactionType::Income);
-    }
-
-    public function scopeExpense($query)
-    {
-        return $query->where('type', TransactionType::Expense);
-    }
-
-    public function scopeTransfer($query)
-    {
-        return $query->where('type', TransactionType::Transfer);
-    }
-
     /**
      * Transactions that touch the account: its own rows and incoming transfers.
      */
@@ -170,25 +153,5 @@ class Transaction extends Model
             ->when(filled($filters['category_id'] ?? null), fn ($q) => $q->forCategory((int) $filters['category_id']))
             ->when(in_array($filters['type'] ?? null, array_column(TransactionType::cases(), 'value'), true), fn (Builder $q) => $q->where('type', $filters['type']))
             ->inPeriod($filters['date_start'] ?? null, $filters['date_end'] ?? null);
-    }
-
-    public function scopeForUser($query, int $userId)
-    {
-        return $query->where('user_id', $userId);
-    }
-
-    public function isTransfer(): bool
-    {
-        return $this->type === TransactionType::Transfer;
-    }
-
-    public function isIncome(): bool
-    {
-        return $this->type === TransactionType::Income;
-    }
-
-    public function isExpense(): bool
-    {
-        return $this->type === TransactionType::Expense;
     }
 }

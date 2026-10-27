@@ -53,14 +53,4 @@ class Category extends Model
     {
         return $this->hasMany(Payment::class);
     }
-
-    public function scopeIncome($query)
-    {
-        return $query->where('type', CategoryType::Income);
-    }
-
-    public function scopeExpense($query)
-    {
-        return $query->where('type', CategoryType::Expense);
-    }
 }

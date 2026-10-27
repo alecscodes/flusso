@@ -4,12 +4,12 @@ namespace App\Models;
 
 use App\Casts\DateOnly;
 use App\Enums\PaymentType;
+use Carbon\CarbonImmutable;
 use Database\Factories\PaymentFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Carbon;
 
 /**
  * One occurrence of a planned payment. It is paid when it links a transaction,
@@ -18,7 +18,7 @@ use Illuminate\Support\Carbon;
  *
  * @property int|null $occurrence
  * @property bool $is_overridden
- * @property Carbon|null $skipped_at
+ * @property CarbonImmutable|null $skipped_at
  */
 class Payment extends Model
 {
@@ -127,11 +127,6 @@ class Payment extends Model
     public function scopeOverdue(Builder $query): Builder
     {
         return $query->visible()->pending()->where('due_date', '<', now()->toDateString());
-    }
-
-    public function scopeForUser($query, int $userId)
-    {
-        return $query->where('user_id', $userId);
     }
 
     public function scopeDueBetween(Builder $query, string $startDate, string $endDate): Builder

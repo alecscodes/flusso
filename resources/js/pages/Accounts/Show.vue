@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { AmountDisplay, TransactionRow } from '@/components/data-display';
-import { TransactionForm } from '@/components/forms';
-import TransactionModal from '@/components/modals/TransactionModal.vue';
+import TransactionDialogs from '@/components/modals/TransactionDialogs.vue';
 import {
     Button,
     Card,
@@ -9,20 +8,14 @@ import {
     CardHeader,
     CardTitle,
     EmptyState,
-    Modal,
 } from '@/components/ui';
-import { useCurrency, useDate } from '@/composables';
+import { useCurrency, useDate, useTransactionActions } from '@/composables';
 import {
     index as accountsIndex,
     destroy as destroyAccount,
 } from '@/routes/accounts';
-import {
-    destroy as destroyTransaction,
-    index as transactionsIndex,
-    store as transactionStore,
-    update as transactionUpdate,
-} from '@/routes/transactions';
-import type { Account, Category, Transaction } from '@/types';
+import { index as transactionsIndex } from '@/routes/transactions';
+import type { Account, Category } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
@@ -33,7 +26,7 @@ import {
     TrendingDown,
     TrendingUp,
 } from '@lucide/vue';
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 
 interface Props {
     account: Account;
@@ -46,51 +39,7 @@ const props = defineProps<Props>();
 const { formatCurrency } = useCurrency();
 const { formatDate } = useDate();
 
-const showViewModal = ref(false);
-const showCreateModal = ref(false);
-const createType = ref<Transaction['type']>('expense');
-const showEditModal = ref(false);
-const selectedTransaction = ref<Transaction | null>(null);
-const editingTransaction = ref<Transaction | null>(null);
-
-function openViewModal(transaction: Transaction) {
-    selectedTransaction.value = transaction;
-    showViewModal.value = true;
-}
-
-function closeViewModal() {
-    showViewModal.value = false;
-    selectedTransaction.value = null;
-}
-
-function openEditModal(transaction: Transaction) {
-    editingTransaction.value = transaction;
-    showEditModal.value = true;
-}
-
-function closeEditModal() {
-    showEditModal.value = false;
-    editingTransaction.value = null;
-}
-
-function openCreateModal(type: Transaction['type'] = 'expense') {
-    createType.value = type;
-    showCreateModal.value = true;
-}
-
-function handleCreateSuccess() {
-    showCreateModal.value = false;
-}
-
-function handleEditSuccess() {
-    closeEditModal();
-}
-
-function deleteTransaction(transaction: Transaction) {
-    if (confirm('Are you sure you want to delete this transaction?')) {
-        router.delete(destroyTransaction.url(transaction));
-    }
-}
+const { create, edit, view, remove } = useTransactionActions();
 
 const balance = computed(() => parseFloat(props.account.balance));
 const initialBalance = computed(() =>
@@ -256,16 +205,12 @@ function deleteAccount() {
                         <Button
                             variant="outline"
                             size="sm"
-                            @click="openCreateModal('transfer')"
+                            @click="create('transfer')"
                         >
                             <ArrowLeftRight class="mr-2 h-4 w-4" />
                             Transfer
                         </Button>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            @click="openCreateModal()"
-                        >
+                        <Button variant="ghost" size="sm" @click="create()">
                             <Plus class="mr-2 h-4 w-4" />
                             Add Transaction
                         </Button>
@@ -290,9 +235,9 @@ function deleteAccount() {
                             :transaction="transaction"
                             :show-account="false"
                             :context-account-id="account.id"
-                            @view="openViewModal"
-                            @edit="openEditModal"
-                            @delete="deleteTransaction"
+                            @view="view"
+                            @edit="edit"
+                            @delete="remove"
                         />
                     </div>
                     <EmptyState
@@ -307,46 +252,9 @@ function deleteAccount() {
         </div>
     </div>
 
-    <Modal
-        :open="showCreateModal"
-        title="Add Transaction"
-        description="Record an expense, an income or a transfer"
-        size="lg"
-        @close="showCreateModal = false"
-    >
-        <TransactionForm
-            :initial-type="createType"
-            :account-id="account.id"
-            :accounts="accounts"
-            :categories="categories"
-            :action="transactionStore.url()"
-            @success="handleCreateSuccess"
-            @cancel="showCreateModal = false"
-        />
-    </Modal>
-
-    <Modal
-        :open="showEditModal"
-        title="Edit Transaction"
-        description="Update transaction details"
-        size="lg"
-        @close="closeEditModal"
-    >
-        <TransactionForm
-            v-if="editingTransaction"
-            :transaction="editingTransaction"
-            :accounts="accounts"
-            :categories="categories"
-            :action="transactionUpdate.url(editingTransaction)"
-            @success="handleEditSuccess"
-            @cancel="closeEditModal"
-        />
-    </Modal>
-
-    <TransactionModal
-        v-if="selectedTransaction"
-        :transaction="selectedTransaction"
-        :open="showViewModal"
-        @close="closeViewModal"
+    <TransactionDialogs
+        :accounts="accounts"
+        :categories="categories"
+        :account-id="account.id"
     />
 </template>

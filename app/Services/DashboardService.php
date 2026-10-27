@@ -3,8 +3,6 @@
 namespace App\Services;
 
 use App\Models\User;
-use Carbon\CarbonInterface;
-use Illuminate\Support\Collection;
 
 class DashboardService
 {
@@ -23,48 +21,24 @@ class DashboardService
         $startDate = $period['start'];
         $endDate = $period['end'];
 
-        $accounts = $this->accountService->getAccountsForUser($user);
+        $balances = $this->accountService->getAccountSummary($user);
         $summary = $this->transactionService->getTransactionSummaryForPeriod($user, $startDate, $endDate);
         $categorySpending = $this->transactionService->getCategorySpendingForPeriod($user, $startDate, $endDate);
 
-        $upcomingPayments = $this->getUpcomingPaymentsForPeriod($user, $startDate, $endDate);
-        $overduePayments = $this->paymentService->getOverduePayments($user);
-
-        $paymentSummary = $this->paymentService->getPaymentSummaryForPeriod($user, $startDate, $endDate);
-        $availableBalance = $this->accountService->getTotalBalanceInPrimaryCurrency($user);
-        $totalBalance = $this->accountService->getFullBalanceInPrimaryCurrency($user);
-        $savingsBalance = $this->accountService->getSavingsBalanceInPrimaryCurrency($user);
-        $paymentSummary['balance_after_planned'] = $availableBalance - $paymentSummary['total_due'];
-
         return [
-            'accounts' => $accounts,
+            'accounts' => $balances['accounts'],
             'period' => [
                 'start' => $startDate->toDateString(),
                 'end' => $endDate->toDateString(),
             ],
             'summary' => $summary,
-            'upcomingPayments' => $upcomingPayments,
-            'overduePayments' => $overduePayments,
+            'upcomingPayments' => $this->paymentService->getUpcomingPayments($user, $endDate),
+            'overduePayments' => $this->paymentService->getOverduePayments($user),
             'categorySpending' => $categorySpending,
-            'paymentSummary' => $paymentSummary,
-            'availableBalance' => $availableBalance,
-            'totalBalance' => $totalBalance,
-            'savingsBalance' => $savingsBalance,
+            'paymentSummary' => $this->paymentService->getPaymentSummaryForPeriod($user, $startDate, $endDate),
+            'availableBalance' => $balances['availableBalance'],
+            'totalBalance' => $balances['totalBalance'],
+            'savingsBalance' => $balances['savingsBalance'],
         ];
-    }
-
-    /**
-     * Unpaid payments due from today to the end of the period (overdue ones are listed separately).
-     */
-    public function getUpcomingPaymentsForPeriod(User $user, CarbonInterface $startDate, CarbonInterface $endDate): Collection
-    {
-        return $user->payments()
-            ->visible()
-            ->pending()
-            ->dueBetween(max($startDate->toDateString(), now()->toDateString()), $endDate->toDateString())
-            ->with(['account', 'category', 'recurringPayment', 'transaction'])
-            ->orderBy('due_date')
-            ->orderBy('id')
-            ->get();
     }
 }

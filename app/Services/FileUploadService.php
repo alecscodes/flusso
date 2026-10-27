@@ -3,10 +3,8 @@
 namespace App\Services;
 
 use App\Models\Transaction;
-use App\Models\TransactionFile;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Storage;
 
 class FileUploadService
 {
@@ -35,18 +33,5 @@ class FileUploadService
         }
 
         return $uploadedFiles;
-    }
-
-    public function deleteFile(TransactionFile $file): bool
-    {
-        try {
-            Storage::disk('local')->delete($file->path);
-
-            return $file->delete();
-        } catch (\Exception $e) {
-            report($e);
-
-            return false;
-        }
     }
 }

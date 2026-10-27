@@ -46,20 +46,4 @@ class PaymentPolicy
     {
         return $user->id === $payment->user_id;
     }
-
-    /**
-     * Determine whether the user can restore the model.
-     */
-    public function restore(User $user, Payment $payment): bool
-    {
-        return $user->id === $payment->user_id;
-    }
-
-    /**
-     * Determine whether the user can permanently delete the model.
-     */
-    public function forceDelete(User $user, Payment $payment): bool
-    {
-        return $user->id === $payment->user_id;
-    }
 }

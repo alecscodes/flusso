@@ -36,8 +36,6 @@ class RecurringPaymentController extends Controller
 
     public function store(RecurringPaymentRequest $request): RedirectResponse
     {
-        $this->authorize('create', RecurringPayment::class);
-
         $this->recurringPaymentService->createRecurringPayment($request->user(), $request->validated());
 
         FlashToast::success('Planned payment created successfully.');
@@ -63,8 +61,6 @@ class RecurringPaymentController extends Controller
 
     public function update(RecurringPaymentRequest $request, RecurringPayment $recurringPayment): RedirectResponse
     {
-        $this->authorize('update', $recurringPayment);
-
         $this->recurringPaymentService->updateRecurringPayment($recurringPayment, $request->validated());
 
         FlashToast::success('Planned payment updated successfully.');
@@ -76,7 +72,7 @@ class RecurringPaymentController extends Controller
     {
         $this->authorize('delete', $recurringPayment);
 
-        $this->recurringPaymentService->deleteRecurringPayment($recurringPayment);
+        $recurringPayment->delete();
 
         FlashToast::success('Planned payment deleted successfully.');
 

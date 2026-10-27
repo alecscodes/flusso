@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Enums\CategoryType;
 use App\Models\Category;
 use App\Models\User;
 use Illuminate\Support\Collection;
@@ -13,22 +12,6 @@ class CategoryService
     {
         return $user->categories()
             ->orderBy('type')
-            ->orderBy('name')
-            ->get();
-    }
-
-    public function getIncomeCategories(User $user): Collection
-    {
-        return $user->categories()
-            ->income()
-            ->orderBy('name')
-            ->get();
-    }
-
-    public function getExpenseCategories(User $user): Collection
-    {
-        return $user->categories()
-            ->expense()
             ->orderBy('name')
             ->get();
     }
@@ -53,15 +36,5 @@ class CategoryService
         ]);
 
         return $category->fresh();
-    }
-
-    public function deleteCategory(Category $category): void
-    {
-        $category->delete();
-    }
-
-    public function getCategoryType(Category $category): CategoryType
-    {
-        return $category->type;
     }
 }

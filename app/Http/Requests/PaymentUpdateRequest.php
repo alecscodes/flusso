@@ -4,7 +4,6 @@ namespace App\Http\Requests;
 
 use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class PaymentUpdateRequest extends FormRequest
 {
@@ -28,7 +27,7 @@ class PaymentUpdateRequest extends FormRequest
         return [
             'amount' => ['required', 'numeric', 'min:0.01'],
             'due_date' => ['required', 'date'],
-            'account_id' => ['required', 'integer', Rule::exists('accounts', 'id')->where('user_id', $user->id)->whereNull('deleted_at')],
+            'account_id' => ['required', 'integer', $user->ownedAccountRule()],
             'description' => ['nullable', 'string', 'max:1000'],
         ];
     }

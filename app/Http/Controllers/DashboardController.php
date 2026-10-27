@@ -15,19 +15,6 @@ class DashboardController extends Controller
 
     public function index(Request $request): Response
     {
-        $dashboardData = $this->dashboardService->getDashboardData($request->user());
-
-        return Inertia::render('Dashboard', [
-            'accounts' => $dashboardData['accounts'],
-            'period' => $dashboardData['period'],
-            'summary' => $dashboardData['summary'],
-            'upcomingPayments' => $dashboardData['upcomingPayments'],
-            'overduePayments' => $dashboardData['overduePayments'],
-            'categorySpending' => $dashboardData['categorySpending'],
-            'paymentSummary' => $dashboardData['paymentSummary'],
-            'availableBalance' => $dashboardData['availableBalance'],
-            'totalBalance' => $dashboardData['totalBalance'],
-            'savingsBalance' => $dashboardData['savingsBalance'],
-        ]);
+        return Inertia::render('Dashboard', $this->dashboardService->getDashboardData($request->user()));
     }
 }

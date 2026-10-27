@@ -1,23 +1,17 @@
 <script setup lang="ts">
 import { AmountDisplay, TransactionRow } from '@/components/data-display';
-import { TransactionForm } from '@/components/forms';
-import TransactionModal from '@/components/modals/TransactionModal.vue';
+import TransactionDialogs from '@/components/modals/TransactionDialogs.vue';
 import {
     Button,
     Card,
     CardContent,
     EmptyState,
     Input,
-    Modal,
     SearchableSelect,
 } from '@/components/ui';
+import { useTransactionActions } from '@/composables';
 import { debounce } from '@/lib/utils';
-import {
-    destroy as destroyTransaction,
-    index as transactionsIndex,
-    store as transactionStore,
-    update as transactionUpdate,
-} from '@/routes/transactions';
+import { index as transactionsIndex } from '@/routes/transactions';
 import type { Account, Category, PaginatedData, Transaction } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { ArrowLeftRight, Filter, Plus, Search, X } from '@lucide/vue';
@@ -43,13 +37,8 @@ const page = usePage();
 const DEBOUNCE_MS = 350;
 
 // State
-const showCreateModal = ref(false);
-const createType = ref<Transaction['type']>('expense');
-const showEditModal = ref(false);
-const showViewModal = ref(false);
 const showFilters = ref(false);
-const editingTransaction = ref<Transaction | null>(null);
-const selectedTransaction = ref<Transaction | null>(null);
+const { create, edit, view, remove } = useTransactionActions();
 
 // Filters
 const filters = ref(getFiltersFromUrl());
@@ -113,45 +102,6 @@ function clearFilters() {
     applyFilters();
 }
 
-function openEditModal(transaction: Transaction) {
-    editingTransaction.value = transaction;
-    showEditModal.value = true;
-}
-
-function closeEditModal() {
-    showEditModal.value = false;
-    editingTransaction.value = null;
-}
-
-function openViewModal(transaction: Transaction) {
-    selectedTransaction.value = transaction;
-    showViewModal.value = true;
-}
-
-function closeViewModal() {
-    showViewModal.value = false;
-    selectedTransaction.value = null;
-}
-
-function openCreateModal(type: Transaction['type'] = 'expense') {
-    createType.value = type;
-    showCreateModal.value = true;
-}
-
-function handleCreateSuccess() {
-    showCreateModal.value = false;
-}
-
-function handleEditSuccess() {
-    closeEditModal();
-}
-
-function deleteTransaction(transaction: Transaction) {
-    if (confirm('Are you sure you want to delete this transaction?')) {
-        router.delete(destroyTransaction.url(transaction));
-    }
-}
-
 // Watchers
 watch(
     () => page.url,
@@ -181,11 +131,11 @@ const debouncedApplyFilters = debounce(applyFilters, DEBOUNCE_MS);
                 </p>
             </div>
             <div class="flex justify-between gap-3">
-                <Button variant="outline" @click="openCreateModal('transfer')">
+                <Button variant="outline" @click="create('transfer')">
                     <ArrowLeftRight class="h-4 w-4" />
                     Transfer
                 </Button>
-                <Button @click="openCreateModal()">
+                <Button @click="create()">
                     <Plus class="h-4 w-4" />
                     Add Transaction
                 </Button>
@@ -395,9 +345,9 @@ const debouncedApplyFilters = debounce(applyFilters, DEBOUNCE_MS);
                         v-for="transaction in transactions.data"
                         :key="transaction.id"
                         :transaction="transaction"
-                        @view="openViewModal"
-                        @edit="openEditModal"
-                        @delete="deleteTransaction"
+                        @view="view"
+                        @edit="edit"
+                        @delete="remove"
                     />
                 </div>
                 <EmptyState
@@ -411,10 +361,7 @@ const debouncedApplyFilters = debounce(applyFilters, DEBOUNCE_MS);
                     :icon="ArrowLeftRight"
                 >
                     <template #action>
-                        <Button
-                            v-if="!hasActiveFilters"
-                            @click="openCreateModal()"
-                        >
+                        <Button v-if="!hasActiveFilters" @click="create()">
                             <Plus class="h-4 w-4" />
                             Add Transaction
                         </Button>
@@ -460,45 +407,5 @@ const debouncedApplyFilters = debounce(applyFilters, DEBOUNCE_MS);
         </Card>
     </div>
 
-    <Modal
-        :open="showCreateModal"
-        title="Add Transaction"
-        description="Record an expense, an income or a transfer"
-        size="lg"
-        @close="showCreateModal = false"
-    >
-        <TransactionForm
-            :initial-type="createType"
-            :accounts="accounts"
-            :categories="categories"
-            :action="transactionStore.url()"
-            @success="handleCreateSuccess"
-            @cancel="showCreateModal = false"
-        />
-    </Modal>
-
-    <Modal
-        :open="showEditModal"
-        title="Edit Transaction"
-        description="Update transaction details"
-        size="lg"
-        @close="closeEditModal"
-    >
-        <TransactionForm
-            v-if="editingTransaction"
-            :transaction="editingTransaction"
-            :accounts="accounts"
-            :categories="categories"
-            :action="transactionUpdate.url(editingTransaction)"
-            @success="handleEditSuccess"
-            @cancel="closeEditModal"
-        />
-    </Modal>
-
-    <TransactionModal
-        v-if="selectedTransaction"
-        :transaction="selectedTransaction"
-        :open="showViewModal"
-        @close="closeViewModal"
-    />
+    <TransactionDialogs :accounts="accounts" :categories="categories" />
 </template>

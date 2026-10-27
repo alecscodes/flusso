@@ -53,14 +53,6 @@ function closeEditModal() {
     editingCategory.value = null;
 }
 
-function handleCreateSuccess() {
-    showCreateModal.value = false;
-}
-
-function handleEditSuccess() {
-    closeEditModal();
-}
-
 function deleteCategory(category: Category) {
     if (confirm(`Are you sure you want to delete "${category.name}"?`)) {
         router.delete(destroyCategory.url(category));
@@ -218,7 +210,7 @@ function deleteCategory(category: Category) {
             :type="createType"
             :action="categoryStore.url()"
             method="post"
-            @success="handleCreateSuccess"
+            @success="showCreateModal = false"
             @cancel="showCreateModal = false"
         />
     </Modal>
@@ -235,7 +227,7 @@ function deleteCategory(category: Category) {
             :type="editingCategory.type"
             :action="categoryUpdate.url(editingCategory)"
             method="patch"
-            @success="handleEditSuccess"
+            @success="closeEditModal"
             @cancel="closeEditModal"
         />
     </Modal>

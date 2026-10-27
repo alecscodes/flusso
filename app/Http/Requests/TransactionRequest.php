@@ -36,13 +36,8 @@ class TransactionRequest extends FormRequest
      */
     public static function rulesFor(User $user, array $input): array
     {
-        $ownedAccount = Rule::exists('accounts', 'id')
-            ->where('user_id', $user->id)
-            ->whereNull('deleted_at');
-
-        $ownedCategory = Rule::exists('categories', 'id')
-            ->where('user_id', $user->id)
-            ->whereNull('deleted_at');
+        $ownedAccount = $user->ownedAccountRule();
+        $ownedCategory = $user->ownedCategoryRule();
 
         // A category must be of the same kind as the transaction (income/expense).
         if (in_array($input['type'] ?? null, [TransactionType::Income->value, TransactionType::Expense->value], true)) {

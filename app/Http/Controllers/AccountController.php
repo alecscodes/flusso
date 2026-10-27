@@ -32,8 +32,6 @@ class AccountController extends Controller
 
     public function store(AccountStoreRequest $request): RedirectResponse
     {
-        $this->authorize('create', Account::class);
-
         $this->accountService->createAccount($request->user(), $request->validated());
 
         FlashToast::success('Account created successfully.');
@@ -61,8 +59,6 @@ class AccountController extends Controller
 
     public function update(AccountUpdateRequest $request, Account $account): RedirectResponse
     {
-        $this->authorize('update', $account);
-
         $this->accountService->updateAccount($account, $request->validated());
 
         FlashToast::success('Account updated successfully.');

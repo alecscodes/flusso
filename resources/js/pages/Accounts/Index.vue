@@ -40,14 +40,6 @@ function closeEditModal() {
     editingAccount.value = null;
 }
 
-function handleCreateSuccess() {
-    showCreateModal.value = false;
-}
-
-function handleEditSuccess() {
-    closeEditModal();
-}
-
 function deleteAccount(account: Account) {
     if (
         confirm(
@@ -180,7 +172,7 @@ function deleteAccount(account: Account) {
         <AccountForm
             :action="accountStore.url()"
             method="post"
-            @success="handleCreateSuccess"
+            @success="showCreateModal = false"
             @cancel="showCreateModal = false"
         />
     </Modal>
@@ -196,7 +188,7 @@ function deleteAccount(account: Account) {
             :account="editingAccount"
             :action="accountUpdate.url(editingAccount)"
             method="patch"
-            @success="handleEditSuccess"
+            @success="closeEditModal"
             @cancel="closeEditModal"
         />
     </Modal>

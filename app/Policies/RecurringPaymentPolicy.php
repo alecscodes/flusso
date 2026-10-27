@@ -46,20 +46,4 @@ class RecurringPaymentPolicy
     {
         return $user->id === $recurringPayment->user_id;
     }
-
-    /**
-     * Determine whether the user can restore the model.
-     */
-    public function restore(User $user, RecurringPayment $recurringPayment): bool
-    {
-        return $user->id === $recurringPayment->user_id;
-    }
-
-    /**
-     * Determine whether the user can permanently delete the model.
-     */
-    public function forceDelete(User $user, RecurringPayment $recurringPayment): bool
-    {
-        return $user->id === $recurringPayment->user_id;
-    }
 }

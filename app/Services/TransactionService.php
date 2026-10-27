@@ -19,25 +19,12 @@ class TransactionService
     ) {}
 
     /**
-     * Get transactions for a user with optional limit.
-     */
-    public function getTransactionsForUser(User $user, ?int $limit = null): Collection
-    {
-        $query = $user->transactions()
-            ->with(['account', 'category', 'toAccount'])
-            ->orderBy('date', 'desc')
-            ->orderBy('created_at', 'desc');
-
-        return $limit ? $query->limit($limit)->get() : $query->get();
-    }
-
-    /**
      * Get transactions for a period (inclusive); a null bound leaves that side open.
      */
-    public function getTransactionsForPeriod(User $user, ?CarbonInterface $startDate, ?CarbonInterface $endDate): Collection
+    private function getTransactionsForPeriod(User $user, ?CarbonInterface $startDate, ?CarbonInterface $endDate): Collection
     {
         return $user->transactions()
-            ->with(['account', 'category', 'toAccount'])
+            ->with('category')
             ->inPeriod($startDate, $endDate)
             ->orderBy('date', 'desc')
             ->orderBy('created_at', 'desc')

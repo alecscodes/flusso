@@ -56,14 +56,6 @@ class RecurringPaymentService
     }
 
     /**
-     * Soft-delete the rule; its unpaid occurrences go, its paid history stays.
-     */
-    public function deleteRecurringPayment(RecurringPayment $rule): void
-    {
-        $rule->delete();
-    }
-
-    /**
      * Bring the rule's occurrences in line with the rule. Idempotent.
      *
      * Paid and skipped occurrences are history and never change. Unpaid ones due

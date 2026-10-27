@@ -93,7 +93,6 @@ export interface TransactionFile {
     path: string;
     created_at: string;
     updated_at: string;
-    formatted_size?: string;
 }
 
 /** One occurrence of a planned payment: paid when it has a transaction, skipped when `skipped_at` is set. */
@@ -153,11 +152,6 @@ export interface Summary {
 
 export interface PaymentSummary {
     total_due: number;
-    total_expected_income: number;
-    total_paid: number;
-    unpaid_count: number;
-    paid_count: number;
-    balance_after_planned: number;
     primary_currency: string;
 }
 

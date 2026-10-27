@@ -66,8 +66,6 @@ class PaymentController extends Controller
 
     public function update(PaymentUpdateRequest $request, Payment $payment): RedirectResponse
     {
-        $this->authorize('update', $payment);
-
         $this->paymentService->updatePayment($payment, $request->validated());
 
         FlashToast::success('Payment updated.');
@@ -110,8 +108,6 @@ class PaymentController extends Controller
 
     public function markPaid(MarkPaymentPaidRequest $request, Payment $payment): RedirectResponse
     {
-        $this->authorize('update', $payment);
-
         $this->paymentService->markAsPaid($payment, $request->validated());
 
         FlashToast::success('Payment marked as paid.');

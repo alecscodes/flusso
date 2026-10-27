@@ -29,8 +29,6 @@ class CategoryController extends Controller
 
     public function store(CategoryStoreRequest $request): RedirectResponse
     {
-        $this->authorize('create', Category::class);
-
         $this->categoryService->createCategory($request->user(), $request->validated());
 
         FlashToast::success('Category created successfully.');
@@ -49,8 +47,6 @@ class CategoryController extends Controller
 
     public function update(CategoryUpdateRequest $request, Category $category): RedirectResponse
     {
-        $this->authorize('update', $category);
-
         $this->categoryService->updateCategory($category, $request->validated());
 
         FlashToast::success('Category updated successfully.');
@@ -62,7 +58,7 @@ class CategoryController extends Controller
     {
         $this->authorize('delete', $category);
 
-        $this->categoryService->deleteCategory($category);
+        $category->delete();
 
         FlashToast::success('Category deleted successfully.');
 

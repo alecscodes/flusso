@@ -2,7 +2,6 @@
 
 namespace App\Mcp\Tools;
 
-use App\Services\RecurringPaymentService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
@@ -15,8 +14,6 @@ use Laravel\Mcp\Server\Tools\Annotations\IsDestructive;
 #[IsDestructive]
 class DeletePlannedPayment extends FlussoTool
 {
-    public function __construct(private RecurringPaymentService $plannedPayments) {}
-
     public function handle(Request $request): Response
     {
         $rule = $this->user($request)->recurringPayments()->find($request->integer('id'));
@@ -25,7 +22,7 @@ class DeletePlannedPayment extends FlussoTool
             return $this->notFound('Planned payment');
         }
 
-        $this->plannedPayments->deleteRecurringPayment($rule);
+        $rule->delete();
 
         return $this->json(['deleted' => $rule->id]);
     }

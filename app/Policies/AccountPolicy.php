@@ -46,20 +46,4 @@ class AccountPolicy
     {
         return $user->id === $account->user_id;
     }
-
-    /**
-     * Determine whether the user can restore the model.
-     */
-    public function restore(User $user, Account $account): bool
-    {
-        return $user->id === $account->user_id;
-    }
-
-    /**
-     * Determine whether the user can permanently delete the model.
-     */
-    public function forceDelete(User $user, Account $account): bool
-    {
-        return $user->id === $account->user_id;
-    }
 }

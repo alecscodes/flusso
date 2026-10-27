@@ -2,7 +2,6 @@
 
 namespace App\Mcp\Tools;
 
-use App\Services\CategoryService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
@@ -15,8 +14,6 @@ use Laravel\Mcp\Server\Tools\Annotations\IsDestructive;
 #[IsDestructive]
 class DeleteCategory extends FlussoTool
 {
-    public function __construct(private CategoryService $categories) {}
-
     public function handle(Request $request): Response
     {
         $category = $this->user($request)->categories()->find($request->integer('id'));
@@ -25,7 +22,7 @@ class DeleteCategory extends FlussoTool
             return $this->notFound('Category');
         }
 
-        $this->categories->deleteCategory($category);
+        $category->delete();
 
         return $this->json(['deleted' => $category->id]);
     }

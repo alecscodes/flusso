@@ -7,6 +7,7 @@ use App\Models\Payment;
 use App\Models\Transaction;
 use App\Models\User;
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -26,7 +27,7 @@ class PaymentService
      */
     public function getOverduePayments(User $user): Collection
     {
-        return $user->payments()->overdue()->with(self::RELATIONS)->orderBy('due_date')->orderBy('id')->get();
+        return $this->inDueOrder($user->payments()->overdue());
     }
 
     /**
@@ -34,9 +35,7 @@ class PaymentService
      */
     public function getUpcomingPayments(User $user, CarbonInterface $until): Collection
     {
-        return $user->payments()->visible()->pending()
-            ->dueBetween(now()->toDateString(), $until->toDateString())
-            ->with(self::RELATIONS)->orderBy('due_date')->orderBy('id')->get();
+        return $this->inDueOrder($user->payments()->visible()->pending()->dueBetween(now()->toDateString(), $until->toDateString()));
     }
 
     /**
@@ -44,7 +43,7 @@ class PaymentService
      */
     public function getPaymentsBetween(User $user, string $from, string $to): Collection
     {
-        return $user->payments()->visible()->dueBetween($from, $to)->with(self::RELATIONS)->orderBy('due_date')->orderBy('id')->get();
+        return $this->inDueOrder($user->payments()->visible()->dueBetween($from, $to));
     }
 
     /**
@@ -58,9 +57,8 @@ class PaymentService
         $period = $user->getFinancialPeriod();
         $today = now()->toDateString();
 
-        [$overdue, $rest] = $user->payments()->visible()
-            ->where(fn ($query) => $query->where('due_date', '>=', $period['start']->toDateString())->orWhere(fn ($query) => $query->pending()))
-            ->with(self::RELATIONS)->orderBy('due_date')->orderBy('id')->get()
+        [$overdue, $rest] = $this->inDueOrder($user->payments()->visible()
+            ->where(fn ($query) => $query->where('due_date', '>=', $period['start']->toDateString())->orWhere(fn ($query) => $query->pending())))
             ->partition(fn (Payment $payment) => $payment->isPending() && $payment->due_date->toDateString() < $today);
 
         [$inPeriod, $later] = $rest->partition(fn (Payment $payment) => $payment->due_date->toDateString() <= $period['end']->toDateString());
@@ -76,25 +74,19 @@ class PaymentService
     }
 
     /**
-     * What is still to pay and what has been paid in a period, in the primary currency.
+     * What is still to pay (expenses not paid or skipped) in a period, in the primary currency.
+     *
+     * @return array{total_due: float, primary_currency: string}
      */
     public function getPaymentSummaryForPeriod(User $user, CarbonInterface $startDate, CarbonInterface $endDate): array
     {
-        $payments = $user->payments()->visible()
+        $due = $user->payments()->visible()->pending()
+            ->where('type', PaymentType::Expense)
             ->dueBetween($startDate->toDateString(), $endDate->toDateString())
-            ->with('transaction')->get();
-
-        $pending = $payments->filter->isPending();
-        $due = $pending->where('type', PaymentType::Expense);
-        $expected = $pending->where('type', PaymentType::Income);
-        $paid = $payments->filter->isPaid();
+            ->get();
 
         return [
             'total_due' => $this->currencyService->sumInPrimaryCurrency($due, 'amount', 'currency', $user),
-            'total_expected_income' => $this->currencyService->sumInPrimaryCurrency($expected, 'amount', 'currency', $user),
-            'total_paid' => $this->currencyService->sumInPrimaryCurrency($paid->map(fn (Payment $payment) => $payment->transaction ?? $payment), 'amount', 'currency', $user),
-            'unpaid_count' => $pending->count(),
-            'paid_count' => $paid->count(),
             'primary_currency' => $this->currencyService->getPrimaryCurrency($user),
         ];
     }
@@ -178,7 +170,16 @@ class PaymentService
             ValidationException::withMessages(['payment' => 'A repeating payment cannot be deleted. Skip it instead.']),
         );
 
-        $this->recurringPaymentService->deleteRecurringPayment($payment->recurringPayment);
+        $payment->recurringPayment->delete();
+    }
+
+    /**
+     * @param  HasMany<Payment, User>  $query
+     * @return Collection<int, Payment>
+     */
+    private function inDueOrder(HasMany $query): Collection
+    {
+        return $query->with(self::RELATIONS)->orderBy('due_date')->orderBy('id')->get();
     }
 
     private function ensurePending(Payment $payment): void

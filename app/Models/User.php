@@ -10,6 +10,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Exists;
 use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laravel\Passport\Contracts\OAuthenticatable;
 use Laravel\Passport\HasApiTokens;
@@ -63,6 +65,22 @@ class User extends Authenticatable implements OAuthenticatable
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);
+    }
+
+    /**
+     * Validation: the value is the id of one of this user's live accounts.
+     */
+    public function ownedAccountRule(): Exists
+    {
+        return Rule::exists('accounts', 'id')->where('user_id', $this->id)->whereNull('deleted_at');
+    }
+
+    /**
+     * Validation: the value is the id of one of this user's live categories.
+     */
+    public function ownedCategoryRule(): Exists
+    {
+        return Rule::exists('categories', 'id')->where('user_id', $this->id)->whereNull('deleted_at');
     }
 
     /**

@@ -95,11 +95,6 @@ class RecurringPayment extends Model
         return $this->hasMany(Payment::class);
     }
 
-    public function scopeForUser($query, int $userId)
-    {
-        return $query->where('user_id', $userId);
-    }
-
     /**
      * The date of occurrence n, always counted from the start date so month ends never drift.
      */

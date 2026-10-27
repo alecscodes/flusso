@@ -37,8 +37,8 @@ class RecurringPaymentRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255'],
-            'account_id' => ['required', 'integer', Rule::exists('accounts', 'id')->where('user_id', $user->id)->whereNull('deleted_at')],
-            'category_id' => ['required', 'integer', Rule::exists('categories', 'id')->where('user_id', $user->id)->whereNull('deleted_at')],
+            'account_id' => ['required', 'integer', $user->ownedAccountRule()],
+            'category_id' => ['required', 'integer', $user->ownedCategoryRule()],
             'amount' => ['required', 'numeric', 'min:0.01'],
             'interval_type' => ['required', Rule::enum(IntervalType::class)],
             'interval_value' => ['required', 'integer', 'min:1', 'max:1000'],
