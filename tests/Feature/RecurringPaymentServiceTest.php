@@ -273,3 +273,15 @@ test('a rule with an end date is only finished when no date is left before it en
     expect($yearly->fresh(['payments', 'account'])->status)->toBe('active')
         ->and($short->fresh(['payments', 'account'])->status)->toBe('finished');
 });
+
+test('the daily sync keeps working after the rule category is deleted', function () {
+    $this->travelTo('2026-04-15 12:00:00');
+    $user = User::factory()->create();
+    $rule = plannedPayment($user, ['start_date' => '2026-04-10']);
+
+    $rule->category->delete();
+    $this->travelTo('2026-06-15 12:00:00');
+
+    $this->artisan('payments:sync')->assertSuccessful();
+    expect(dueDates($rule->fresh()))->toContain('2027-06-10');
+});
