@@ -82,13 +82,15 @@ function deleteAccount() {
 
     <div class="space-y-8">
         <div class="flex items-center gap-4">
-            <Link :href="accountsIndex().url">
+            <Link :href="accountsIndex().url" class="shrink-0">
                 <Button variant="ghost" size="icon">
                     <ArrowLeft class="h-5 w-5" />
                 </Button>
             </Link>
-            <div>
-                <h1 class="text-3xl font-bold tracking-tight text-foreground">
+            <div class="min-w-0">
+                <h1
+                    class="truncate text-3xl font-bold tracking-tight text-foreground"
+                >
                     {{ account.name }}
                 </h1>
                 <p class="mt-1 text-muted-foreground">
@@ -97,8 +99,8 @@ function deleteAccount() {
             </div>
         </div>
 
-        <div class="grid gap-6 lg:grid-cols-3">
-            <Card class="lg:col-span-1">
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <Card class="min-w-0 lg:col-span-1">
                 <CardContent class="pt-6">
                     <div class="flex flex-col items-center text-center">
                         <div
@@ -123,7 +125,7 @@ function deleteAccount() {
                                     Current Balance
                                 </p>
                                 <p
-                                    class="mt-1 text-3xl font-bold text-foreground"
+                                    class="mt-1 text-3xl font-bold text-foreground tabular-nums"
                                 >
                                     {{
                                         formatCurrency(
@@ -134,13 +136,15 @@ function deleteAccount() {
                                 </p>
                             </div>
 
-                            <div class="grid grid-cols-2 gap-4">
-                                <div class="rounded-xl bg-muted/50 p-4">
+                            <div
+                                class="grid grid-cols-2 gap-3 lg:grid-cols-1 2xl:grid-cols-2"
+                            >
+                                <div class="rounded-xl bg-muted/50 p-3 sm:p-4">
                                     <p class="text-xs text-muted-foreground">
                                         Initial
                                     </p>
                                     <p
-                                        class="mt-1 font-semibold text-foreground"
+                                        class="mt-1 text-sm font-semibold text-foreground tabular-nums sm:text-base"
                                     >
                                         {{
                                             formatCurrency(
@@ -150,11 +154,13 @@ function deleteAccount() {
                                         }}
                                     </p>
                                 </div>
-                                <div class="rounded-xl bg-muted/50 p-4">
+                                <div class="rounded-xl bg-muted/50 p-3 sm:p-4">
                                     <p class="text-xs text-muted-foreground">
                                         Change
                                     </p>
-                                    <div class="mt-1 flex items-center gap-1">
+                                    <div
+                                        class="mt-1 flex items-center justify-center gap-1"
+                                    >
                                         <TrendingUp
                                             v-if="balanceChange.isPositive"
                                             class="h-4 w-4 text-emerald-600"
@@ -198,10 +204,12 @@ function deleteAccount() {
                 </CardContent>
             </Card>
 
-            <Card class="lg:col-span-2">
-                <CardHeader class="flex flex-row items-center justify-between">
+            <Card class="min-w-0 lg:col-span-2">
+                <CardHeader
+                    class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+                >
                     <CardTitle>Recent Transactions</CardTitle>
-                    <div class="flex gap-2">
+                    <div class="flex flex-wrap gap-2">
                         <Button
                             variant="outline"
                             size="sm"
@@ -221,7 +229,7 @@ function deleteAccount() {
                         </Link>
                     </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent class="px-2 sm:px-6">
                     <div
                         v-if="
                             account.transactions &&

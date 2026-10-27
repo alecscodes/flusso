@@ -30,7 +30,7 @@ const trendBgColors = {
 
 const cardClasses = computed(() =>
     cn(
-        'relative overflow-hidden rounded-2xl border border-border bg-card p-6',
+        'relative min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-4 sm:p-6',
         'transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:shadow-primary/5',
         props.class,
     ),
@@ -39,19 +39,24 @@ const cardClasses = computed(() =>
 
 <template>
     <div :class="cardClasses">
-        <div class="flex items-start justify-between">
-            <div class="space-y-1">
+        <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0 space-y-1">
                 <p class="text-sm font-medium text-muted-foreground">
                     {{ title }}
                 </p>
-                <p class="text-3xl font-bold tracking-tight text-foreground">
+                <p
+                    class="truncate text-2xl font-bold tracking-tight text-foreground tabular-nums sm:text-3xl xl:text-2xl 2xl:text-3xl"
+                >
                     {{ value }}
                 </p>
                 <p v-if="subtitle" class="text-sm text-muted-foreground">
                     {{ subtitle }}
                 </p>
             </div>
-            <div v-if="icon" class="rounded-xl bg-primary/10 p-3">
+            <div
+                v-if="icon"
+                class="shrink-0 rounded-xl bg-primary/10 p-2.5 sm:p-3"
+            >
                 <component :is="icon" class="h-6 w-6 text-primary" />
             </div>
         </div>

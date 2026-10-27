@@ -122,8 +122,15 @@ const cardClasses = computed(() =>
                         class="mt-0.5 flex flex-wrap items-center gap-x-1 gap-y-0 text-sm text-muted-foreground"
                     >
                         <span>{{ formatRelative(payment.due_date) }}</span>
-                        <span class="shrink-0 text-border">•</span>
-                        <span>{{ formatDate(payment.due_date) }}</span>
+                        <template
+                            v-if="
+                                formatRelative(payment.due_date) !==
+                                formatDate(payment.due_date)
+                            "
+                        >
+                            <span class="shrink-0 text-border">•</span>
+                            <span>{{ formatDate(payment.due_date) }}</span>
+                        </template>
                     </div>
                 </div>
             </div>

@@ -112,7 +112,7 @@ function deleteRule() {
             </div>
         </div>
 
-        <div class="grid gap-6 lg:grid-cols-3">
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <Card class="lg:col-span-1">
                 <CardContent class="pt-6">
                     <div class="flex flex-col items-center text-center">
@@ -300,7 +300,7 @@ function deleteRule() {
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div class="grid gap-4 sm:grid-cols-2">
+                        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <PaymentCard
                                 v-for="payment in pendingPayments"
                                 :key="payment.id"
@@ -317,7 +317,7 @@ function deleteRule() {
                     <CardContent>
                         <div
                             v-if="historyPayments.length > 0"
-                            class="grid gap-4 sm:grid-cols-2"
+                            class="grid grid-cols-1 gap-4 sm:grid-cols-2"
                         >
                             <PaymentCard
                                 v-for="payment in historyPayments"

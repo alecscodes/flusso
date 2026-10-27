@@ -50,10 +50,36 @@ const isTransferDestination = computed(
         props.contextAccountId === props.transaction.to_account_id,
 );
 
-const title = computed(() =>
-    isTransfer.value
-        ? `${props.transaction.account?.name ?? 'Unknown'} → ${props.transaction.to_account?.name ?? 'Unknown'}`
-        : props.transaction.description || 'No description',
+const transferRoute = computed(
+    () =>
+        `${props.transaction.account?.name ?? 'Unknown'} → ${props.transaction.to_account?.name ?? 'Unknown'}`,
+);
+
+const title = computed(
+    () =>
+        props.transaction.description ||
+        (isTransfer.value
+            ? transferRoute.value
+            : (props.transaction.category?.name ?? 'No description')),
+);
+
+// A transfer titled by its description still shows where the money went.
+const detail = computed(() => {
+    if (isTransfer.value) {
+        return props.transaction.description ? transferRoute.value : null;
+    }
+
+    return props.showAccount ? props.transaction.account?.name : null;
+});
+
+const shortDate = computed(() =>
+    formatDate(props.transaction.date, {
+        year:
+            props.transaction.date.slice(0, 4) ===
+            String(new Date().getFullYear())
+                ? undefined
+                : 'numeric',
+    }),
 );
 
 // An incoming transfer is worth what arrived, in the destination's currency.
@@ -123,7 +149,7 @@ const typeIconClasses = computed(() => {
 
 const rowClasses = computed(() =>
     cn(
-        'group flex items-center gap-4 rounded-xl p-3 transition-colors hover:bg-muted/50',
+        'group flex items-center gap-3 rounded-xl p-2 transition-colors hover:bg-muted/50 sm:gap-4 sm:p-3',
         props.class,
     ),
 );
@@ -141,48 +167,44 @@ const rowClasses = computed(() =>
         </div>
 
         <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-2">
-                <p class="truncate font-medium text-foreground">
+            <div class="flex items-baseline justify-between gap-3">
+                <p class="min-w-0 truncate font-medium text-foreground">
                     {{ title }}
                 </p>
-                <CategoryBadge
-                    v-if="transaction.category"
-                    :category="transaction.category"
-                    size="sm"
-                />
+                <div class="shrink-0 text-right">
+                    <AmountDisplay
+                        :amount="amount"
+                        :currency="currency"
+                        :type="amountType"
+                        size="md"
+                        class="font-semibold whitespace-nowrap"
+                    />
+                    <p
+                        v-if="receivedNote"
+                        class="text-xs whitespace-nowrap text-muted-foreground tabular-nums"
+                    >
+                        {{ receivedNote }}
+                    </p>
+                </div>
             </div>
             <div
-                class="mt-0.5 flex items-center gap-2 text-sm text-muted-foreground"
+                class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground"
             >
-                <span>{{ formatDate(transaction.date) }}</span>
-                <span
-                    v-if="showAccount && transaction.account && !isTransfer"
-                    class="flex items-center gap-1"
-                >
-                    <span class="text-border">•</span>
-                    {{ transaction.account.name }}
-                </span>
-                <span
-                    v-if="isTransfer && transaction.description"
-                    class="flex items-center gap-1 truncate"
-                >
-                    <span class="text-border">•</span>
-                    {{ transaction.description }}
-                </span>
+                <span class="whitespace-nowrap">{{ shortDate }}</span>
+                <template v-if="detail">
+                    <span class="text-border">·</span>
+                    <span class="min-w-0 truncate">{{ detail }}</span>
+                </template>
+                <CategoryBadge
+                    v-if="
+                        transaction.category &&
+                        title !== transaction.category.name
+                    "
+                    :category="transaction.category"
+                    size="sm"
+                    class="max-w-full min-w-0 overflow-hidden whitespace-nowrap"
+                />
             </div>
-        </div>
-
-        <div class="text-right">
-            <AmountDisplay
-                :amount="amount"
-                :currency="currency"
-                :type="amountType"
-                size="md"
-                class="font-semibold"
-            />
-            <p v-if="receivedNote" class="text-xs text-muted-foreground">
-                {{ receivedNote }}
-            </p>
         </div>
 
         <Dropdown align="right" placement="below">

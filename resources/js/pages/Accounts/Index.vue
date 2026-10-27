@@ -95,7 +95,7 @@ function deleteAccount(account: Account) {
                 </p>
             </div>
 
-            <div class="grid gap-4 sm:grid-cols-2">
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div class="rounded-xl border border-border bg-muted/30 p-4">
                     <p class="text-sm font-medium text-muted-foreground">
                         Total Balance (including savings)
@@ -136,7 +136,7 @@ function deleteAccount(account: Account) {
 
         <div
             v-if="accounts.length > 0"
-            class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
+            class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3"
         >
             <AccountCard
                 v-for="account in accounts"

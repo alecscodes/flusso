@@ -339,7 +339,7 @@ const debouncedApplyFilters = debounce(applyFilters, DEBOUNCE_MS);
         </Card>
 
         <Card>
-            <CardContent class="pt-6">
+            <CardContent class="px-2 pt-4 sm:px-6 sm:pt-6">
                 <div v-if="transactions.data.length > 0" class="space-y-1">
                     <TransactionRow
                         v-for="transaction in transactions.data"

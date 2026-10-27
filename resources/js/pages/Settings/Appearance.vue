@@ -40,7 +40,7 @@ const themes = [
 
         <div class="space-y-4">
             <h3 class="text-sm font-medium text-foreground">Theme</h3>
-            <div class="grid gap-4 sm:grid-cols-3">
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <button
                     v-for="option in themes"
                     :key="option.value"

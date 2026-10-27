@@ -94,20 +94,24 @@ const isEmpty = computed(
             </Button>
         </div>
 
-        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
             <Card>
-                <CardContent class="pt-6">
+                <CardContent class="p-4 pt-4 sm:p-6 sm:pt-6">
                     <div class="flex items-center gap-4">
                         <div
-                            class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10"
+                            class="hidden h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 sm:flex"
                         >
                             <Wallet class="h-6 w-6 text-primary" />
                         </div>
-                        <div>
-                            <p class="text-sm text-muted-foreground">
+                        <div class="min-w-0">
+                            <p
+                                class="truncate text-xs text-muted-foreground sm:text-sm"
+                            >
                                 Available balance
                             </p>
-                            <p class="text-2xl font-bold text-foreground">
+                            <p
+                                class="truncate text-lg font-bold text-foreground tabular-nums sm:text-2xl"
+                            >
                                 {{
                                     formatCurrency(
                                         totals.available_balance,
@@ -121,20 +125,24 @@ const isEmpty = computed(
             </Card>
 
             <Card class="border-rose-200 dark:border-rose-900/50">
-                <CardContent class="pt-6">
+                <CardContent class="p-4 pt-4 sm:p-6 sm:pt-6">
                     <div class="flex items-center gap-4">
                         <div
-                            class="flex h-12 w-12 items-center justify-center rounded-xl bg-rose-500/10"
+                            class="hidden h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-rose-500/10 sm:flex"
                         >
                             <AlertCircle
                                 class="h-6 w-6 text-rose-600 dark:text-rose-400"
                             />
                         </div>
-                        <div>
-                            <p class="text-sm text-muted-foreground">
+                        <div class="min-w-0">
+                            <p
+                                class="truncate text-xs text-muted-foreground sm:text-sm"
+                            >
                                 Overdue ({{ totals.overdue_count }})
                             </p>
-                            <p class="text-2xl font-bold text-foreground">
+                            <p
+                                class="truncate text-lg font-bold text-foreground tabular-nums sm:text-2xl"
+                            >
                                 {{
                                     formatCurrency(
                                         totals.overdue_amount,
@@ -148,20 +156,24 @@ const isEmpty = computed(
             </Card>
 
             <Card class="border-amber-200 dark:border-amber-900/50">
-                <CardContent class="pt-6">
+                <CardContent class="p-4 pt-4 sm:p-6 sm:pt-6">
                     <div class="flex items-center gap-4">
                         <div
-                            class="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-500/10"
+                            class="hidden h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 sm:flex"
                         >
                             <Calendar
                                 class="h-6 w-6 text-amber-600 dark:text-amber-400"
                             />
                         </div>
-                        <div>
-                            <p class="text-sm text-muted-foreground">
+                        <div class="min-w-0">
+                            <p
+                                class="truncate text-xs text-muted-foreground sm:text-sm"
+                            >
                                 Upcoming ({{ totals.upcoming_count }})
                             </p>
-                            <p class="text-2xl font-bold text-foreground">
+                            <p
+                                class="truncate text-lg font-bold text-foreground tabular-nums sm:text-2xl"
+                            >
                                 {{
                                     formatCurrency(
                                         totals.upcoming_amount,
@@ -175,20 +187,24 @@ const isEmpty = computed(
             </Card>
 
             <Card class="border-emerald-200 dark:border-emerald-900/50">
-                <CardContent class="pt-6">
+                <CardContent class="p-4 pt-4 sm:p-6 sm:pt-6">
                     <div class="flex items-center gap-4">
                         <div
-                            class="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/10"
+                            class="hidden h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 sm:flex"
                         >
                             <CircleDollarSign
                                 class="h-6 w-6 text-emerald-600 dark:text-emerald-400"
                             />
                         </div>
-                        <div>
-                            <p class="text-sm text-muted-foreground">
+                        <div class="min-w-0">
+                            <p
+                                class="truncate text-xs text-muted-foreground sm:text-sm"
+                            >
                                 Balance after planned
                             </p>
-                            <p class="text-2xl font-bold text-foreground">
+                            <p
+                                class="truncate text-lg font-bold text-foreground tabular-nums sm:text-2xl"
+                            >
                                 {{
                                     formatCurrency(
                                         totals.balance_after_planned,
@@ -226,7 +242,9 @@ const isEmpty = computed(
                 </CardTitle>
             </CardHeader>
             <CardContent>
-                <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div
+                    class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+                >
                     <PaymentCard
                         v-for="payment in overduePayments"
                         :key="payment.id"
@@ -258,7 +276,9 @@ const isEmpty = computed(
                 </CardTitle>
             </CardHeader>
             <CardContent>
-                <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div
+                    class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+                >
                     <PaymentCard
                         v-for="payment in periodPayments"
                         :key="payment.id"
@@ -290,7 +310,9 @@ const isEmpty = computed(
                 </CardTitle>
             </CardHeader>
             <CardContent>
-                <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div
+                    class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+                >
                     <PaymentCard
                         v-for="payment in payments"
                         :key="payment.id"

@@ -103,7 +103,9 @@ const totalCategorySpending = computed(() => {
             </div>
         </div>
 
-        <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div
+            class="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 xl:grid-cols-4"
+        >
             <StatCard
                 title="Available Balance"
                 :value="formatCurrency(availableBalance, primaryCurrency)"
@@ -133,7 +135,9 @@ const totalCategorySpending = computed(() => {
             />
         </div>
 
-        <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div
+            class="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 xl:grid-cols-3"
+        >
             <StatCard
                 title="Net (period)"
                 :value="formatCurrency(summary.net, primaryCurrency)"
@@ -159,7 +163,7 @@ const totalCategorySpending = computed(() => {
             />
         </div>
 
-        <div class="grid gap-6 lg:grid-cols-3">
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <div class="space-y-6 lg:col-span-2">
                 <Card>
                     <CardHeader
@@ -175,7 +179,7 @@ const totalCategorySpending = computed(() => {
                     <CardContent>
                         <div
                             v-if="accounts.length > 0"
-                            class="grid gap-4 sm:grid-cols-2"
+                            class="grid grid-cols-1 gap-4 sm:grid-cols-2"
                         >
                             <AccountCard
                                 v-for="account in accounts.slice(0, 4)"

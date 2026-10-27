@@ -19,6 +19,7 @@ import {
     UserPlus,
     Wallet,
 } from '@lucide/vue';
+import { nextTick, onMounted, ref, watch } from 'vue';
 
 const page = usePage();
 
@@ -33,13 +34,31 @@ const navigation = [
     { name: 'Finance', href: financeEdit.url(), icon: Wallet },
 ];
 
-const isActive = (href: string) => page.url === href;
+const isActive = (href: string) => page.url.split('?')[0] === href;
+
+const tabBar = ref<HTMLElement | null>(null);
+
+/** The tab bar scrolls sideways on mobile: keep the current tab in view. */
+async function scrollActiveTabIntoView(): Promise<void> {
+    await nextTick();
+
+    const bar = tabBar.value;
+    const tab = bar?.querySelector<HTMLElement>('[aria-current="page"]');
+
+    if (bar && tab) {
+        bar.scrollLeft =
+            tab.offsetLeft - (bar.clientWidth - tab.offsetWidth) / 2;
+    }
+}
+
+onMounted(scrollActiveTabIntoView);
+watch(() => page.url, scrollActiveTabIntoView);
 </script>
 
 <template>
     <AppLayout>
         <div class="mx-auto max-w-4xl">
-            <div class="mb-8">
+            <div class="mb-6 lg:mb-8">
                 <h1 class="text-3xl font-bold tracking-tight text-foreground">
                     Settings
                 </h1>
@@ -51,12 +70,16 @@ const isActive = (href: string) => page.url === href;
             <div class="flex flex-col gap-8 lg:flex-row">
                 <nav class="w-full shrink-0 lg:w-56">
                     <div
-                        class="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible"
+                        ref="tabBar"
+                        class="relative flex [scrollbar-width:none] gap-1 overflow-x-auto lg:flex-col lg:overflow-visible [&::-webkit-scrollbar]:hidden"
                     >
                         <Link
                             v-for="item in navigation"
                             :key="item.name"
                             :href="item.href"
+                            :aria-current="
+                                isActive(item.href) ? 'page' : undefined
+                            "
                             :class="[
                                 'flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-all',
                                 isActive(item.href)

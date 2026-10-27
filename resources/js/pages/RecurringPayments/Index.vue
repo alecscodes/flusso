@@ -100,7 +100,7 @@ function deleteRule(rule: RecurringPayment) {
 
         <div
             v-if="current.length > 0"
-            class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+            class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
         >
             <Card
                 v-for="rule in current"
@@ -143,6 +143,7 @@ function deleteRule(rule: RecurringPayment) {
                                     ? 'success'
                                     : 'secondary'
                             "
+                            class="shrink-0"
                         >
                             {{ rule.status === 'active' ? 'Active' : 'Paused' }}
                         </Badge>
@@ -189,10 +190,12 @@ function deleteRule(rule: RecurringPayment) {
                         </div>
                     </div>
 
-                    <div class="mt-4 flex gap-2 border-t border-border pt-4">
+                    <div
+                        class="mt-4 flex flex-wrap gap-2 border-t border-border pt-4"
+                    >
                         <Link
                             :href="showRecurringPayment.url(rule)"
-                            class="flex-1"
+                            class="min-w-24 flex-1"
                         >
                             <Button variant="outline" size="sm" class="w-full">
                                 Details
@@ -250,7 +253,7 @@ function deleteRule(rule: RecurringPayment) {
 
             <div
                 v-if="showFinished"
-                class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+                class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
             >
                 <Card
                     v-for="rule in finished"
