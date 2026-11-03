@@ -39,6 +39,7 @@ class AccountUpdateRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'currency' => ['required', 'string', 'size:3', 'uppercase', fn (string $attribute, mixed $value, Closure $fail) => self::currencyIsLocked($account, $value, $fail)],
             'is_savings' => ['sometimes', 'boolean'],
+            'alert_threshold' => ['nullable', 'numeric', 'min:-9999999999.99', 'max:9999999999.99', 'decimal:0,2'],
         ];
     }
 

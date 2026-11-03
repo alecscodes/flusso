@@ -17,6 +17,7 @@ export interface Account {
     balance: string;
     initial_balance: string;
     is_savings: boolean;
+    alert_threshold: string | null;
     created_at: string;
     updated_at: string;
     deleted_at: string | null;
@@ -153,6 +154,47 @@ export interface Summary {
 export interface PaymentSummary {
     total_due: number;
     primary_currency: string;
+}
+
+export interface LiquidityPaymentLine {
+    id: number;
+    name: string;
+    due_date: string;
+    amount: number;
+    overdue: boolean;
+    is_estimate: boolean;
+}
+
+export interface LiquidityForecast {
+    account_id: number;
+    account_name: string;
+    currency: string;
+    balance: number;
+    balance_after: number;
+    alert_threshold: number | null;
+    below_threshold: boolean;
+    due_total: number;
+    shortfall: number;
+    needed_by: string | null;
+    negative_on: string | null;
+    threshold_crossed_on: string | null;
+    is_at_risk: boolean;
+    is_estimate: boolean;
+    days: number;
+    message: string;
+    payments: LiquidityPaymentLine[];
+}
+
+export interface LiquidityAlert {
+    id: string;
+    message: string;
+    created_at: string;
+}
+
+export interface Liquidity {
+    at_risk: LiquidityForecast[];
+    alerts: LiquidityAlert[];
+    days: number;
 }
 
 export interface CategorySpending {
