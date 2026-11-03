@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Models\User;
+use App\Services\Ai\AiSettings;
 use App\Services\CurrencyService;
 use Carbon\CarbonImmutable;
 use DateInterval;
@@ -30,6 +31,9 @@ class AppServiceProvider extends ServiceProvider
 
         // One per request, so rates and the primary currency are looked up once.
         $this->app->scoped(CurrencyService::class);
+
+        // One per request too, so the AI settings are read and decrypted once.
+        $this->app->scoped(AiSettings::class);
     }
 
     /**
