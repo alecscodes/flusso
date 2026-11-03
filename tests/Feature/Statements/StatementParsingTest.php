@@ -1,5 +1,6 @@
 <?php
 
+use App\Services\Statements\CsvReader;
 use App\Services\Statements\GenericCsvParser;
 use App\Services\Statements\Normalizer;
 use App\Services\Statements\PdfLineParser;
@@ -150,4 +151,10 @@ test('the statement parser tries the deterministic parsers and reports none when
         ->and($parser->parse(statementsPdfText(), false)->parser)->toBe('pdf')
         ->and($parser->parse('nothing to see here', false)->parser)->toBe('none')
         ->and($parser->parse('nothing to see here', false)->lines)->toBe([]);
+});
+
+test('a huge CSV is read only up to the row cap', function () {
+    $csv = "Date,Description,Amount\n".str_repeat("2024-01-01,X,1.00\n", CsvReader::MAX_ROWS + 50);
+
+    expect(CsvReader::rows($csv))->toHaveCount(CsvReader::MAX_ROWS);
 });

@@ -23,7 +23,9 @@ final class CsvReader
 
     public static function detectDelimiter(string $content): string
     {
-        $lines = array_slice(array_values(array_filter(explode("\n", $content), fn (string $line) => trim($line) !== '')), 0, 5);
+        // Only the start of the file matters, so a big export is not split into lines just for this.
+        $head = substr($content, 0, 8192);
+        $lines = array_slice(array_values(array_filter(explode("\n", $head), fn (string $line) => trim($line) !== '')), 0, 5);
         $best = ',';
         $bestCount = 0;
 
@@ -44,9 +46,14 @@ final class CsvReader
     }
 
     /**
+     * At most this many rows are read, which bounds memory for a huge export.
+     */
+    public const MAX_ROWS = 20000;
+
+    /**
      * @return list<list<string>> the non-empty rows, cells trimmed
      */
-    public static function rows(string $content, ?string $delimiter = null): array
+    public static function rows(string $content, ?string $delimiter = null, int $limit = self::MAX_ROWS): array
     {
         $content = self::decode($content);
         $delimiter ??= self::detectDelimiter($content);
@@ -61,7 +68,7 @@ final class CsvReader
 
         $rows = [];
 
-        while (($row = fgetcsv($handle, null, $delimiter, '"', '')) !== false) {
+        while (count($rows) < $limit && ($row = fgetcsv($handle, null, $delimiter, '"', '')) !== false) {
             $cells = array_map(fn (?string $cell) => trim((string) $cell), $row);
 
             if (implode('', $cells) === '') {

@@ -9,6 +9,7 @@ use App\Http\Requests\StatementUploadRequest;
 use App\Models\Statement;
 use App\Models\StatementLine;
 use App\Models\Transaction;
+use App\Models\User;
 use App\Services\AccountService;
 use App\Services\Ai\AiManager;
 use App\Services\Statements\StatementMatcher;
@@ -83,11 +84,7 @@ class StatementController extends Controller
                 'amount_min' => isset($filters['amount_min']) ? (string) $filters['amount_min'] : '',
                 'amount_max' => isset($filters['amount_max']) ? (string) $filters['amount_max'] : '',
             ],
-            'accounts' => $this->accountService->getAccountsForUser($user)->map(fn ($account) => [
-                'id' => $account->id,
-                'name' => $account->name,
-                'currency' => $account->currency,
-            ])->values(),
+            'accounts' => $this->accountOptions($user),
             'institutions' => $user->statements()->whereNotNull('institution')->distinct()->orderBy('institution')->pluck('institution'),
             'aiEnabled' => $this->ai->isEnabled(AiFeature::Statements),
             'maxUploadMb' => intdiv(StatementService::MAX_SIZE_KB, 1024),
@@ -164,6 +161,8 @@ class StatementController extends Controller
             'lines as unmatched_lines_count' => fn ($query) => $query->where('match_status', StatementLineStatus::Unmatched->value),
         ]);
 
+        $textLength = (int) Statement::query()->whereKey($statement->id)->selectRaw('length(extracted_text) as text_length')->value('text_length');
+
         $counts = $statement->lines()
             ->selectRaw('match_status, count(*) as total')
             ->groupBy('match_status')
@@ -174,8 +173,7 @@ class StatementController extends Controller
                 ...$this->summary($statement),
                 'currency' => $statement->account?->currency,
                 'parsed_at' => $statement->parsed_at?->toIso8601String(),
-                'has_text' => filled($statement->extracted_text),
-                'text_length' => mb_strlen((string) $statement->extracted_text),
+                'has_text' => $textLength > 0,
                 'counts' => collect(StatementLineStatus::cases())->mapWithKeys(fn (StatementLineStatus $case) => [$case->value => (int) ($counts[$case->value] ?? 0)])->all(),
                 'can_reparse' => ($counts[StatementLineStatus::Imported->value] ?? 0) + ($counts[StatementLineStatus::Ignored->value] ?? 0) === 0,
             ],
@@ -194,12 +192,7 @@ class StatementController extends Controller
                 ->map(fn (array $transactions) => array_map($this->transactionSummary(...), array_slice($transactions, 0, self::CANDIDATES_PER_LINE)))
                 ->all(),
             'status' => $status?->value,
-            'accounts' => $this->accountService->getAccountsForUser($request->user())->map(fn ($account) => [
-                'id' => $account->id,
-                'name' => $account->name,
-                'currency' => $account->currency,
-            ])->values(),
-            'aiEnabled' => $this->ai->isEnabled(AiFeature::Statements),
+            'accounts' => $this->accountOptions($request->user()),
         ]);
     }
 
@@ -254,6 +247,20 @@ class StatementController extends Controller
             Storage::disk('local')->path($statement->path),
             $statement->original_filename
         );
+    }
+
+    /**
+     * @return list<array{id: int, name: string, currency: string}>
+     */
+    private function accountOptions(User $user): array
+    {
+        $options = [];
+
+        foreach ($this->accountService->getAccountsForUser($user) as $account) {
+            $options[] = ['id' => (int) $account->id, 'name' => (string) $account->name, 'currency' => (string) $account->currency];
+        }
+
+        return $options;
     }
 
     /**

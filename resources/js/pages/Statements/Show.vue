@@ -35,7 +35,6 @@ interface StatementDetail {
     parser: string | null;
     parsed_at: string | null;
     has_text: boolean;
-    text_length: number;
     counts: Record<string, number>;
     can_reparse: boolean;
 }
@@ -65,7 +64,6 @@ interface Props {
     candidates: Record<number, Candidate[]>;
     status: string | null;
     accounts: { id: number; name: string; currency: string }[];
-    aiEnabled: boolean;
 }
 
 const props = defineProps<Props>();

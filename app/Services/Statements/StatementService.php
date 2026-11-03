@@ -11,6 +11,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Throwable;
 
 /**
  * The statement vault: keeps the file for good, reads its text and lines, indexes
@@ -48,7 +49,8 @@ class StatementService
         $isPdf = strtolower($file->getClientOriginalExtension()) === 'pdf';
         $path = 'statements/'.$user->id.'/'.Str::uuid()->toString().($isPdf ? '.pdf' : '.csv');
 
-        Storage::disk('local')->put($path, (string) file_get_contents((string) $file->getRealPath()));
+        // Streamed to the disk, so a 20 MB upload is not held in memory.
+        Storage::disk('local')->putFileAs(dirname($path), $file, basename($path));
 
         try {
             $statement = $user->statements()->create([
@@ -68,6 +70,10 @@ class StatementService
             Storage::disk('local')->delete($path);
 
             return ['statement' => $user->statements()->where('sha256', $hash)->firstOrFail(), 'created' => false];
+        } catch (Throwable $exception) {
+            Storage::disk('local')->delete($path);
+
+            throw $exception;
         }
 
         $this->process($statement);
