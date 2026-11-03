@@ -11,6 +11,7 @@ import {
 } from '@/components/ui';
 import { useTransactionActions } from '@/composables';
 import { debounce } from '@/lib/utils';
+import { index as cleanupIndex } from '@/routes/cleanup';
 import { index as transactionsIndex } from '@/routes/transactions';
 import type { Account, Category, PaginatedData, Transaction } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
@@ -28,6 +29,7 @@ interface Props {
     }>;
     hasDateFilters: boolean;
     primaryCurrency: string;
+    uncategorizedCount: number;
 }
 
 const props = defineProps<Props>();
@@ -125,6 +127,14 @@ const debouncedApplyFilters = debounce(applyFilters, DEBOUNCE_MS);
                 </p>
             </div>
             <div class="flex justify-between gap-3">
+                <Button
+                    v-if="uncategorizedCount > 0"
+                    variant="outline"
+                    :as="Link"
+                    :href="cleanupIndex.url()"
+                >
+                    Clean up ({{ uncategorizedCount }})
+                </Button>
                 <Button variant="outline" @click="create('transfer')">
                     <ArrowLeftRight class="h-4 w-4" />
                     Transfer

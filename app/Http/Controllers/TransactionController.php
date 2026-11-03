@@ -60,6 +60,7 @@ class TransactionController extends Controller
                 )
                 : [],
             'hasDateFilters' => $hasDateFilters,
+            'uncategorizedCount' => $user->transactions()->uncategorized()->count(),
             'primaryCurrency' => $this->currencyService->getPrimaryCurrency($user),
         ]);
     }
