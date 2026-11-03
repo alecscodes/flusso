@@ -212,12 +212,12 @@ class CounterpartyService
                     ->sortKeys()
                     ->map(fn (array $sum, string $currency) => [
                         'currency' => $currency,
-                        'advanced' => $sum['advanced'] / 100,
-                        'settled' => $sum['settled'] / 100,
-                        'outstanding' => ($sum['advanced'] - $sum['settled']) / 100,
-                        'received' => $sum['received'] / 100,
-                        'unallocated' => ($sum['received'] - $sum['settled']) / 100,
-                        'balance' => ($sum['advanced'] - $sum['received']) / 100,
+                        'advanced' => (float) ($sum['advanced'] / 100),
+                        'settled' => (float) ($sum['settled'] / 100),
+                        'outstanding' => (float) (($sum['advanced'] - $sum['settled']) / 100),
+                        'received' => (float) ($sum['received'] / 100),
+                        'unallocated' => (float) (($sum['received'] - $sum['settled']) / 100),
+                        'balance' => (float) (($sum['advanced'] - $sum['received']) / 100),
                     ])
                     ->values()
                     ->all(),
@@ -266,8 +266,8 @@ class CounterpartyService
                 'amount' => (float) $expense->amount,
                 'currency' => $expense->currency,
                 'description' => $expense->description,
-                'settled' => ($settledOfExpense[$expense->id] ?? 0) / 100,
-                'remaining' => (SettlementService::cents($expense->amount) - ($settledOfExpense[$expense->id] ?? 0)) / 100,
+                'settled' => (float) (($settledOfExpense[$expense->id] ?? 0) / 100),
+                'remaining' => (float) ((SettlementService::cents($expense->amount) - ($settledOfExpense[$expense->id] ?? 0)) / 100),
             ])->values()->all(),
             'repayments' => $incomes->map(function (Transaction $income) use ($settledOfIncome, $open) {
                 $unallocated = SettlementService::cents($income->amount) - ($settledOfIncome[$income->id] ?? 0);
@@ -278,8 +278,8 @@ class CounterpartyService
                     'amount' => (float) $income->amount,
                     'currency' => $income->currency,
                     'description' => $income->description,
-                    'allocated' => ($settledOfIncome[$income->id] ?? 0) / 100,
-                    'unallocated' => $unallocated / 100,
+                    'allocated' => (float) (($settledOfIncome[$income->id] ?? 0) / 100),
+                    'unallocated' => (float) ($unallocated / 100),
                     'suggestion' => SettlementService::fifo(
                         $open->where('currency', $income->currency)->map(fn (array $advance) => ['id' => $advance['id'], 'remaining' => $advance['remaining']])->values()->all(),
                         $unallocated,
