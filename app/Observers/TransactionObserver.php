@@ -6,6 +6,7 @@ use App\Enums\TransactionType;
 use App\Models\Account;
 use App\Models\Payment;
 use App\Models\Transaction;
+use App\Models\TransactionSettlement;
 use RuntimeException;
 
 /**
@@ -18,6 +19,15 @@ class TransactionObserver
     {
         $account = Account::withTrashed()->findOrFail($transaction->account_id);
         $transaction->currency = $account->currency;
+
+        // Only an expense can be an advance, only for someone, and a transfer is nobody's.
+        if ($transaction->type === TransactionType::Transfer) {
+            $transaction->counterparty_id = null;
+        }
+
+        if ($transaction->type !== TransactionType::Expense || $transaction->counterparty_id === null) {
+            $transaction->is_advance = false;
+        }
 
         if ($transaction->type !== TransactionType::Transfer) {
             $transaction->to_account_id = null;
@@ -68,6 +78,11 @@ class TransactionObserver
     public function deleted(Transaction $transaction): void
     {
         Payment::where('transaction_id', $transaction->id)->update(['transaction_id' => null]);
+
+        // A deleted transaction settles nothing (a restored one starts unsettled), so the others stay consistent.
+        TransactionSettlement::where('income_transaction_id', $transaction->id)
+            ->orWhere('expense_transaction_id', $transaction->id)
+            ->delete();
 
         $this->recalculate($transaction);
     }
