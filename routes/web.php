@@ -6,7 +6,9 @@ use App\Http\Controllers\CurrencyController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\RecurringPaymentController;
+use App\Http\Controllers\TransactionCleanupController;
 use App\Http\Controllers\TransactionController;
+use App\Http\Controllers\TransactionSuggestionController;
 use App\Models\Setting;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -29,6 +31,13 @@ Route::get('dashboard', [DashboardController::class, 'index'])
 Route::middleware('auth')->group(function () {
     Route::resource('accounts', AccountController::class)->except(['create', 'edit']);
     Route::resource('categories', CategoryController::class)->except(['create', 'edit']);
+    Route::get('transactions/shortcuts', [TransactionSuggestionController::class, 'shortcuts'])->name('transactions.shortcuts');
+    Route::get('transactions/suggest-category', [TransactionSuggestionController::class, 'category'])->middleware('throttle:60,1')->name('transactions.suggestCategory');
+    Route::controller(TransactionCleanupController::class)->prefix('transactions/cleanup')->name('cleanup.')->group(function () {
+        Route::get('/', 'index')->name('index');
+        Route::post('apply-all', 'applyAll')->name('applyAll');
+        Route::patch('{transaction}', 'apply')->name('apply');
+    });
     Route::resource('transactions', TransactionController::class)->except(['create', 'edit', 'show']);
     Route::get('transactions/{transaction}/files/{file}/download', [TransactionController::class, 'downloadFile'])->name('transactions.files.download');
     Route::resource('planned-payments', RecurringPaymentController::class)->except(['create', 'edit'])->parameters(['planned-payments' => 'recurring_payment']);
