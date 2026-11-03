@@ -55,7 +55,7 @@ class TransactionShortcutService
             ->orderByDesc('id')
             ->get(['id', 'account_id', 'category_id', 'type', 'amount', 'description', 'date', 'created_at']);
 
-        return $transactions
+        $shortcuts = $transactions
             ->groupBy(fn (Transaction $transaction) => implode('|', [
                 $transaction->account_id,
                 $transaction->category_id,
@@ -82,7 +82,22 @@ class TransactionShortcutService
             ->filter(fn (array $shortcut) => $shortcut['count'] >= self::MIN_OCCURRENCES)
             ->sortByDesc(fn (array $shortcut) => $shortcut['count'] * ($shortcut['boosted'] ? self::TIME_BOOST : 1))
             ->take(self::MAX_SHORTCUTS)
-            ->values();
+            ->values()
+            ->all();
+
+        return $this->shortcutRows($shortcuts);
+    }
+
+    /**
+     * Keeps the declared shape: a collection's value type is invariant, so the narrower
+     * types PHPStan infers (e.g. a count of at least 5) would not match the declared return type.
+     *
+     * @param  array<int, array{account_id: int, category_id: int|null, type: string, amount: string, description: string|null, count: int, boosted: bool}>  $shortcuts
+     * @return Collection<int, array{account_id: int, category_id: int|null, type: string, amount: string, description: string|null, count: int, boosted: bool}>
+     */
+    private function shortcutRows(array $shortcuts): Collection
+    {
+        return new Collection($shortcuts);
     }
 
     /**

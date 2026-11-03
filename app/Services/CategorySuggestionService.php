@@ -56,7 +56,7 @@ class CategorySuggestionService
      */
     public function history(User $user, TransactionType $type): Collection
     {
-        return $user->transactions()
+        $entries = $user->transactions()
             ->where('type', $type->value)
             ->whereNotNull('description')
             ->whereIn('category_id', $user->categories()->where('type', $type->value)->select('id'))
@@ -67,12 +67,27 @@ class CategorySuggestionService
             ->groupBy(fn ($transaction) => $transaction->category_id.'|'.DescriptionMatcher::normalize($transaction->description))
             ->map(fn (Collection $group): array => [
                 'normalized' => DescriptionMatcher::normalize($group->first()->description),
-                'description' => $group->first()->description,
+                'description' => (string) $group->first()->description,
                 'category_id' => (int) $group->first()->category_id,
                 'count' => $group->count(),
             ])
             ->filter(fn (array $entry) => $entry['normalized'] !== '')
-            ->values();
+            ->values()
+            ->all();
+
+        return $this->historyEntries($entries);
+    }
+
+    /**
+     * Keeps the declared shape: a collection's value type is invariant, so the narrower
+     * types PHPStan infers from the query would not match the declared return type.
+     *
+     * @param  array<int, array{normalized: string, description: string, category_id: int, count: int}>  $entries
+     * @return Collection<int, array{normalized: string, description: string, category_id: int, count: int}>
+     */
+    private function historyEntries(array $entries): Collection
+    {
+        return new Collection($entries);
     }
 
     /**
