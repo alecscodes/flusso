@@ -4,7 +4,6 @@ namespace App\Services\Ai;
 
 use App\Enums\AiFeature;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 use Laravel\Ai\Ai;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Providers\Provider;
@@ -18,6 +17,9 @@ use Throwable;
  */
 class AiManager
 {
+    /** Drivers that work without an API key (local models and gateways). */
+    private const KEYLESS_DRIVERS = ['ollama', 'openai-compatible'];
+
     public function __construct(private readonly AiSettings $settings) {}
 
     /**
@@ -32,6 +34,10 @@ class AiManager
         }
 
         if ($config['driver'] === 'openai-compatible' && $config['url'] === null) {
+            return false;
+        }
+
+        if (! in_array($config['driver'], self::KEYLESS_DRIVERS, true) && $this->apiKey($config['driver'], $config['api_key']) === null) {
             return false;
         }
 
@@ -57,10 +63,24 @@ class AiManager
         return Ai::build([
             ...$base,
             'driver' => $config['driver'],
-            'key' => $config['api_key'] ?? '',
+            'key' => $this->apiKey($config['driver'], $config['api_key']) ?? '',
             ...($config['url'] !== null ? ['url' => $config['url']] : []),
             'models' => ['text' => ['default' => $config['model']]],
         ]);
+    }
+
+    /**
+     * The key saved in the settings, else the one the deployment sets for the provider in its environment.
+     */
+    private function apiKey(string $driver, ?string $saved): ?string
+    {
+        if ($saved !== null) {
+            return $saved;
+        }
+
+        $fromConfig = config("ai.providers.{$driver}.key");
+
+        return is_string($fromConfig) && $fromConfig !== '' ? $fromConfig : null;
     }
 
     /**
@@ -78,11 +98,10 @@ class AiManager
         try {
             return $agent->prompt($prompt, attachments: $attachments, provider: [$this->provider()], timeout: $timeout);
         } catch (Throwable $exception) {
-            // Never log the prompt or the response: they hold the user's financial data.
+            // Only the class: the message can carry the request URL (and a key in it) or an echo of the prompt.
             Log::warning('AI request failed.', [
                 'agent' => $agent::class,
                 'exception' => $exception::class,
-                'message' => Str::limit($exception->getMessage(), 200),
             ]);
 
             return null;
