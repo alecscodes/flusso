@@ -66,7 +66,12 @@ class LiquidityService
      */
     public function atRisk(User $user, int $days = self::DEFAULT_DAYS): Collection
     {
-        return $this->forecast($user, $days)->filter(fn (array $row) => $row['is_at_risk'])->values();
+        $atRisk = array_values(array_filter(
+            $this->forecast($user, $days)->all(),
+            fn (array $row): bool => $row['is_at_risk'],
+        ));
+
+        return new Collection($atRisk);
     }
 
     /**
@@ -186,7 +191,7 @@ class LiquidityService
 
             $lines[] = [
                 'id' => $payment->id,
-                'name' => $payment->recurringPayment?->name ?? $payment->description ?? 'Payment',
+                'name' => $payment->recurringPayment->name,
                 'due_date' => $dueDate,
                 'amount' => $this->money($amount),
                 'overdue' => $dueDate < $today,
