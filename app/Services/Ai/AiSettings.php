@@ -17,6 +17,9 @@ class AiSettings
 {
     public const KEY = 'ai_config';
 
+    /** @var AiConfig|null */
+    private ?array $config = null;
+
     /**
      * Text providers of the Laravel AI SDK that need nothing beyond a key, a URL and a model.
      *
@@ -39,6 +42,14 @@ class AiSettings
      * @return AiConfig
      */
     public function all(): array
+    {
+        return $this->config ??= $this->load();
+    }
+
+    /**
+     * @return AiConfig
+     */
+    private function load(): array
     {
         $stored = json_decode((string) Setting::get(self::KEY, ''), true);
         $stored = is_array($stored) ? $stored : [];
@@ -74,8 +85,8 @@ class AiSettings
         $current = $this->all();
 
         $apiKey = match (true) {
-            (bool) ($input['clear_api_key'] ?? false) => null,
             is_string($input['api_key'] ?? null) && trim($input['api_key']) !== '' => trim($input['api_key']),
+            (bool) ($input['clear_api_key'] ?? false) => null,
             default => $current['api_key'],
         };
 
@@ -93,6 +104,8 @@ class AiSettings
             'vision' => (bool) ($input['vision'] ?? false),
             'features' => $features,
         ], JSON_THROW_ON_ERROR));
+
+        $this->config = null;
     }
 
     private function filled(mixed $value): ?string
