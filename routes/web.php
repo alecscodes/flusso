@@ -6,6 +6,7 @@ use App\Http\Controllers\CurrencyController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\RecurringPaymentController;
+use App\Http\Controllers\StatementController;
 use App\Http\Controllers\TransactionController;
 use App\Models\Setting;
 use Illuminate\Support\Facades\Route;
@@ -40,6 +41,15 @@ Route::middleware('auth')->group(function () {
         Route::patch('{payment}/unskip', 'unskip')->name('unskip');
         Route::patch('{payment}/mark-paid', 'markPaid')->name('mark-paid');
         Route::patch('{payment}/mark-unpaid', 'markUnpaid')->name('mark-unpaid');
+    });
+    Route::controller(StatementController::class)->prefix('statements')->name('statements.')->group(function () {
+        Route::get('/', 'index')->name('index');
+        Route::post('/', 'store')->name('store');
+        Route::get('{statement}', 'show')->name('show');
+        Route::patch('{statement}', 'update')->name('update');
+        Route::delete('{statement}', 'destroy')->name('destroy');
+        Route::get('{statement}/download', 'download')->name('download');
+        Route::post('{statement}/reparse', 'reparse')->name('reparse');
     });
     Route::get('currency/rates', [CurrencyController::class, 'getRates'])->name('currency.rates');
 });
