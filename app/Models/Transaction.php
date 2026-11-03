@@ -44,7 +44,16 @@ class Transaction extends Model
         'date',
         'to_account_id',
         'to_amount',
+        'counterparty_id',
+        'is_advance',
     ];
+
+    /**
+     * Mirrors the column defaults, so a freshly created transaction has the attributes too.
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = ['counterparty_id' => null, 'is_advance' => false];
 
     protected function casts(): array
     {
@@ -52,6 +61,7 @@ class Transaction extends Model
             'type' => TransactionType::class,
             'amount' => 'decimal:2',
             'to_amount' => 'decimal:2',
+            'is_advance' => 'boolean',
             'date' => DateOnly::class,
         ];
     }
@@ -111,6 +121,32 @@ class Transaction extends Model
     public function recurringPayment(): BelongsTo
     {
         return $this->belongsTo(RecurringPayment::class);
+    }
+
+    /** @return BelongsTo<Counterparty, $this> */
+    public function counterparty(): BelongsTo
+    {
+        return $this->belongsTo(Counterparty::class);
+    }
+
+    /**
+     * Settlements that cover this expense (an advance), one per income.
+     *
+     * @return HasMany<TransactionSettlement, $this>
+     */
+    public function settlementsAsExpense(): HasMany
+    {
+        return $this->hasMany(TransactionSettlement::class, 'expense_transaction_id');
+    }
+
+    /**
+     * Settlements this income pays, one per expense.
+     *
+     * @return HasMany<TransactionSettlement, $this>
+     */
+    public function settlementsAsIncome(): HasMany
+    {
+        return $this->hasMany(TransactionSettlement::class, 'income_transaction_id');
     }
 
     /** @return HasOne<Payment, $this> */

@@ -40,7 +40,7 @@ class TransactionController extends Controller
         ]);
 
         $query = $user->transactions()
-            ->with(['account', 'category', 'toAccount', 'files'])
+            ->with(['account', 'category', 'toAccount', 'files', 'counterparty'])
             ->orderBy('date', 'desc')
             ->orderBy('created_at', 'desc');
 

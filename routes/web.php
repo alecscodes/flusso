@@ -2,12 +2,14 @@
 
 use App\Http\Controllers\AccountController;
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\CounterpartyController;
 use App\Http\Controllers\CurrencyController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\LiquidityAlertController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\ReceiptController;
 use App\Http\Controllers\RecurringPaymentController;
+use App\Http\Controllers\SettlementController;
 use App\Http\Controllers\TransactionCleanupController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\TransactionSuggestionController;
@@ -55,6 +57,11 @@ Route::middleware('auth')->group(function () {
         Route::patch('{payment}/mark-unpaid', 'markUnpaid')->name('mark-unpaid');
     });
     Route::post('liquidity-alerts/read', [LiquidityAlertController::class, 'markRead'])->name('liquidity-alerts.read');
+    Route::get('counterparties/options', [CounterpartyController::class, 'options'])->name('counterparties.options');
+    Route::resource('counterparties', CounterpartyController::class)->except(['create', 'edit']);
+    Route::post('counterparties/{counterparty}/assign', [CounterpartyController::class, 'assign'])->name('counterparties.assign');
+    Route::post('settlements', [SettlementController::class, 'store'])->name('settlements.store');
+    Route::delete('settlements/{settlement}', [SettlementController::class, 'destroy'])->name('settlements.destroy');
     Route::get('currency/rates', [CurrencyController::class, 'getRates'])->name('currency.rates');
 });
 
