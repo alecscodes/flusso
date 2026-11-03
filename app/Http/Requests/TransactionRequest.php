@@ -56,6 +56,9 @@ class TransactionRequest extends FormRequest
             'to_account_id' => ['required_if:type,transfer', 'nullable', 'integer', 'different:account_id', 'prohibited_unless:type,transfer', $user->ownedAccountRule($transaction?->to_account_id)],
             'amount' => ['required', 'numeric', 'min:0.01', 'max:9999999999.99', 'decimal:0,2'],
             'to_amount' => ['nullable', 'numeric', 'min:0.01', 'max:9999999999.99', 'decimal:0,2', 'prohibited_unless:type,transfer', fn (string $attribute, mixed $value, Closure $fail) => self::sameCurrencyReceivesWhatLeft($user, $input, $value, $fail)],
+            'counterparty_id' => ['nullable', 'integer', 'prohibited_if:type,transfer', Rule::exists('counterparties', 'id')->where('user_id', $user->id)],
+            'counterparty_name' => ['nullable', 'string', 'max:100', 'prohibited_if:type,transfer'],
+            'is_advance' => ['nullable', 'boolean', fn (string $attribute, mixed $value, Closure $fail) => self::advanceIsAnExpenseForSomeone($input, $value, $fail)],
             'description' => ['nullable', 'string', 'max:1000'],
             'date' => ['required', 'date_format:Y-m-d'],
             'files' => ['nullable', 'array', 'max:5'],
@@ -78,7 +81,26 @@ class TransactionRequest extends FormRequest
             'account_id.required' => 'Account is required.',
             'to_account_id.different' => 'Cannot transfer to the same account.',
             'to_account_id.required_if' => 'Choose the account the money goes to.',
+            'counterparty_id.exists' => 'Choose one of your people.',
         ];
+    }
+
+    /**
+     * "I paid this for them" only makes sense on an expense, and needs the person.
+     *
+     * @param  array<string, mixed>  $input
+     */
+    private static function advanceIsAnExpenseForSomeone(array $input, mixed $isAdvance, Closure $fail): void
+    {
+        if (! filter_var($isAdvance, FILTER_VALIDATE_BOOLEAN)) {
+            return;
+        }
+
+        if (($input['type'] ?? null) !== TransactionType::Expense->value) {
+            $fail('Only an expense can be paid for someone else.');
+        } elseif (! filled($input['counterparty_id'] ?? null) && ! filled($input['counterparty_name'] ?? null)) {
+            $fail('Choose who this was paid for.');
+        }
     }
 
     /**
