@@ -3,6 +3,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { edit as appearanceEdit } from '@/routes/appearance';
 import { index as bannedIpsIndex } from '@/routes/settings/banned-ips';
 import { index as connectedAppsIndex } from '@/routes/settings/connected-apps';
+import { edit as aiEdit } from '@/routes/settings/ai';
 import { edit as profileEdit } from '@/routes/profile';
 import { edit as registrationEdit } from '@/routes/settings/registration';
 import { edit as financeEdit } from '@/routes/settings/finance';
@@ -11,6 +12,7 @@ import { edit as passwordEdit } from '@/routes/user-password';
 import { Link, usePage } from '@inertiajs/vue3';
 import {
     KeyRound,
+    Sparkles,
     Palette,
     Plug,
     Shield,
@@ -42,6 +44,7 @@ const navigation = [
         ownerOnly: true,
     },
     { name: 'Finance', href: financeEdit.url(), icon: Wallet },
+    { name: 'AI', href: aiEdit.url(), icon: Sparkles, ownerOnly: true },
 ].filter((item) => !item.ownerOnly || page.props.auth.canManageInstance);
 
 const isActive = (href: string) => page.url.split('?')[0] === href;
