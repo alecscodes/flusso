@@ -30,7 +30,7 @@ class SettlementController extends Controller
     {
         $settlement->load('income');
 
-        abort_unless($settlement->income?->user_id === $request->user()->id, 403);
+        abort_unless($settlement->income->user_id === $request->user()->id, 403);
 
         $this->settlementService->remove($settlement);
 

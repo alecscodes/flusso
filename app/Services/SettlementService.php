@@ -283,14 +283,24 @@ class SettlementService
             return new Collection;
         }
 
-        return $transactions->clone()->whereKey($settled->keys()->all())->get(['id', 'category_id', 'currency'])
-            ->groupBy(fn (Transaction $transaction) => $transaction->category_id.'|'.$transaction->currency)
-            ->map(fn (Collection $group) => [
-                'category_id' => $group->first()->category_id,
-                'currency' => $group->first()->currency,
-                'settled' => (float) $group->sum(fn (Transaction $transaction) => $settled[$transaction->id]),
-            ])
-            ->values();
+        $groups = [];
+
+        foreach ($transactions->clone()->whereKey($settled->keys()->all())->get(['id', 'category_id', 'currency']) as $transaction) {
+            $key = $transaction->category_id.'|'.$transaction->currency;
+            $groups[$key] ??= ['category_id' => $transaction->category_id, 'currency' => $transaction->currency, 'settled' => 0.0];
+            $groups[$key]['settled'] += (float) $settled[$transaction->id];
+        }
+
+        return $this->settledRows(array_values($groups));
+    }
+
+    /**
+     * @param  array<int, array{category_id: int|null, currency: string, settled: float}>  $rows
+     * @return Collection<int, array{category_id: int|null, currency: string, settled: float}>
+     */
+    private function settledRows(array $rows): Collection
+    {
+        return new Collection($rows);
     }
 
     private function column(TransactionType $side): string

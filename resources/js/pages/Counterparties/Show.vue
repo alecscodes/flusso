@@ -93,16 +93,16 @@ const selectedIncome = computed(
 
 const openAdvances = computed(() =>
     props.advances.filter(
-        (a) =>
-            a.remaining > 0 &&
-            a.currency === selectedIncome.value?.currency,
+        (a) => a.remaining > 0 && a.currency === selectedIncome.value?.currency,
     ),
 );
 
 const allocated = computed(() =>
     openAdvances.value.reduce(
         (sum, a) =>
-            picked.value[a.id] ? sum + (parseFloat(amounts.value[a.id]) || 0) : sum,
+            picked.value[a.id]
+                ? sum + (parseFloat(amounts.value[a.id]) || 0)
+                : sum,
         0,
     ),
 );
@@ -141,7 +141,9 @@ function applySuggestion() {
 watch(
     openRepayments,
     (repayments) => {
-        if (!repayments.some((r) => r.id.toString() === selectedIncomeId.value)) {
+        if (
+            !repayments.some((r) => r.id.toString() === selectedIncomeId.value)
+        ) {
             selectedIncomeId.value = repayments[0]?.id.toString() ?? '';
         }
 
@@ -159,7 +161,9 @@ function settle() {
 
     form.income_id = selectedIncome.value.id;
     form.allocations = openAdvances.value
-        .filter((a) => picked.value[a.id] && parseFloat(amounts.value[a.id]) > 0)
+        .filter(
+            (a) => picked.value[a.id] && parseFloat(amounts.value[a.id]) > 0,
+        )
         .map((a) => ({ expense_id: a.id, amount: amounts.value[a.id] }));
 
     form.post(storeSettlement.url(), { preserveScroll: true });

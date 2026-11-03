@@ -201,27 +201,38 @@ class CounterpartyService
             $totals[$row->counterparty_id][$row->currency]['settled'] += SettlementService::cents($row->total);
         }
 
-        return $user->counterparties()
-            ->when($counterpartyId !== null, fn ($query) => $query->whereKey($counterpartyId))
-            ->orderBy('name')
-            ->get()
-            ->map(fn (Counterparty $counterparty) => [
-                'id' => $counterparty->id,
-                'name' => $counterparty->name,
-                'balances' => collect($totals[$counterparty->id] ?? [])
-                    ->sortKeys()
-                    ->map(fn (array $sum, string $currency) => [
-                        'currency' => $currency,
-                        'advanced' => (float) ($sum['advanced'] / 100),
-                        'settled' => (float) ($sum['settled'] / 100),
-                        'outstanding' => (float) (($sum['advanced'] - $sum['settled']) / 100),
-                        'received' => (float) ($sum['received'] / 100),
-                        'unallocated' => (float) (($sum['received'] - $sum['settled']) / 100),
-                        'balance' => (float) (($sum['advanced'] - $sum['received']) / 100),
-                    ])
-                    ->values()
-                    ->all(),
-            ]);
+        $rows = [];
+
+        foreach ($user->counterparties()->when($counterpartyId !== null, fn ($query) => $query->whereKey($counterpartyId))->orderBy('name')->get() as $counterparty) {
+            $balances = [];
+            $byCurrency = $totals[$counterparty->id] ?? [];
+            ksort($byCurrency);
+
+            foreach ($byCurrency as $currency => $sum) {
+                $balances[] = [
+                    'currency' => (string) $currency,
+                    'advanced' => (float) ($sum['advanced'] / 100),
+                    'settled' => (float) ($sum['settled'] / 100),
+                    'outstanding' => (float) (($sum['advanced'] - $sum['settled']) / 100),
+                    'received' => (float) ($sum['received'] / 100),
+                    'unallocated' => (float) (($sum['received'] - $sum['settled']) / 100),
+                    'balance' => (float) (($sum['advanced'] - $sum['received']) / 100),
+                ];
+            }
+
+            $rows[] = ['id' => $counterparty->id, 'name' => $counterparty->name, 'balances' => $balances];
+        }
+
+        return $this->balanceRows($rows);
+    }
+
+    /**
+     * @param  array<int, array{id: int, name: string, balances: list<array{currency: string, advanced: float, settled: float, outstanding: float, received: float, unallocated: float, balance: float}>}>  $rows
+     * @return Collection<int, array{id: int, name: string, balances: list<array{currency: string, advanced: float, settled: float, outstanding: float, received: float, unallocated: float, balance: float}>}>
+     */
+    private function balanceRows(array $rows): Collection
+    {
+        return new Collection($rows);
     }
 
     /**
