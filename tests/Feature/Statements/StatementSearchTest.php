@@ -43,8 +43,7 @@ function statementsArchive(User $user, string $text, array $lines = [], array $a
  */
 function statementsWithoutFts(): void
 {
-    app()->instance(StatementSearchIndex::class, new class extends StatementSearchIndex
-    {
+    app()->instance(StatementSearchIndex::class, new class extends StatementSearchIndex {
         public function isAvailable(): bool
         {
             return false;
