@@ -7,10 +7,12 @@ import { index as categoriesIndex } from '@/routes/categories';
 import { index as paymentsIndex } from '@/routes/payments';
 import { edit as profileEdit } from '@/routes/profile';
 import { index as recurringPaymentsIndex } from '@/routes/planned-payments';
+import { index as statementsIndex } from '@/routes/statements';
 import { index as transactionsIndex } from '@/routes/transactions';
 import type { User } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
 import {
+    Archive,
     ArrowLeftRight,
     CreditCard,
     LayoutDashboard,
@@ -52,6 +54,7 @@ const navigation = [
 
 const secondaryNavigation = [
     { name: 'Planned', href: recurringPaymentsIndex.url(), icon: RefreshCw },
+    { name: 'Statements', href: statementsIndex.url(), icon: Archive },
     { name: 'Categories', href: categoriesIndex.url(), icon: Tag },
     { name: 'Settings', href: profileEdit.url(), icon: Settings },
 ];

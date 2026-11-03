@@ -62,6 +62,12 @@ class User extends Authenticatable implements OAuthenticatable
         return $this->hasMany(Transaction::class);
     }
 
+    /** @return HasMany<Statement, $this> */
+    public function statements(): HasMany
+    {
+        return $this->hasMany(Statement::class);
+    }
+
     /** @return HasMany<RecurringPayment, $this> */
     public function recurringPayments(): HasMany
     {
