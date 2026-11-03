@@ -213,7 +213,8 @@ class StatementMatcher
             ->where('match_status', StatementLineStatus::Imported->value)
             ->where(fn ($query) => $query
                 ->whereNull('matched_transaction_id')
-                ->orWhereIn('matched_transaction_id', Transaction::onlyTrashed()->select('id')))
+                ->orWhereIn('matched_transaction_id', Transaction::onlyTrashed()->select('id'))
+                ->orWhereNotIn('matched_transaction_id', Transaction::withTrashed()->select('id')))
             ->update(['match_status' => StatementLineStatus::Unmatched->value, 'matched_transaction_id' => null]);
     }
 
