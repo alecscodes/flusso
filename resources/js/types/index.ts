@@ -4,6 +4,8 @@ export interface User {
     email: string;
     email_verified_at: string | null;
     reset_date: number | null;
+    /** Opt-in: totals count advances only until they are settled. */
+    count_advances_until_settled?: boolean;
     two_factor_confirmed_at: string | null;
     created_at: string;
     updated_at: string;
@@ -49,12 +51,17 @@ export interface Transaction {
     to_account_id: number | null;
     /** What arrived in the destination account (transfers only), in its currency. */
     to_amount: string | null;
+    /** The person this was paid for (an advance) or came from (a repayment). */
+    counterparty_id?: number | null;
+    /** An expense paid for the counterparty: they owe it back. */
+    is_advance?: boolean;
     created_at: string;
     updated_at: string;
     deleted_at: string | null;
     account?: Account;
     category?: Category;
     to_account?: Account;
+    counterparty?: { id: number; name: string } | null;
     files?: TransactionFile[];
 }
 
@@ -159,4 +166,21 @@ export interface CategorySpending {
     category: Category;
     total: number;
     count: number;
+}
+
+/** Per currency: what was advanced, settled and paid back. `balance` > 0 means they owe the owner, < 0 that they overpaid. */
+export interface CounterpartyBalanceRow {
+    currency: string;
+    advanced: number;
+    settled: number;
+    outstanding: number;
+    received: number;
+    unallocated: number;
+    balance: number;
+}
+
+export interface CounterpartyBalance {
+    id: number;
+    name: string;
+    balances: CounterpartyBalanceRow[];
 }
