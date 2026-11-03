@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Notifications\LiquidityAlert;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Will an account run dry? Deterministic: every figure is plain arithmetic on the ledger
@@ -105,30 +106,39 @@ class LiquidityService
      */
     public function notifyUser(User $user): int
     {
+        $states = LiquidityAlertState::query()
+            ->whereIn('account_id', $user->accounts()->withTrashed()->select('id')->toBase())
+            ->get()
+            ->keyBy(fn (LiquidityAlertState $state) => "{$state->account_id}:{$state->kind}");
         $active = [];
         $sent = 0;
 
         foreach ($this->forecast($user, self::NOTIFICATION_DAYS) as $row) {
             foreach ($this->activeKinds($row) as $kind => $signature) {
-                $active["{$row['account_id']}:{$kind}"] = true;
+                $key = "{$row['account_id']}:{$kind}";
+                $active[$key] = true;
+                $state = $states->get($key);
 
-                $state = LiquidityAlertState::firstOrNew(['account_id' => $row['account_id'], 'kind' => $kind]);
-
-                if ($state->exists && $state->signature === $signature) {
+                if ($state?->signature === $signature) {
                     continue;
                 }
 
-                $user->notify(new LiquidityAlert($row, $kind, $this->describe($row)));
-                $state->fill(['signature' => $signature, 'notified_at' => now()])->save();
+                DB::transaction(function () use ($user, $row, $kind, $signature) {
+                    $user->notify(new LiquidityAlert($row, $kind, $this->describe($row)));
+                    LiquidityAlertState::updateOrCreate(
+                        ['account_id' => $row['account_id'], 'kind' => $kind],
+                        ['signature' => $signature, 'notified_at' => now()],
+                    );
+                });
                 $sent++;
             }
         }
 
-        LiquidityAlertState::query()
-            ->whereIn('account_id', $user->accounts()->withTrashed()->pluck('id')->all())
-            ->get()
-            ->reject(fn (LiquidityAlertState $state) => isset($active["{$state->account_id}:{$state->kind}"]))
-            ->each->delete();
+        $cleared = $states->reject(fn (LiquidityAlertState $state, string $key) => isset($active[$key]));
+
+        if ($cleared->isNotEmpty()) {
+            LiquidityAlertState::query()->whereKey($cleared->modelKeys())->delete();
+        }
 
         return $sent;
     }
