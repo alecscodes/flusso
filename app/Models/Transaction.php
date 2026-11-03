@@ -61,7 +61,12 @@ class Transaction extends Model
         // Files go with the row only when it is gone for good, so a soft delete (e.g. marking a payment unpaid) can be restored.
         static::forceDeleting(function (Transaction $transaction) {
             $transaction->files()->get()->each(function (TransactionFile $file) {
-                Storage::disk('local')->delete($file->path);
+                $usedElsewhere = TransactionFile::where('path', $file->path)->whereKeyNot($file->id)->exists();
+
+                if (! $usedElsewhere) {
+                    Storage::disk('local')->delete($file->path);
+                }
+
                 $file->delete();
             });
         });
