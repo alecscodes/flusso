@@ -10,6 +10,7 @@ use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\ReceiptController;
 use App\Http\Controllers\RecurringPaymentController;
 use App\Http\Controllers\SettlementController;
+use App\Http\Controllers\StatementController;
 use App\Http\Controllers\TransactionCleanupController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\TransactionSuggestionController;
@@ -62,6 +63,15 @@ Route::middleware('auth')->group(function () {
     Route::post('counterparties/{counterparty}/assign', [CounterpartyController::class, 'assign'])->name('counterparties.assign');
     Route::post('settlements', [SettlementController::class, 'store'])->name('settlements.store');
     Route::delete('settlements/{settlement}', [SettlementController::class, 'destroy'])->name('settlements.destroy');
+    Route::controller(StatementController::class)->prefix('statements')->name('statements.')->group(function () {
+        Route::get('/', 'index')->name('index');
+        Route::post('/', 'store')->name('store');
+        Route::get('{statement}', 'show')->name('show');
+        Route::patch('{statement}', 'update')->name('update');
+        Route::delete('{statement}', 'destroy')->name('destroy');
+        Route::get('{statement}/download', 'download')->name('download');
+        Route::post('{statement}/reparse', 'reparse')->name('reparse');
+    });
     Route::get('currency/rates', [CurrencyController::class, 'getRates'])->name('currency.rates');
 });
 
