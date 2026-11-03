@@ -187,6 +187,7 @@ class CounterpartyService
         }
 
         $settled = TransactionSettlement::query()
+            ->live()
             ->join('transactions', 'transactions.id', '=', 'transaction_settlements.expense_transaction_id')
             ->where('transactions.user_id', $user->id)
             ->whereNull('transactions.deleted_at')
@@ -299,6 +300,7 @@ class CounterpartyService
                 ];
             })->values()->all(),
             'settlements' => TransactionSettlement::query()
+                ->live()
                 ->whereIn('income_transaction_id', $incomes->modelKeys())
                 ->orderBy('id')
                 ->get()

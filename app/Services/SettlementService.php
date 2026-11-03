@@ -50,6 +50,7 @@ class SettlementService
         $column = $this->column($side);
 
         return TransactionSettlement::query()
+            ->live()
             ->whereIn($column, $transactionIds)
             ->groupBy($column)
             ->selectRaw("{$column} as transaction_id, sum(amount) as settled")
@@ -120,6 +121,7 @@ class SettlementService
                 $available -= $cents;
 
                 $existing = TransactionSettlement::query()
+                    ->live()
                     ->where('income_transaction_id', $income->id)
                     ->where('expense_transaction_id', $expense->id)
                     ->first();
@@ -240,8 +242,9 @@ class SettlementService
      */
     public function assertStillConsistent(Transaction $transaction): void
     {
-        $asExpense = $transaction->settlementsAsExpense()->with('income')->get();
-        $asIncome = $transaction->settlementsAsIncome()->with('expense')->get();
+        // Every row, also those of deleted transactions: restoring them must still make sense.
+        $asExpense = $transaction->settlementsAsExpense()->with(['income' => fn ($query) => $query->withTrashed()])->get();
+        $asIncome = $transaction->settlementsAsIncome()->with(['expense' => fn ($query) => $query->withTrashed()])->get();
 
         if ($asExpense->isEmpty() && $asIncome->isEmpty()) {
             return;
@@ -277,6 +280,41 @@ class SettlementService
     }
 
     /**
+     * After a restore the transaction's settlements count again. If its counterpart was settled
+     * past its amount in the meantime, the restored rows give way (the newer settlements win).
+     */
+    public function reconcileRestored(Transaction $transaction): void
+    {
+        $rows = TransactionSettlement::query()
+            ->live()
+            ->where(fn (Builder $query) => $query
+                ->where('income_transaction_id', $transaction->id)
+                ->orWhere('expense_transaction_id', $transaction->id))
+            ->get();
+
+        foreach ($rows as $row) {
+            $restoredIsIncome = $row->income_transaction_id === $transaction->id;
+            $counterpartId = $restoredIsIncome ? $row->expense_transaction_id : $row->income_transaction_id;
+            $side = $restoredIsIncome ? TransactionType::Expense : TransactionType::Income;
+
+            $counterpartAmount = self::cents(Transaction::query()->whereKey($counterpartId)->value('amount'));
+            $overflow = ($this->settledCents([$counterpartId], $side)[$counterpartId] ?? 0) - $counterpartAmount;
+
+            if ($overflow <= 0) {
+                continue;
+            }
+
+            $kept = self::cents($row->amount) - $overflow;
+
+            if ($kept > 0) {
+                $row->update(['amount' => self::decimal($kept)]);
+            } else {
+                $row->delete();
+            }
+        }
+    }
+
+    /**
      * The settled part of a set of expenses or incomes, per category and currency: what the
      * opt-in "net" totals take off. Pass a query already limited to the transactions that count.
      *
@@ -288,6 +326,7 @@ class SettlementService
         $column = $this->column($side);
 
         $settled = TransactionSettlement::query()
+            ->live()
             ->whereIn($column, $transactions->clone()->select('id'))
             ->groupBy($column)
             ->selectRaw("{$column} as transaction_id, sum(amount) as settled")

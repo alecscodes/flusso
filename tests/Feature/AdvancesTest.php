@@ -519,29 +519,56 @@ test('an edit that would break an existing settlement is refused and rolled back
     expect($expense->fresh()->amount)->toBe('90.00');
 });
 
-test('deleting a transaction removes its settlements and keeps the others consistent', function () {
+test('a deleted transaction keeps its settlements but they count for nothing until it is restored', function () {
     [$user, $account, $person] = advancesSetup();
     $first = advancesBook($user, $account, 'expense', 100, $person);
     $second = advancesBook($user, $account, 'expense', 50, $person);
     $income = advancesBook($user, $account, 'income', 120, $person);
     app(SettlementService::class)->allocate($user, $income, [['expense_id' => $first->id, 'amount' => 100], ['expense_id' => $second->id, 'amount' => 20]]);
+    $balances = fn () => app(CounterpartyService::class)->balances($user)->first()['balances'][0];
 
     app(TransactionService::class)->deleteTransaction($first);
 
-    expect(TransactionSettlement::count())->toBe(1)
-        ->and(TransactionSettlement::first()->expense_transaction_id)->toBe($second->id)
-        ->and(app(CounterpartyService::class)->balances($user)->first()['balances'][0])->toMatchArray([
+    expect(TransactionSettlement::count())->toBe(2)
+        ->and(TransactionSettlement::live()->count())->toBe(1)
+        ->and($balances())->toMatchArray([
             'advanced' => 50.0, 'settled' => 20.0, 'outstanding' => 30.0, 'received' => 120.0, 'unallocated' => 100.0, 'balance' => -70.0,
         ]);
 
     $first->restore();
 
-    expect(TransactionSettlement::count())->toBe(1);
+    expect(TransactionSettlement::live()->count())->toBe(2)
+        ->and($balances())->toMatchArray([
+            'advanced' => 150.0, 'settled' => 120.0, 'outstanding' => 30.0, 'received' => 120.0, 'unallocated' => 0.0, 'balance' => 30.0,
+        ]);
 
     app(TransactionService::class)->deleteTransaction($income);
 
-    expect(TransactionSettlement::count())->toBe(0)
-        ->and(app(CounterpartyService::class)->balances($user)->first()['balances'][0])->toMatchArray(['advanced' => 150.0, 'settled' => 0.0, 'received' => 0.0, 'balance' => 150.0]);
+    expect(TransactionSettlement::count())->toBe(2)
+        ->and(TransactionSettlement::live()->count())->toBe(0)
+        ->and($balances())->toMatchArray(['advanced' => 150.0, 'settled' => 0.0, 'received' => 0.0, 'balance' => 150.0]);
+
+    $newIncome = advancesBook($user, $account, 'income', 150, $person);
+    app(SettlementService::class)->allocate($user, $newIncome, advancesAllocation($first, 100));
+
+    expect(TransactionSettlement::live()->count())->toBe(1);
+});
+
+test('restoring a transaction trims settlements that were made past its counterpart meanwhile', function () {
+    [$user, $account, $person] = advancesSetup();
+    $expense = advancesBook($user, $account, 'expense', 100, $person);
+    $first = advancesBook($user, $account, 'income', 100, $person);
+    $second = advancesBook($user, $account, 'income', 100, $person);
+    $service = app(SettlementService::class);
+    $service->allocate($user, $first, advancesAllocation($expense, 100));
+
+    app(TransactionService::class)->deleteTransaction($first);
+    $service->allocate($user, $second, advancesAllocation($expense, 100));
+    $first->restore();
+
+    expect($service->settledCents([$expense->id], TransactionType::Expense))->toBe([$expense->id => 10000])
+        ->and($service->settledCents([$first->id], TransactionType::Income))->toBe([])
+        ->and(TransactionSettlement::live()->count())->toBe(1);
 });
 
 test('deleting a person unlinks their transactions and drops the settlements', function () {

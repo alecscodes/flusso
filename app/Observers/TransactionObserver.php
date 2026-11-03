@@ -6,7 +6,7 @@ use App\Enums\TransactionType;
 use App\Models\Account;
 use App\Models\Payment;
 use App\Models\Transaction;
-use App\Models\TransactionSettlement;
+use App\Services\SettlementService;
 use RuntimeException;
 
 /**
@@ -79,16 +79,14 @@ class TransactionObserver
     {
         Payment::where('transaction_id', $transaction->id)->update(['transaction_id' => null]);
 
-        // A deleted transaction settles nothing (a restored one starts unsettled), so the others stay consistent.
-        TransactionSettlement::where('income_transaction_id', $transaction->id)
-            ->orWhere('expense_transaction_id', $transaction->id)
-            ->delete();
-
         $this->recalculate($transaction);
     }
 
     public function restored(Transaction $transaction): void
     {
+        // Its settlements count again; trim any that the other side has meanwhile been settled past.
+        app(SettlementService::class)->reconcileRestored($transaction);
+
         $this->recalculate($transaction);
     }
 

@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::table('transactions', function (Blueprint $table) {
             $table->foreignId('counterparty_id')->nullable()->constrained()->nullOnDelete();
             $table->boolean('is_advance')->default(false);
+            $table->index(['user_id', 'counterparty_id']);
         });
     }
 
@@ -23,6 +24,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('transactions', function (Blueprint $table) {
+            $table->dropIndex(['user_id', 'counterparty_id']);
             $table->dropConstrainedForeignId('counterparty_id');
             $table->dropColumn('is_advance');
         });
