@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AiFeature;
 use App\Http\Requests\TransactionRequest;
 use App\Models\Transaction;
 use App\Models\TransactionFile;
 use App\Services\AccountService;
+use App\Services\Ai\AiManager;
 use App\Services\CategoryService;
 use App\Services\CurrencyService;
 use App\Services\TransactionService;
@@ -26,7 +28,7 @@ class TransactionController extends Controller
         private CurrencyService $currencyService,
     ) {}
 
-    public function index(Request $request): Response
+    public function index(Request $request, AiManager $ai): Response
     {
         $this->authorize('viewAny', Transaction::class);
 
@@ -61,6 +63,7 @@ class TransactionController extends Controller
                 : [],
             'hasDateFilters' => $hasDateFilters,
             'primaryCurrency' => $this->currencyService->getPrimaryCurrency($user),
+            'receiptScanEnabled' => $ai->isEnabled(AiFeature::Receipts),
         ]);
     }
 

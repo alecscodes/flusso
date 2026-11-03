@@ -6,6 +6,7 @@ use App\Http\Controllers\CurrencyController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\RecurringPaymentController;
+use App\Http\Controllers\ReceiptController;
 use App\Http\Controllers\TransactionController;
 use App\Models\Setting;
 use Illuminate\Support\Facades\Route;
@@ -31,6 +32,8 @@ Route::middleware('auth')->group(function () {
     Route::resource('categories', CategoryController::class)->except(['create', 'edit']);
     Route::resource('transactions', TransactionController::class)->except(['create', 'edit', 'show']);
     Route::get('transactions/{transaction}/files/{file}/download', [TransactionController::class, 'downloadFile'])->name('transactions.files.download');
+    Route::post('receipts/scan', [ReceiptController::class, 'scan'])->middleware('throttle:20,1')->name('receipts.scan');
+    Route::post('receipts', [ReceiptController::class, 'store'])->name('receipts.store');
     Route::resource('planned-payments', RecurringPaymentController::class)->except(['create', 'edit'])->parameters(['planned-payments' => 'recurring_payment']);
     Route::controller(PaymentController::class)->prefix('payments')->name('payments.')->group(function () {
         Route::get('/', 'index')->name('index');
