@@ -101,6 +101,7 @@ class TransactionCleanupController extends Controller
 
             $this->uncategorized($user)
                 ->where('type', $type->value)
+                ->with('user')
                 ->limit(self::APPLY_ALL_LIMIT)
                 ->get()
                 ->each(function (Transaction $transaction) use ($history, &$applied): void {
@@ -134,6 +135,9 @@ class TransactionCleanupController extends Controller
 
     private function setCategory(Transaction $transaction, int $categoryId): void
     {
+        // The update path reads the owner; load it explicitly (lazy loading is off outside production).
+        $transaction->loadMissing('user');
+
         $this->transactionService->updateTransaction($transaction, [
             'account_id' => $transaction->account_id,
             'type' => $transaction->type,
