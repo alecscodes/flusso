@@ -90,6 +90,14 @@ test('an empty key keeps the stored one and the clear box removes it', function 
     expect(app(AiSettings::class)->all()['api_key'])->toBeNull();
 });
 
+test('a new key wins over the remove box when both are sent', function () {
+    app(AiSettings::class)->save(aiPayload(['api_key' => 'sk-old']));
+
+    actingAs($this->owner)->patch(route('settings.ai.update'), aiPayload(['api_key' => 'sk-new', 'clear_api_key' => true]))->assertRedirect();
+
+    expect(app(AiSettings::class)->all()['api_key'])->toBe('sk-new');
+});
+
 test('the configuration is validated', function () {
     actingAs($this->owner)->patch(route('settings.ai.update'), aiPayload(['driver' => 'skynet']))
         ->assertSessionHasErrors('driver');

@@ -48,15 +48,22 @@ const featureLabels: Record<string, { name: string; hint: string }> = {
 const enabled = ref(props.config.enabled);
 const vision = ref(props.config.vision);
 const driver = ref(props.config.driver);
+const url = ref(props.config.url ?? '');
 const clearApiKey = ref(false);
 const features = reactive<Record<string, boolean>>({
     ...props.config.features,
+});
+
+// A saved URL belongs to one provider: never carry it (and the key) over to another one.
+watch(driver, () => {
+    url.value = '';
 });
 
 watch(
     () => props.config,
     (config) => {
         enabled.value = config.enabled;
+        url.value = config.url ?? '';
         vision.value = config.vision;
         driver.value = config.driver;
         clearApiKey.value = false;
@@ -157,7 +164,7 @@ const urlHints: Record<string, string> = {
                     id="url"
                     name="url"
                     type="url"
-                    :default-value="config.url ?? ''"
+                    v-model="url"
                     :error="errors.url"
                     :placeholder="
                         urlHints[driver] ??
