@@ -116,9 +116,11 @@ class StatementMatcher
         $from = gmdate('Y-m-d', (int) (($dayNumbers->min() - self::DAY_WINDOW) * 86400));
         $to = gmdate('Y-m-d', (int) (($dayNumbers->max() + self::DAY_WINDOW) * 86400));
 
-        // Transactions already matched to (or imported from) lines outside this open set are taken.
+        // Transactions already matched to (or imported from) lines outside this open set are taken,
+        // but only by statements of this same account: a transfer is legitimately on two accounts' statements.
         $taken = StatementLine::query()
             ->where('user_id', $statement->user_id)
+            ->whereIn('statement_id', Statement::query()->where('account_id', $accountId)->select('id'))
             ->whereNotNull('matched_transaction_id')
             ->whereNotIn('id', $lines->modelKeys())
             ->pluck('matched_transaction_id')

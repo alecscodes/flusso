@@ -43,7 +43,8 @@ function statementsArchive(User $user, string $text, array $lines = [], array $a
  */
 function statementsWithoutFts(): void
 {
-    app()->instance(StatementSearchIndex::class, new class extends StatementSearchIndex {
+    app()->instance(StatementSearchIndex::class, new class extends StatementSearchIndex
+    {
         public function isAvailable(): bool
         {
             return false;
@@ -184,7 +185,7 @@ test('an empty search lists no results and a bad date range is rejected', functi
 });
 
 test('search words and highlights are built safely', function () {
-    expect(StatementSearch::terms("  pizza   \"  --  beer  "))->toBe(['pizza', 'beer']);
+    expect(StatementSearch::terms('  pizza   "  --  beer  '))->toBe(['pizza', 'beer']);
 
     $segments = StatementSearch::highlight('Pizza <b>Margherita</b>', ['pizza', 'b']);
 

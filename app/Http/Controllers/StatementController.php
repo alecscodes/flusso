@@ -158,7 +158,11 @@ class StatementController extends Controller
 
         $candidates = $this->matcher->candidates($statement);
         $pageIds = $lines->getCollection()->pluck('id')->all();
-        $statement->load('account:id,name,currency');
+        $statement->load('account:id,name,currency')->loadCount([
+            'lines',
+            'lines as matched_lines_count' => fn ($query) => $query->where('match_status', StatementLineStatus::Matched->value),
+            'lines as unmatched_lines_count' => fn ($query) => $query->where('match_status', StatementLineStatus::Unmatched->value),
+        ]);
 
         $counts = $statement->lines()
             ->selectRaw('match_status, count(*) as total')
