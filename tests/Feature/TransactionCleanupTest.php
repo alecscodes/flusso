@@ -169,6 +169,22 @@ test('applying all only uses confident history matches and never the model or ot
     CategorySuggestionAgent::assertNeverPrompted();
 });
 
+test('the transactions page tells how many transactions still lack a category', function () {
+    $user = User::factory()->create();
+    $account = Account::factory()->create(['user_id' => $user->id]);
+    $category = Category::factory()->create(['user_id' => $user->id, 'type' => 'expense']);
+    $other = User::factory()->create();
+
+    cleanupTransaction($user, $account, null, 'One');
+    cleanupTransaction($user, $account, null, 'Two');
+    cleanupTransaction($user, $account, $category, 'Filed');
+    cleanupTransaction($other, Account::factory()->create(['user_id' => $other->id]), null, 'Theirs');
+
+    actingAs($user)
+        ->get(route('transactions.index'))
+        ->assertInertia(fn (AssertableInertia $page) => $page->where('uncategorizedCount', 2));
+});
+
 test('guests cannot use the cleanup', function () {
     get(route('cleanup.index'))->assertRedirect(route('login'));
 });

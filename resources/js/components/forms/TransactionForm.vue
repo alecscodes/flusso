@@ -10,8 +10,11 @@ import {
 import { useDate } from '@/composables';
 import { rates } from '@/routes/currency';
 import type { Account, Category, Transaction } from '@/types';
+import type { TransactionShortcut } from '@/types/suggestions';
 import { useForm, useHttp } from '@inertiajs/vue3';
-import { computed, ref, useId, watch } from 'vue';
+import { computed, nextTick, ref, useId, watch } from 'vue';
+import CategorySuggestion from './CategorySuggestion.vue';
+import TransactionShortcuts from './TransactionShortcuts.vue';
 
 type TransactionType = Transaction['type'];
 
@@ -263,6 +266,17 @@ watch(
     },
 );
 
+// A shortcut only prefills: the owner still reviews and presses Add.
+async function applyShortcut(shortcut: TransactionShortcut) {
+    form.type = shortcut.type;
+    // Changing the type clears the category: wait for that before filling it in.
+    await nextTick();
+    form.account_id = shortcut.account_id.toString();
+    form.category_id = shortcut.category_id?.toString() ?? '';
+    form.amount = shortcut.amount;
+    form.description = shortcut.description ?? '';
+}
+
 function handleFileChange(event: Event) {
     const target = event.target as HTMLInputElement;
     if (target.files) {
@@ -294,6 +308,13 @@ function submit() {
 <template>
     <form :id="formId" class="space-y-6" @submit.prevent="submit">
         <div class="space-y-4">
+            <TransactionShortcuts
+                v-if="!isEditing && !isTransfer"
+                :accounts="accounts"
+                :categories="categories"
+                @pick="applyShortcut"
+            />
+
             <div class="space-y-2">
                 <Label required>Transaction Type</Label>
                 <div class="grid grid-cols-3 gap-2">
@@ -449,6 +470,13 @@ function submit() {
                 >
                     {{ form.errors.category_id }}
                 </p>
+                <CategorySuggestion
+                    :description="form.description"
+                    :type="form.type"
+                    :categories="categories"
+                    :has-category="form.category_id !== ''"
+                    @accept="(id) => (form.category_id = id.toString())"
+                />
             </div>
 
             <div class="space-y-2">
