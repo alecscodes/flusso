@@ -16,7 +16,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laravel\Passport\Contracts\OAuthenticatable;
 use Laravel\Passport\HasApiTokens;
 
-#[Fillable(['name', 'email', 'password', 'reset_date'])]
+#[Fillable(['name', 'email', 'password', 'reset_date', 'count_advances_until_settled'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
 class User extends Authenticatable implements OAuthenticatable
 {
@@ -28,7 +28,7 @@ class User extends Authenticatable implements OAuthenticatable
      *
      * @var array<string, mixed>
      */
-    protected $attributes = ['reset_date' => null];
+    protected $attributes = ['reset_date' => null, 'count_advances_until_settled' => false];
 
     /**
      * Get the attributes that should be cast.
@@ -40,6 +40,7 @@ class User extends Authenticatable implements OAuthenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'count_advances_until_settled' => 'boolean',
             'two_factor_confirmed_at' => 'datetime',
         ];
     }
@@ -60,6 +61,12 @@ class User extends Authenticatable implements OAuthenticatable
     public function transactions(): HasMany
     {
         return $this->hasMany(Transaction::class);
+    }
+
+    /** @return HasMany<Counterparty, $this> */
+    public function counterparties(): HasMany
+    {
+        return $this->hasMany(Counterparty::class);
     }
 
     /** @return HasMany<RecurringPayment, $this> */

@@ -6,6 +6,7 @@ use App\Enums\TransactionType;
 use App\Models\Account;
 use App\Models\Payment;
 use App\Models\Transaction;
+use App\Services\SettlementService;
 use RuntimeException;
 
 /**
@@ -18,6 +19,15 @@ class TransactionObserver
     {
         $account = Account::withTrashed()->findOrFail($transaction->account_id);
         $transaction->currency = $account->currency;
+
+        // Only an expense can be an advance, only for someone, and a transfer is nobody's.
+        if ($transaction->type === TransactionType::Transfer) {
+            $transaction->counterparty_id = null;
+        }
+
+        if ($transaction->type !== TransactionType::Expense || $transaction->counterparty_id === null) {
+            $transaction->is_advance = false;
+        }
 
         if ($transaction->type !== TransactionType::Transfer) {
             $transaction->to_account_id = null;
@@ -74,6 +84,9 @@ class TransactionObserver
 
     public function restored(Transaction $transaction): void
     {
+        // Its settlements count again; trim any that the other side has meanwhile been settled past.
+        app(SettlementService::class)->reconcileRestored($transaction);
+
         $this->recalculate($transaction);
     }
 

@@ -16,13 +16,15 @@ class TransactionService
 {
     public function __construct(
         private CurrencyService $currencyService,
-        private FileUploadService $fileUploadService
+        private FileUploadService $fileUploadService,
+        private CounterpartyService $counterpartyService,
+        private SettlementService $settlementService,
     ) {}
 
     /**
      * Create an expense, income or transfer.
      *
-     * @param  array{account_id: int, type: string|TransactionType, amount: numeric, date?: string|null, description?: string|null, category_id?: int|null, to_account_id?: int|null, to_amount?: numeric|null, recurring_payment_id?: int|null, files?: array<int, mixed>}  $data
+     * @param  array{account_id: int, type: string|TransactionType, amount: numeric, date?: string|null, description?: string|null, category_id?: int|null, to_account_id?: int|null, to_amount?: numeric|null, recurring_payment_id?: int|null, counterparty_id?: int|null, counterparty_name?: string|null, is_advance?: bool|null, files?: array<int, mixed>}  $data
      */
     public function createTransaction(User $user, array $data): Transaction
     {
@@ -43,12 +45,16 @@ class TransactionService
     /**
      * Replace a transaction's data. Nullable fields that are absent are cleared.
      *
-     * @param  array{account_id: int, type: string|TransactionType, amount: numeric, date?: string|null, description?: string|null, category_id?: int|null, to_account_id?: int|null, to_amount?: numeric|null, files?: array<int, mixed>}  $data
+     * @param  array{account_id: int, type: string|TransactionType, amount: numeric, date?: string|null, description?: string|null, category_id?: int|null, to_account_id?: int|null, to_amount?: numeric|null, counterparty_id?: int|null, counterparty_name?: string|null, is_advance?: bool|null, files?: array<int, mixed>}  $data
      */
     public function updateTransaction(Transaction $transaction, array $data): Transaction
     {
         return DB::transaction(function () use ($transaction, $data) {
             $transaction->update($this->attributes($transaction->user, $data));
+
+            if ($transaction->wasChanged(['type', 'amount', 'account_id', 'counterparty_id', 'is_advance'])) {
+                $this->settlementService->assertStillConsistent($transaction);
+            }
 
             if (isset($data['files'])) {
                 $this->fileUploadService->handleTransactionFiles($transaction, $data['files']);
@@ -71,7 +77,7 @@ class TransactionService
      * same-currency destination amounts are normalised by the TransactionObserver;
      * what is left here is looking up the accounts and, between currencies, the amount received.
      *
-     * @param  array{account_id: int, type: string|TransactionType, amount: numeric, date?: string|null, description?: string|null, category_id?: int|null, to_account_id?: int|null, to_amount?: numeric|null}  $data
+     * @param  array{account_id: int, type: string|TransactionType, amount: numeric, date?: string|null, description?: string|null, category_id?: int|null, to_account_id?: int|null, to_amount?: numeric|null, counterparty_id?: int|null, counterparty_name?: string|null, is_advance?: bool|null}  $data
      * @return array<string, mixed>
      */
     private function attributes(User $user, array $data): array
@@ -99,7 +105,32 @@ class TransactionService
                 : $this->receivedAmount($account, $toAccount, (float) $data['amount']));
         }
 
+        // Only what the caller sent: an update that says nothing about the person (the MCP tools) leaves it alone.
+        if (array_key_exists('counterparty_id', $data) || array_key_exists('counterparty_name', $data)) {
+            $attributes['counterparty_id'] = $this->counterpartyId($user, $data);
+        }
+
+        if (array_key_exists('is_advance', $data)) {
+            $attributes['is_advance'] = (bool) $data['is_advance'];
+        }
+
         return $attributes;
+    }
+
+    /**
+     * The person a payload names: by id, or by name (created when the user has no one by that name).
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function counterpartyId(User $user, array $data): ?int
+    {
+        if (filled($data['counterparty_id'] ?? null)) {
+            return (int) $data['counterparty_id'];
+        }
+
+        return filled($data['counterparty_name'] ?? null)
+            ? $this->counterpartyService->findOrCreate($user, (string) $data['counterparty_name'])->id
+            : null;
     }
 
     /**
@@ -131,6 +162,20 @@ class TransactionService
             ->selectRaw('type, currency, sum(amount) as total, count(*) as aggregate')
             ->groupBy('type', 'currency')
             ->get();
+
+        // Opt-in: advances count only until they are settled, and so does the money that settled them.
+        if ($user->count_advances_until_settled) {
+            foreach ([TransactionType::Income, TransactionType::Expense] as $side) {
+                $settled = $this->settlementService->settledAmounts(
+                    Transaction::query()->where('user_id', $user->id)->inPeriod($startDate, $endDate)->where('type', $side),
+                    $side,
+                )->groupBy('currency')->map(fn (Collection $group) => (float) $group->sum('settled'));
+
+                foreach ($rows->where('type', $side) as $row) {
+                    $row->setAttribute('total', max(0, (float) $row->getAttribute('total') - ($settled[$row->currency] ?? 0)));
+                }
+            }
+        }
 
         $inPrimaryCurrency = fn (TransactionType $type): float => $this->currencyService->sumInPrimaryCurrency(
             $rows->where('type', $type),
@@ -168,6 +213,21 @@ class TransactionService
             ->selectRaw('category_id, currency, sum(amount) as total, count(*) as aggregate')
             ->groupBy('category_id', 'currency')
             ->get();
+
+        // Opt-in: advances count only until they are settled, in the period of the expense.
+        if ($user->count_advances_until_settled) {
+            $settled = $this->settlementService->settledAmounts(
+                Transaction::query()->where('user_id', $user->id)->filter($filters)->inPeriod($startDate, $endDate)
+                    ->where('type', TransactionType::Expense)->whereNotNull('category_id'),
+                TransactionType::Expense,
+            )->mapWithKeys(fn (array $row) => [$row['category_id'].'|'.$row['currency'] => $row['settled']]);
+
+            foreach ($rows as $row) {
+                $row->setAttribute('total', max(0, (float) $row->getAttribute('total') - ($settled[$row->category_id.'|'.$row->currency] ?? 0)));
+            }
+
+            $rows = $rows->filter(fn ($row) => (float) $row->getAttribute('total') > 0)->values();
+        }
 
         $categories = $user->categories()->withTrashed()->whereKey($rows->pluck('category_id')->unique())->get()->keyBy('id');
         $primaryCurrency = $this->currencyService->getPrimaryCurrency($user);
