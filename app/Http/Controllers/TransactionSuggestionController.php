@@ -3,12 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Enums\TransactionType;
+use App\Http\Requests\CategorySuggestionRequest;
 use App\Models\Transaction;
 use App\Services\CategorySuggestionService;
 use App\Services\TransactionShortcutService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 /**
  * Read-only hints for the add-transaction form: nothing here writes, the owner confirms in the form.
@@ -29,14 +29,9 @@ class TransactionSuggestionController extends Controller
         ]);
     }
 
-    public function category(Request $request): JsonResponse
+    public function category(CategorySuggestionRequest $request): JsonResponse
     {
-        $this->authorize('viewAny', Transaction::class);
-
-        $data = $request->validate([
-            'description' => ['required', 'string', 'max:200'],
-            'type' => ['required', Rule::in([TransactionType::Expense->value, TransactionType::Income->value])],
-        ]);
+        $data = $request->validated();
 
         return response()->json([
             'suggestion' => $this->categorySuggestionService->suggest(

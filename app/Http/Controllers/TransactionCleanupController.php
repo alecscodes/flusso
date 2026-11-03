@@ -4,17 +4,15 @@ namespace App\Http\Controllers;
 
 use App\Enums\AiFeature;
 use App\Enums\TransactionType;
+use App\Http\Requests\TransactionCategoryRequest;
 use App\Models\Transaction;
-use App\Models\User;
 use App\Services\Ai\AiManager;
 use App\Services\CategoryService;
 use App\Services\CategorySuggestionService;
 use App\Services\TransactionService;
 use App\Support\FlashToast;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -45,7 +43,10 @@ class TransactionCleanupController extends Controller
             TransactionType::Income->value => $this->suggestionService->history($user, TransactionType::Income),
         ];
 
-        $transactions = $this->uncategorized($user)
+        $transactions = $user->transactions()
+            ->uncategorized()
+            ->orderByDesc('date')
+            ->orderByDesc('id')
             ->with('account')
             ->paginate(25)
             ->withQueryString()
@@ -67,19 +68,9 @@ class TransactionCleanupController extends Controller
         ]);
     }
 
-    public function apply(Request $request, Transaction $transaction): RedirectResponse
+    public function apply(TransactionCategoryRequest $request, Transaction $transaction): RedirectResponse
     {
-        $this->authorize('update', $transaction);
-
-        if ($transaction->type === TransactionType::Transfer) {
-            throw ValidationException::withMessages(['category_id' => 'A transfer has no category.']);
-        }
-
-        $data = $request->validate([
-            'category_id' => ['required', 'integer', $request->user()->ownedCategoryRule()->where('type', $transaction->type->value)],
-        ]);
-
-        $this->setCategory($transaction, (int) $data['category_id']);
+        $this->setCategory($transaction, (int) $request->validated('category_id'));
 
         FlashToast::success('Category applied.');
 
@@ -99,8 +90,11 @@ class TransactionCleanupController extends Controller
         foreach ([TransactionType::Expense, TransactionType::Income] as $type) {
             $history = $this->suggestionService->history($user, $type);
 
-            $this->uncategorized($user)
+            $user->transactions()
+                ->uncategorized()
                 ->where('type', $type->value)
+                ->orderByDesc('date')
+                ->orderByDesc('id')
                 ->with('user')
                 ->limit(self::APPLY_ALL_LIMIT)
                 ->get()
@@ -119,18 +113,6 @@ class TransactionCleanupController extends Controller
             : FlashToast::info('Nothing to apply with confidence.');
 
         return redirect()->back(fallback: route('cleanup.index'));
-    }
-
-    /**
-     * @return HasMany<Transaction, User>
-     */
-    private function uncategorized(User $user): HasMany
-    {
-        return $user->transactions()
-            ->whereIn('type', [TransactionType::Expense->value, TransactionType::Income->value])
-            ->whereNull('category_id')
-            ->orderByDesc('date')
-            ->orderByDesc('id');
     }
 
     private function setCategory(Transaction $transaction, int $categoryId): void

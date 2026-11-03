@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\TransactionType;
 use App\Http\Requests\TransactionRequest;
 use App\Models\Transaction;
 use App\Models\TransactionFile;
@@ -61,10 +60,7 @@ class TransactionController extends Controller
                 )
                 : [],
             'hasDateFilters' => $hasDateFilters,
-            'uncategorizedCount' => $user->transactions()
-                ->whereIn('type', [TransactionType::Expense->value, TransactionType::Income->value])
-                ->whereNull('category_id')
-                ->count(),
+            'uncategorizedCount' => $user->transactions()->uncategorized()->count(),
             'primaryCurrency' => $this->currencyService->getPrimaryCurrency($user),
         ]);
     }

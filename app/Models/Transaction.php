@@ -143,6 +143,19 @@ class Transaction extends Model
     }
 
     /**
+     * Expenses and income without a category (transfers never have one).
+     *
+     * @param  Builder<Transaction>  $query
+     * @return Builder<Transaction>
+     */
+    public function scopeUncategorized(Builder $query): Builder
+    {
+        return $query
+            ->whereIn('type', [TransactionType::Expense->value, TransactionType::Income->value])
+            ->whereNull('category_id');
+    }
+
+    /**
      * Both bounds are inclusive; dates are compared as 'Y-m-d' strings.
      *
      * @param  Builder<Transaction>  $query

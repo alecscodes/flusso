@@ -38,14 +38,14 @@ class CategorySuggestionService
     /**
      * @return array{category_id: int, source: 'history'|'ai', reason: string}|null
      */
-    public function suggest(User $user, string $description, TransactionType $type, bool $useAi = true): ?array
+    public function suggest(User $user, string $description, TransactionType $type): ?array
     {
         if ($type === TransactionType::Transfer) {
             return null;
         }
 
         return $this->fromHistory($this->history($user, $type), $description)
-            ?? ($useAi ? $this->fromAi($user, $description, $type) : null);
+            ?? $this->fromAi($user, $description, $type);
     }
 
     /**
