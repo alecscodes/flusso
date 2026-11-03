@@ -89,7 +89,7 @@ test('amounts can be rounded up to the next whole unit', function () {
     receiptsScan($user, ['amounts' => 'round_up'])
         ->assertOk()
         ->assertJsonPath('total', 13.7)
-        ->assertJsonPath('transactions.0.amount', 14.0)
+        ->assertJsonPath('transactions.0.amount', 14)
         ->assertJsonPath('transactions.0.category_id', null)
         ->assertJsonPath('date', null);
 });
@@ -132,7 +132,7 @@ test('a model with vision gets the image and no OCR runs', function () {
     $user = User::factory()->create();
     ReceiptReader::fake([['merchant' => 'Shop', 'date' => '', 'total' => 5, 'category_id' => 0]]);
 
-    receiptsScan($user)->assertOk()->assertJsonPath('transactions.0.amount', 5.0);
+    receiptsScan($user)->assertOk()->assertJsonPath('transactions.0.amount', 5);
 });
 
 test('a split scan groups the lines by category and reports the reconciliation difference', function () {
@@ -161,7 +161,7 @@ test('a split scan groups the lines by category and reports the reconciliation d
         ->assertJsonPath('transactions.0.category_id', $groceries->id)
         ->assertJsonPath('transactions.0.amount', 5.1)
         ->assertJsonPath('transactions.1.category_id', $auto->id)
-        ->assertJsonPath('transactions.1.amount', 25.0);
+        ->assertJsonPath('transactions.1.amount', 25);
 });
 
 test('a split scan rounds each group up when asked to', function () {
@@ -175,7 +175,7 @@ test('a split scan rounds each group up when asked to', function () {
     receiptsScan($user, ['mode' => 'split', 'amounts' => 'round_up'])
         ->assertOk()
         ->assertJsonPath('difference', null)
-        ->assertJsonPath('transactions.0.amount', 6.0)
+        ->assertJsonPath('transactions.0.amount', 6)
         ->assertJsonPath('lines.0.amount', 3.1);
 });
 
@@ -260,9 +260,15 @@ test('only JPEG, PNG and WebP content is accepted, whatever the file name says',
     $user = User::factory()->create();
     ReceiptReader::fake();
 
-    receiptsScan($user, ['image' => UploadedFile::fake()->createWithContent($name, $content)])
+    // UploadedFile::fake() reports the type from the file NAME, so use a real upload whose type is sniffed from its content.
+    $path = tempnam(sys_get_temp_dir(), 'receipt');
+    file_put_contents($path, $content);
+
+    receiptsScan($user, ['image' => new UploadedFile($path, $name, null, null, true)])
         ->assertUnprocessable()
         ->assertJsonValidationErrors('image');
+
+    @unlink($path);
 
     ReceiptReader::assertNeverPrompted();
 })->with([
