@@ -36,6 +36,8 @@ class StatementMatcher
      */
     public function match(Statement $statement): array
     {
+        $this->releaseImportsWithoutTransaction($statement);
+
         $analysis = $this->analyze($statement);
         $matched = 0;
         $unmatched = 0;
@@ -58,6 +60,17 @@ class StatementMatcher
         });
 
         return ['matched' => $matched, 'unmatched' => $unmatched];
+    }
+
+    /**
+     * The transaction each open line of the statement matches right now, checked against
+     * `$accountId` (the statement's own account, or the one chosen to import into). Nothing is written.
+     *
+     * @return array<int, int> transaction id keyed by statement line id
+     */
+    public function matchesFor(Statement $statement, int $accountId): array
+    {
+        return $this->analyze($statement, $accountId)['matches'];
     }
 
     /**
@@ -99,7 +112,7 @@ class StatementMatcher
     /**
      * @return array{lines: Collection<int, StatementLine>, matches: array<int, int>, options: array<int, list<Entry>>}
      */
-    private function analyze(Statement $statement): array
+    private function analyze(Statement $statement, ?int $forAccountId = null): array
     {
         $lines = $statement->lines()
             ->whereIn('match_status', [StatementLineStatus::Unmatched->value, StatementLineStatus::Matched->value])
@@ -107,20 +120,25 @@ class StatementMatcher
             ->orderBy('id')
             ->get();
 
-        if ($statement->account_id === null || $lines->isEmpty()) {
+        $accountId = $forAccountId ?? $statement->account_id;
+
+        if ($accountId === null || $lines->isEmpty()) {
             return ['lines' => $lines, 'matches' => [], 'options' => []];
         }
 
-        $accountId = (int) $statement->account_id;
+        $accountId = (int) $accountId;
         $dayNumbers = $lines->map(fn (StatementLine $line) => $this->dayNumber($line->posted_on->toDateString()));
         $from = gmdate('Y-m-d', (int) (($dayNumbers->min() - self::DAY_WINDOW) * 86400));
         $to = gmdate('Y-m-d', (int) (($dayNumbers->max() + self::DAY_WINDOW) * 86400));
 
         // Transactions already matched to (or imported from) lines outside this open set are taken,
-        // but only by statements of this same account: a transfer is legitimately on two accounts' statements.
+        // but only by statements of this same account (or this very statement, which may have no account
+        // of its own): a transfer is legitimately on two accounts' statements.
         $taken = StatementLine::query()
             ->where('user_id', $statement->user_id)
-            ->whereIn('statement_id', Statement::query()->where('account_id', $accountId)->select('id'))
+            ->whereIn('statement_id', Statement::query()
+                ->where(fn ($query) => $query->where('account_id', $accountId)->orWhere('id', $statement->id))
+                ->select('id'))
             ->whereNotNull('matched_transaction_id')
             ->whereNotIn('id', $lines->modelKeys())
             ->pluck('matched_transaction_id')
@@ -183,6 +201,20 @@ class StatementMatcher
         }
 
         return ['lines' => $lines, 'matches' => $matches, 'options' => $options];
+    }
+
+    /**
+     * An imported line whose transaction is gone (deleted, or removed for good) is open again:
+     * the next analysis decides whether it is unmatched or now matches something else.
+     */
+    private function releaseImportsWithoutTransaction(Statement $statement): void
+    {
+        $statement->lines()
+            ->where('match_status', StatementLineStatus::Imported->value)
+            ->where(fn ($query) => $query
+                ->whereNull('matched_transaction_id')
+                ->orWhereIn('matched_transaction_id', Transaction::onlyTrashed()->select('id')))
+            ->update(['match_status' => StatementLineStatus::Unmatched->value, 'matched_transaction_id' => null]);
     }
 
     /**

@@ -6,12 +6,14 @@ use App\Enums\AiFeature;
 use App\Enums\StatementLineStatus;
 use App\Http\Requests\StatementUpdateRequest;
 use App\Http\Requests\StatementUploadRequest;
+use App\Models\Category;
 use App\Models\Statement;
 use App\Models\StatementLine;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\AccountService;
 use App\Services\Ai\AiManager;
+use App\Services\Statements\StatementImporter;
 use App\Services\Statements\StatementMatcher;
 use App\Services\Statements\StatementSearch;
 use App\Services\Statements\StatementService;
@@ -37,6 +39,7 @@ class StatementController extends Controller
         private readonly StatementMatcher $matcher,
         private readonly AccountService $accountService,
         private readonly AiManager $ai,
+        private readonly StatementImporter $importer,
     ) {}
 
     /**
@@ -154,6 +157,10 @@ class StatementController extends Controller
             ->withQueryString();
 
         $candidates = $this->matcher->candidates($statement);
+        $suggestedCategories = $this->importer->suggestCategories(
+            $request->user(),
+            $lines->getCollection()->filter(fn (StatementLine $line) => $line->match_status === StatementLineStatus::Unmatched),
+        );
         $pageIds = $lines->getCollection()->pluck('id')->all();
         $statement->load('account:id,name,currency')->loadCount([
             'lines',
@@ -186,6 +193,7 @@ class StatementController extends Controller
                 'parsed_by' => $line->parsed_by,
                 'match_status' => $line->match_status->value,
                 'matched_transaction' => $line->matchedTransaction ? $this->transactionSummary($line->matchedTransaction) : null,
+                'suggested_category_id' => $suggestedCategories[$line->id] ?? null,
             ]),
             'candidates' => (object) collect($candidates)
                 ->only($pageIds)
@@ -193,6 +201,9 @@ class StatementController extends Controller
                 ->all(),
             'status' => $status?->value,
             'accounts' => $this->accountOptions($request->user()),
+            'categories' => $request->user()->categories()->orderBy('name')->get(['id', 'name', 'type'])
+                ->map(fn (Category $category) => ['id' => $category->id, 'name' => $category->name, 'type' => $category->type->value])
+                ->all(),
         ]);
     }
 
