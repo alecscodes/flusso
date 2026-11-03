@@ -99,7 +99,6 @@ const scanner = useHttp({
     amounts: amounts.value as string,
 });
 const scanError = ref('');
-const scanning = ref(false);
 
 function pickImage(event: Event) {
     const file = (event.target as HTMLInputElement).files?.[0] ?? null;
@@ -118,7 +117,6 @@ async function runScan() {
     scanner.mode = mode.value;
     scanner.amounts = amounts.value;
     scanError.value = '';
-    scanning.value = true;
 
     try {
         const proposal = (await scanner.submit(scan())) as Proposal | undefined;
@@ -136,8 +134,6 @@ async function runScan() {
     } catch {
         scanError.value =
             'The receipt could not be read. You can still add the transaction by hand.';
-    } finally {
-        scanning.value = false;
     }
 }
 
@@ -457,11 +453,11 @@ watch(
                 <Button
                     type="submit"
                     :form="formId"
-                    :disabled="scanning"
-                    :loading="scanning"
+                    :disabled="scanner.processing"
+                    :loading="scanner.processing"
                 >
                     <ScanLine class="h-4 w-4" />
-                    {{ scanning ? 'Reading...' : 'Read receipt' }}
+                    {{ scanner.processing ? 'Reading...' : 'Read receipt' }}
                 </Button>
             </ModalFooter>
         </form>

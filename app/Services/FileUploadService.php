@@ -8,6 +8,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Throwable;
 
 class FileUploadService
 {
@@ -53,12 +54,18 @@ class FileUploadService
 
         $disk->copy($sourcePath, $path);
 
-        return $transaction->files()->create([
-            'filename' => basename($path),
-            'original_filename' => $originalFilename,
-            'mime_type' => $disk->mimeType($sourcePath) ?: 'application/octet-stream',
-            'size' => $disk->size($sourcePath),
-            'path' => $path,
-        ]);
+        try {
+            return $transaction->files()->create([
+                'filename' => basename($path),
+                'original_filename' => $originalFilename,
+                'mime_type' => $disk->mimeType($sourcePath) ?: 'application/octet-stream',
+                'size' => $disk->size($sourcePath),
+                'path' => $path,
+            ]);
+        } catch (Throwable $exception) {
+            $disk->delete($path);
+
+            throw $exception;
+        }
     }
 }
