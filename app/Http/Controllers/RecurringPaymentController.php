@@ -7,7 +7,9 @@ use App\Models\RecurringPayment;
 use App\Services\AccountService;
 use App\Services\CategoryService;
 use App\Services\RecurringPaymentService;
+use App\Services\RecurringSuggestionService;
 use App\Support\FlashToast;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -18,7 +20,8 @@ class RecurringPaymentController extends Controller
     public function __construct(
         private RecurringPaymentService $recurringPaymentService,
         private AccountService $accountService,
-        private CategoryService $categoryService
+        private CategoryService $categoryService,
+        private RecurringSuggestionService $suggestionService
     ) {}
 
     public function index(Request $request): Response
@@ -31,6 +34,7 @@ class RecurringPaymentController extends Controller
             'recurringPayments' => $this->recurringPaymentService->getRecurringPaymentsForUser($user),
             'accounts' => $this->accountService->getAccountsForUser($user),
             'categories' => $this->categoryService->getCategoriesForUser($user),
+            'suggestions' => Inertia::defer(fn () => $this->suggestionService->suggestionsFor($user)),
         ]);
     }
 
@@ -48,6 +52,8 @@ class RecurringPaymentController extends Controller
         $this->authorize('view', $recurringPayment);
 
         $user = $request->user();
+
+        $this->recurringPaymentService->withPriceChanges(new Collection([$recurringPayment]));
 
         return Inertia::render('RecurringPayments/Show', [
             'recurringPayment' => $recurringPayment

@@ -9,6 +9,7 @@ use App\Http\Controllers\LiquidityAlertController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\ReceiptController;
 use App\Http\Controllers\RecurringPaymentController;
+use App\Http\Controllers\RecurringSuggestionController;
 use App\Http\Controllers\SettlementController;
 use App\Http\Controllers\StatementController;
 use App\Http\Controllers\TransactionCleanupController;
@@ -47,6 +48,10 @@ Route::middleware('auth')->group(function () {
     Route::get('transactions/{transaction}/files/{file}/download', [TransactionController::class, 'downloadFile'])->name('transactions.files.download');
     Route::post('receipts/scan', [ReceiptController::class, 'scan'])->middleware('throttle:20,1')->name('receipts.scan');
     Route::post('receipts', [ReceiptController::class, 'store'])->name('receipts.store');
+    Route::controller(RecurringSuggestionController::class)->prefix('planned-payments/suggestions/dismissals')->middleware('throttle:60,1')->name('planned-payments.suggestions.')->group(function () {
+        Route::post('/', 'dismiss')->name('dismiss');
+        Route::delete('{key}', 'restore')->name('restore');
+    });
     Route::resource('planned-payments', RecurringPaymentController::class)->except(['create', 'edit'])->parameters(['planned-payments' => 'recurring_payment']);
     Route::controller(PaymentController::class)->prefix('payments')->name('payments.')->group(function () {
         Route::get('/', 'index')->name('index');
