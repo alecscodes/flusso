@@ -28,6 +28,8 @@ return new class extends Migration
             $table->string('path');
             $table->longText('extracted_text')->nullable();
             $table->string('parser')->nullable();
+            $table->boolean('lines_truncated')->default(false);
+            $table->boolean('text_truncated')->default(false);
             $table->timestamp('parsed_at')->nullable();
             $table->timestamps();
 

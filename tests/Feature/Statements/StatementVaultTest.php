@@ -5,6 +5,7 @@ use App\Models\Account;
 use App\Models\Statement;
 use App\Models\StatementLine;
 use App\Models\User;
+use App\Services\Statements\CsvReader;
 use App\Services\Statements\PdfTextExtractor;
 use App\Services\Statements\StatementService;
 use Illuminate\Http\UploadedFile;
@@ -337,4 +338,34 @@ test('reading a statement again replaces its lines, unless some were already dec
 
     expect(app(StatementService::class)->reprocess($statement))->toBeFalse()
         ->and($statement->lines()->count())->toBe(2);
+});
+
+test('a CSV with more rows than can be read is flagged, and its full text is still stored and searchable', function () {
+    $user = User::factory()->create();
+    $rows = str_repeat("2024-01-01,Coffee,-1.00\n", CsvReader::MAX_ROWS + 5);
+    $csv = "Date,Description,Amount\n".$rows."2024-01-02,LASTROWMARKER,-1.00\n";
+
+    actingAs($user)->post(route('statements.store'), ['files' => [UploadedFile::fake()->createWithContent('big.csv', $csv)]])
+        ->assertSessionHasNoErrors();
+
+    $statement = $user->statements()->firstOrFail();
+
+    expect($statement->lines_truncated)->toBeTrue()
+        ->and($statement->text_truncated)->toBeFalse()
+        ->and($statement->lines()->count())->toBe(CsvReader::MAX_ROWS - 1)
+        ->and($statement->extracted_text)->toContain('LASTROWMARKER');
+
+    actingAs($user)->get(route('statements.show', $statement))
+        ->assertInertia(fn ($page) => $page->where('statement.lines_truncated', true)->where('statement.text_truncated', false));
+
+    actingAs($user)->get(route('statements.index', ['q' => 'LASTROWMARKER']))
+        ->assertInertia(fn ($page) => $page->where('search.results.0.id', $statement->id));
+});
+
+test('a normal statement is not flagged', function () {
+    $user = User::factory()->create();
+
+    actingAs($user)->post(route('statements.store'), ['files' => [statementsCsvFile()]]);
+
+    expect($user->statements()->firstOrFail()->lines_truncated)->toBeFalse();
 });

@@ -59,7 +59,7 @@ class StatementController extends Controller
         ]);
 
         $statements = $user->statements()
-            ->select(['id', 'user_id', 'account_id', 'institution', 'account_label', 'period_start', 'period_end', 'original_filename', 'mime_type', 'size', 'parser', 'created_at'])
+            ->select(['id', 'user_id', 'account_id', 'institution', 'account_label', 'period_start', 'period_end', 'original_filename', 'mime_type', 'size', 'parser', 'lines_truncated', 'text_truncated', 'created_at'])
             ->with('account:id,name')
             ->withCount([
                 'lines',
@@ -280,6 +280,8 @@ class StatementController extends Controller
             'mime_type' => $statement->mime_type,
             'size' => $statement->size,
             'parser' => $statement->parser,
+            'lines_truncated' => (bool) $statement->lines_truncated,
+            'text_truncated' => (bool) $statement->text_truncated,
             'lines_count' => (int) $statement->lines_count,
             'matched_lines_count' => (int) $statement->matched_lines_count,
             'unmatched_lines_count' => (int) $statement->unmatched_lines_count,

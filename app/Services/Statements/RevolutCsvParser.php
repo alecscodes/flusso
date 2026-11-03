@@ -11,13 +11,13 @@ class RevolutCsvParser
 {
     public function parse(string $content): ?ParseResult
     {
-        $rows = CsvReader::rows($content);
+        $rows = CsvReader::rows($content, null, CsvReader::MAX_ROWS, $truncated);
 
         foreach (array_slice($rows, 0, 5, true) as $index => $row) {
             $columns = $this->columns($row);
 
             if ($columns !== null) {
-                return new ParseResult($this->lines(array_slice($rows, $index + 1), $columns), 'revolut', 'Revolut');
+                return new ParseResult($this->lines(array_slice($rows, $index + 1), $columns), 'revolut', 'Revolut', $truncated);
             }
         }
 

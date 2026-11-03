@@ -33,6 +33,9 @@ interface StatementDetail {
     period_start: string | null;
     period_end: string | null;
     parser: string | null;
+    lines_truncated: boolean;
+    text_truncated: boolean;
+    lines_count: number;
     parsed_at: string | null;
     has_text: boolean;
     counts: Record<string, number>;
@@ -310,6 +313,23 @@ function count(status: string): number {
                 </form>
             </CardContent>
         </Card>
+
+        <p
+            v-if="statement.lines_truncated"
+            class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300"
+            role="status"
+        >
+            Only the first {{ statement.lines_count }} lines were read; the full
+            text is still stored and searchable.
+        </p>
+        <p
+            v-if="statement.text_truncated"
+            class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300"
+            role="status"
+        >
+            This file is so large that only its first part is searchable. The
+            original file is kept in full and can be downloaded.
+        </p>
 
         <div class="flex flex-wrap gap-2">
             <Badge variant="success">{{ count('matched') }} matched</Badge>

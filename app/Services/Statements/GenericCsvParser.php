@@ -36,13 +36,13 @@ class GenericCsvParser
 
     public function parse(string $content): ?ParseResult
     {
-        $rows = CsvReader::rows($content);
+        $rows = CsvReader::rows($content, null, CsvReader::MAX_ROWS, $truncated);
 
         foreach (array_slice($rows, 0, 20, true) as $index => $row) {
             $columns = $this->columns($row);
 
             if ($columns !== null) {
-                return new ParseResult($this->lines(array_slice($rows, $index + 1), $columns), 'csv');
+                return new ParseResult($this->lines(array_slice($rows, $index + 1), $columns), 'csv', null, $truncated);
             }
         }
 

@@ -38,6 +38,8 @@ class Statement extends Model
         'path',
         'extracted_text',
         'parser',
+        'lines_truncated',
+        'text_truncated',
         'parsed_at',
     ];
 
@@ -47,6 +49,8 @@ class Statement extends Model
             'period_start' => DateOnly::class,
             'period_end' => DateOnly::class,
             'size' => 'integer',
+            'lines_truncated' => 'boolean',
+            'text_truncated' => 'boolean',
             'parsed_at' => 'datetime',
         ];
     }

@@ -156,5 +156,12 @@ test('the statement parser tries the deterministic parsers and reports none when
 test('a huge CSV is read only up to the row cap', function () {
     $csv = "Date,Description,Amount\n".str_repeat("2024-01-01,X,1.00\n", CsvReader::MAX_ROWS + 50);
 
-    expect(CsvReader::rows($csv))->toHaveCount(CsvReader::MAX_ROWS);
+    $rows = CsvReader::rows($csv, null, CsvReader::MAX_ROWS, $truncated);
+
+    expect($rows)->toHaveCount(CsvReader::MAX_ROWS)
+        ->and($truncated)->toBeTrue();
+
+    CsvReader::rows("a,b\n1,2\n", null, CsvReader::MAX_ROWS, $small);
+
+    expect($small)->toBeFalse();
 });

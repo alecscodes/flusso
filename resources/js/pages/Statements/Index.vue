@@ -28,6 +28,8 @@ interface StatementSummary {
     period_end: string | null;
     size: number;
     parser: string | null;
+    lines_truncated: boolean;
+    text_truncated: boolean;
     lines_count: number;
     matched_lines_count: number;
     unmatched_lines_count: number;
@@ -557,6 +559,16 @@ const statusVariant: Record<
                         </p>
                     </div>
                     <div class="flex flex-wrap items-center gap-2">
+                        <Badge
+                            v-if="
+                                statement.lines_truncated ||
+                                statement.text_truncated
+                            "
+                            variant="warning"
+                            title="Not everything was read; the file itself is kept in full."
+                        >
+                            Partly read
+                        </Badge>
                         <Badge
                             v-if="statement.lines_count === 0"
                             variant="outline"

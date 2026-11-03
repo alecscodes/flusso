@@ -22,7 +22,7 @@ class StatementService
     /** Hard cap per file, in kilobytes. */
     public const MAX_SIZE_KB = 20480;
 
-    private const MAX_TEXT_CHARACTERS = 3000000;
+    public const MAX_TEXT_CHARACTERS = 20000000;
 
     public function __construct(
         private readonly PdfTextExtractor $pdfText,
@@ -92,13 +92,15 @@ class StatementService
             ? ($this->pdfText->extract($disk->path($statement->path)) ?? '')
             : CsvReader::decode((string) $disk->get($statement->path));
 
-        $text = mb_substr((string) mb_convert_encoding(str_replace("\0", '', $text), 'UTF-8', 'UTF-8'), 0, self::MAX_TEXT_CHARACTERS);
+        $text = (string) mb_convert_encoding(str_replace("\0", '', $text), 'UTF-8', 'UTF-8');
+        $textTruncated = mb_strlen($text) > self::MAX_TEXT_CHARACTERS;
+        $text = $textTruncated ? mb_substr($text, 0, self::MAX_TEXT_CHARACTERS) : $text;
         $result = $this->parser->parse($text, ! $statement->isPdf(), $aiChunks);
 
         // The index rows of the old lines are found through the lines, so forget first.
         $this->index->forget($statement);
 
-        DB::transaction(function () use ($statement, $text, $result) {
+        DB::transaction(function () use ($statement, $text, $textTruncated, $result) {
             $statement->lines()->delete();
 
             $now = now();
@@ -122,6 +124,8 @@ class StatementService
             $statement->forceFill([
                 'extracted_text' => $text === '' ? null : $text,
                 'parser' => $result->parser,
+                'lines_truncated' => $result->truncated,
+                'text_truncated' => $textTruncated,
                 'parsed_at' => $now,
                 'institution' => $statement->institution ?? $result->institution,
                 'period_start' => $statement->period_start ?? $result->periodStart(),

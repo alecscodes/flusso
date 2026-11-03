@@ -51,9 +51,11 @@ final class CsvReader
     public const MAX_ROWS = 20000;
 
     /**
+     * `$truncated` is set to whether the file had more rows than the limit.
+     *
      * @return list<list<string>> the non-empty rows, cells trimmed
      */
-    public static function rows(string $content, ?string $delimiter = null, int $limit = self::MAX_ROWS): array
+    public static function rows(string $content, ?string $delimiter = null, int $limit = self::MAX_ROWS, ?bool &$truncated = null): array
     {
         $content = self::decode($content);
         $delimiter ??= self::detectDelimiter($content);
@@ -67,12 +69,19 @@ final class CsvReader
         rewind($handle);
 
         $rows = [];
+        $truncated = false;
 
-        while (count($rows) < $limit && ($row = fgetcsv($handle, null, $delimiter, '"', '')) !== false) {
+        while (($row = fgetcsv($handle, null, $delimiter, '"', '')) !== false) {
             $cells = array_map(fn (?string $cell) => trim((string) $cell), $row);
 
             if (implode('', $cells) === '') {
                 continue;
+            }
+
+            if (count($rows) >= $limit) {
+                $truncated = true;
+
+                break;
             }
 
             $rows[] = $cells;

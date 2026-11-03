@@ -8,7 +8,7 @@ namespace App\Services\Statements;
  */
 class StatementParser
 {
-    public const MAX_LINES = 5000;
+    public const MAX_LINES = 20000;
 
     public function __construct(
         private readonly RevolutCsvParser $revolut,
@@ -42,6 +42,6 @@ class StatementParser
             return $result;
         }
 
-        return new ParseResult(array_slice($result->lines, 0, self::MAX_LINES), $result->parser, $result->institution);
+        return new ParseResult(array_slice($result->lines, 0, self::MAX_LINES), $result->parser, $result->institution, true);
     }
 }

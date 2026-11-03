@@ -14,6 +14,7 @@ final readonly class ParseResult
         public array $lines,
         public string $parser,
         public ?string $institution = null,
+        public bool $truncated = false,
     ) {}
 
     /**

@@ -36,8 +36,10 @@ class AiLineParser
         }
 
         $lines = [];
+        $chunks = $this->chunks($text);
+        $truncated = count($chunks) > $maxChunks;
 
-        foreach (array_slice($this->chunks($text), 0, $maxChunks) as $chunk) {
+        foreach (array_slice($chunks, 0, $maxChunks) as $chunk) {
             $response = $this->ai->prompt(new StatementLinesAgent, "Bank statement text:\n\n".$chunk, [], self::TIMEOUT_SECONDS);
 
             if ($response === null) {
@@ -52,12 +54,13 @@ class AiLineParser
 
             if (count($lines) >= self::MAX_LINES) {
                 $lines = array_slice($lines, 0, self::MAX_LINES);
+                $truncated = true;
 
                 break;
             }
         }
 
-        return $lines === [] ? null : new ParseResult($lines, 'ai');
+        return $lines === [] ? null : new ParseResult($lines, 'ai', null, $truncated);
     }
 
     /**
