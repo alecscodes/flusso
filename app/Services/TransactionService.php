@@ -77,7 +77,7 @@ class TransactionService
      * same-currency destination amounts are normalised by the TransactionObserver;
      * what is left here is looking up the accounts and, between currencies, the amount received.
      *
-     * @param  array{account_id: int, type: string|TransactionType, amount: numeric, date?: string|null, description?: string|null, category_id?: int|null, to_account_id?: int|null, to_amount?: numeric|null}  $data
+     * @param  array{account_id: int, type: string|TransactionType, amount: numeric, date?: string|null, description?: string|null, category_id?: int|null, to_account_id?: int|null, to_amount?: numeric|null, counterparty_id?: int|null, counterparty_name?: string|null, is_advance?: bool|null}  $data
      * @return array<string, mixed>
      */
     private function attributes(User $user, array $data): array
@@ -172,7 +172,7 @@ class TransactionService
                 )->groupBy('currency')->map(fn (Collection $group) => (float) $group->sum('settled'));
 
                 foreach ($rows->where('type', $side) as $row) {
-                    $row->total = max(0, (float) $row->total - ($settled[$row->currency] ?? 0));
+                    $row->setAttribute('total', max(0, (float) $row->getAttribute('total') - ($settled[$row->currency] ?? 0)));
                 }
             }
         }
@@ -223,10 +223,10 @@ class TransactionService
             )->mapWithKeys(fn (array $row) => [$row['category_id'].'|'.$row['currency'] => $row['settled']]);
 
             foreach ($rows as $row) {
-                $row->total = max(0, (float) $row->total - ($settled[$row->category_id.'|'.$row->currency] ?? 0));
+                $row->setAttribute('total', max(0, (float) $row->getAttribute('total') - ($settled[$row->category_id.'|'.$row->currency] ?? 0)));
             }
 
-            $rows = $rows->filter(fn ($row) => (float) $row->total > 0)->values();
+            $rows = $rows->filter(fn ($row) => (float) $row->getAttribute('total') > 0)->values();
         }
 
         $categories = $user->categories()->withTrashed()->whereKey($rows->pluck('category_id')->unique())->get()->keyBy('id');

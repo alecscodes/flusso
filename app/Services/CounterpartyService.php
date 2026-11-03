@@ -178,12 +178,12 @@ class CounterpartyService
 
         foreach ($transactions(TransactionType::Expense)->where('is_advance', true)->get() as $row) {
             $totals[$row->counterparty_id][$row->currency] ??= $blank;
-            $totals[$row->counterparty_id][$row->currency]['advanced'] += SettlementService::cents($row->total);
+            $totals[$row->counterparty_id][$row->currency]['advanced'] += SettlementService::cents($row->getAttribute('total'));
         }
 
         foreach ($transactions(TransactionType::Income)->get() as $row) {
             $totals[$row->counterparty_id][$row->currency] ??= $blank;
-            $totals[$row->counterparty_id][$row->currency]['received'] += SettlementService::cents($row->total);
+            $totals[$row->counterparty_id][$row->currency]['received'] += SettlementService::cents($row->getAttribute('total'));
         }
 
         $settled = TransactionSettlement::query()
@@ -194,6 +194,7 @@ class CounterpartyService
             ->when($counterpartyId !== null, fn ($query) => $query->where('transactions.counterparty_id', $counterpartyId))
             ->groupBy('transactions.counterparty_id', 'transactions.currency')
             ->selectRaw('transactions.counterparty_id as counterparty_id, transactions.currency as currency, sum(transaction_settlements.amount) as total')
+            ->toBase()
             ->get();
 
         foreach ($settled as $row) {

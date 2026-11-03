@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use stdClass;
 
 /**
  * Matches the money someone paid back (an income) to the advances paid for them
@@ -52,8 +53,9 @@ class SettlementService
             ->whereIn($column, $transactionIds)
             ->groupBy($column)
             ->selectRaw("{$column} as transaction_id, sum(amount) as settled")
+            ->toBase()
             ->get()
-            ->mapWithKeys(fn (TransactionSettlement $row) => [(int) $row->transaction_id => self::cents($row->settled)])
+            ->mapWithKeys(fn (stdClass $row) => [(int) $row->transaction_id => self::cents($row->settled)])
             ->all();
     }
 
@@ -80,7 +82,7 @@ class SettlementService
             $available = self::cents($income->amount) - ($this->settledCents([$income->id], TransactionType::Income)[$income->id] ?? 0);
             $settlements = new Collection;
 
-            foreach (array_values($allocations) as $index => $allocation) {
+            foreach ($allocations as $index => $allocation) {
                 $expense = Transaction::query()->lockForUpdate()->find((int) $allocation['expense_id']);
 
                 if ($expense === null || $expense->user_id !== $user->id || $expense->type !== TransactionType::Expense) {
@@ -164,13 +166,26 @@ class SettlementService
 
         $settled = $this->settledCents($expenses->modelKeys(), TransactionType::Expense);
 
-        return $expenses
-            ->map(fn (Transaction $expense) => [
-                'transaction' => $expense,
-                'remaining' => self::cents($expense->amount) - ($settled[$expense->id] ?? 0),
-            ])
-            ->filter(fn (array $advance) => $advance['remaining'] > 0)
-            ->values();
+        $advances = [];
+
+        foreach ($expenses as $expense) {
+            $remaining = self::cents($expense->amount) - ($settled[$expense->id] ?? 0);
+
+            if ($remaining > 0) {
+                $advances[] = ['transaction' => $expense, 'remaining' => $remaining];
+            }
+        }
+
+        return $this->advanceRows($advances);
+    }
+
+    /**
+     * @param  array<int, array{transaction: Transaction, remaining: int}>  $advances
+     * @return Collection<int, array{transaction: Transaction, remaining: int}>
+     */
+    private function advanceRows(array $advances): Collection
+    {
+        return new Collection($advances);
     }
 
     /**
@@ -276,8 +291,9 @@ class SettlementService
             ->whereIn($column, $transactions->clone()->select('id'))
             ->groupBy($column)
             ->selectRaw("{$column} as transaction_id, sum(amount) as settled")
+            ->toBase()
             ->get()
-            ->mapWithKeys(fn (TransactionSettlement $row) => [(int) $row->transaction_id => (float) $row->settled]);
+            ->mapWithKeys(fn (stdClass $row) => [(int) $row->transaction_id => (float) $row->settled]);
 
         if ($settled->isEmpty()) {
             return new Collection;
