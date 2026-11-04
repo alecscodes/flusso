@@ -240,7 +240,8 @@ test('an empty period gives zeros and empty lists', function () {
 
 test('overdue and upcoming payments and the accounts at risk are reported', function () {
     [$user, $account] = insightsSetup();
-    $account->update(['name' => 'Main', 'balance' => 50]);
+    $account->update(['name' => 'Main']);
+    $account->forceFill(['balance' => 50])->save();
     $category = insightsCategory($user, 'Bills');
     $rule = RecurringPayment::factory()->create([
         'user_id' => $user->id, 'account_id' => $account->id, 'category_id' => $category->id,
@@ -309,7 +310,8 @@ test('the dashboard still renders with the insights card', function () {
 test('the narrator only receives figures and category names', function () {
     insightsEnableAi();
     [$user, $account] = insightsSetup();
-    $account->update(['name' => 'Hidden savings', 'balance' => 98765.43]);
+    $account->update(['name' => 'Hidden savings']);
+    $account->forceFill(['balance' => 98765.43])->save();
     $groceries = insightsCategory($user, 'Groceries');
     $person = Counterparty::factory()->create(['user_id' => $user->id, 'name' => 'Mama Rosa']);
     insightsBook($user, $account, 'expense', 123.45, '2026-11-02', $groceries, [
