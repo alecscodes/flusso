@@ -5,6 +5,7 @@ use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\CounterpartyController;
 use App\Http\Controllers\CurrencyController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\InsightsController;
 use App\Http\Controllers\LiquidityAlertController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\ReceiptController;
@@ -72,6 +73,7 @@ Route::middleware('auth')->group(function () {
         Route::get('{statement}/download', 'download')->name('download');
         Route::post('{statement}/reparse', 'reparse')->name('reparse');
     });
+    Route::get('insights', [InsightsController::class, 'index'])->name('insights.index');
     Route::get('currency/rates', [CurrencyController::class, 'getRates'])->name('currency.rates');
 });
 

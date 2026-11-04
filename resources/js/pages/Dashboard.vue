@@ -6,6 +6,7 @@ import {
     PaymentCard,
     StatCard,
 } from '@/components/data-display';
+import InsightsCard from '@/components/data-display/InsightsCard.vue';
 import PaymentDialogs from '@/components/modals/PaymentDialogs.vue';
 import {
     Button,
@@ -109,6 +110,8 @@ const totalCategorySpending = computed(() => {
         </div>
 
         <HeadsUp :liquidity="liquidity" />
+
+        <InsightsCard />
 
         <div
             class="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 xl:grid-cols-4"
