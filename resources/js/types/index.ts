@@ -4,6 +4,8 @@ export interface User {
     email: string;
     email_verified_at: string | null;
     reset_date: number | null;
+    /** Opt-in: totals count advances only until they are settled. */
+    count_advances_until_settled?: boolean;
     two_factor_confirmed_at: string | null;
     created_at: string;
     updated_at: string;
@@ -17,6 +19,7 @@ export interface Account {
     balance: string;
     initial_balance: string;
     is_savings: boolean;
+    alert_threshold: string | null;
     created_at: string;
     updated_at: string;
     deleted_at: string | null;
@@ -49,12 +52,17 @@ export interface Transaction {
     to_account_id: number | null;
     /** What arrived in the destination account (transfers only), in its currency. */
     to_amount: string | null;
+    /** The person this was paid for (an advance) or came from (a repayment). */
+    counterparty_id?: number | null;
+    /** An expense paid for the counterparty: they owe it back. */
+    is_advance?: boolean;
     created_at: string;
     updated_at: string;
     deleted_at: string | null;
     account?: Account;
     category?: Category;
     to_account?: Account;
+    counterparty?: { id: number; name: string } | null;
     files?: TransactionFile[];
 }
 
@@ -155,8 +163,66 @@ export interface PaymentSummary {
     primary_currency: string;
 }
 
+export interface LiquidityPaymentLine {
+    id: number;
+    name: string;
+    due_date: string;
+    amount: number;
+    overdue: boolean;
+    is_estimate: boolean;
+}
+
+export interface LiquidityForecast {
+    account_id: number;
+    account_name: string;
+    currency: string;
+    balance: number;
+    balance_after: number;
+    alert_threshold: number | null;
+    below_threshold: boolean;
+    due_total: number;
+    shortfall: number;
+    needed_by: string | null;
+    negative_on: string | null;
+    threshold_crossed_on: string | null;
+    is_at_risk: boolean;
+    is_estimate: boolean;
+    days: number;
+    message: string;
+    payments: LiquidityPaymentLine[];
+}
+
+export interface LiquidityAlert {
+    id: string;
+    message: string;
+    created_at: string;
+}
+
+export interface Liquidity {
+    at_risk: LiquidityForecast[];
+    alerts: LiquidityAlert[];
+    days: number;
+}
+
 export interface CategorySpending {
     category: Category;
     total: number;
     count: number;
+}
+
+/** Per currency: what was advanced, settled and paid back. `balance` > 0 means they owe the owner, < 0 that they overpaid. */
+export interface CounterpartyBalanceRow {
+    currency: string;
+    advanced: number;
+    settled: number;
+    outstanding: number;
+    received: number;
+    unallocated: number;
+    balance: number;
+}
+
+export interface CounterpartyBalance {
+    id: number;
+    name: string;
+    balances: CounterpartyBalanceRow[];
 }

@@ -21,6 +21,7 @@ class FinanceController extends Controller
 
         return Inertia::render('Settings/Finance', [
             'resetDate' => $user->reset_date,
+            'countAdvancesUntilSettled' => $user->count_advances_until_settled,
             'currentPeriod' => [
                 'start' => $currentPeriod['start']->toDateString(),
                 'end' => $currentPeriod['end']->toDateString(),
@@ -35,10 +36,12 @@ class FinanceController extends Controller
     {
         $validated = $request->validate([
             'reset_date' => ['nullable', 'integer', 'min:1', 'max:31'],
+            'count_advances_until_settled' => ['sometimes', 'boolean'],
         ]);
 
         $request->user()->update([
             'reset_date' => $validated['reset_date'] ?? null,
+            'count_advances_until_settled' => $validated['count_advances_until_settled'] ?? $request->user()->count_advances_until_settled,
         ]);
 
         FlashToast::success('Finance settings updated successfully.');

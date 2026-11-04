@@ -2,6 +2,7 @@
 import {
     AccountCard,
     AmountDisplay,
+    HeadsUp,
     PaymentCard,
     StatCard,
 } from '@/components/data-display';
@@ -21,6 +22,7 @@ import { index as transactionsIndex } from '@/routes/transactions';
 import type {
     Account,
     CategorySpending,
+    Liquidity,
     Payment,
     PaymentSummary,
     Period,
@@ -50,6 +52,7 @@ interface Props {
     availableBalance: number;
     totalBalance: number;
     savingsBalance: number;
+    liquidity: Liquidity;
 }
 
 const props = defineProps<Props>();
@@ -104,6 +107,8 @@ const totalCategorySpending = computed(() => {
                 </Link>
             </div>
         </div>
+
+        <HeadsUp :liquidity="liquidity" />
 
         <div
             class="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 xl:grid-cols-4"

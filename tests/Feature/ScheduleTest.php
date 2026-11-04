@@ -19,6 +19,7 @@ function scheduled(string $command): ?Event
 test('the daily jobs are scheduled', function () {
     expect(scheduled('payments:sync'))->expression->toBe('10 0 * * *')->withoutOverlapping->toBeTrue()
         ->and(scheduled('accounts:verify-balances'))->expression->toBe('0 0 * * *')
+        ->and(scheduled('liquidity:notify'))->expression->toBe('0 7 * * *')->withoutOverlapping->toBeTrue()
         ->and(scheduled('model:prune'))->expression->toBe('0 0 * * *')
         ->and(scheduled('passport:purge'))->expression->toBe('0 0 * * *')
         ->and(scheduled('inspire'))->toBeNull();
