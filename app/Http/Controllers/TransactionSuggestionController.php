@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Enums\TransactionType;
 use App\Http\Requests\CategorySuggestionRequest;
+use App\Http\Requests\QuickEntryParseRequest;
 use App\Models\Transaction;
 use App\Services\CategorySuggestionService;
+use App\Services\QuickEntry\QuickEntryService;
 use App\Services\TransactionShortcutService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,6 +20,7 @@ class TransactionSuggestionController extends Controller
     public function __construct(
         private TransactionShortcutService $shortcutService,
         private CategorySuggestionService $categorySuggestionService,
+        private QuickEntryService $quickEntryService,
     ) {}
 
     public function shortcuts(Request $request): JsonResponse
@@ -40,5 +43,13 @@ class TransactionSuggestionController extends Controller
                 TransactionType::from($data['type']),
             ),
         ]);
+    }
+
+    /**
+     * Read a typed line ("cafea 2.5 cash") into proposed transactions. Nothing is saved.
+     */
+    public function parseText(QuickEntryParseRequest $request): JsonResponse
+    {
+        return response()->json($this->quickEntryService->parse($request->user(), $request->validated('text')));
     }
 }

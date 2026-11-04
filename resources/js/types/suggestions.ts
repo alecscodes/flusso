@@ -16,6 +16,23 @@ export interface CategorySuggestion {
     reason: string;
 }
 
+/** One transaction read from a typed line: a proposal the owner reviews, nothing is saved. */
+export interface QuickEntry {
+    type: 'income' | 'expense';
+    amount: string;
+    account_id: number | null;
+    category_id: number | null;
+    description: string | null;
+    date: string;
+    /** Where the category came from; null without one. */
+    source: 'history' | 'ai' | null;
+}
+
+export interface QuickEntryResult {
+    entries: QuickEntry[];
+    unparsed: string[];
+}
+
 /** An uncategorised transaction on the clean-up page. */
 export interface CleanupRow {
     id: number;

@@ -38,6 +38,7 @@ Route::middleware('auth')->group(function () {
     Route::resource('categories', CategoryController::class)->except(['create', 'edit']);
     Route::get('transactions/shortcuts', [TransactionSuggestionController::class, 'shortcuts'])->name('transactions.shortcuts');
     Route::get('transactions/suggest-category', [TransactionSuggestionController::class, 'category'])->middleware('throttle:60,1')->name('transactions.suggestCategory');
+    Route::post('transactions/parse-text', [TransactionSuggestionController::class, 'parseText'])->middleware('throttle:30,1')->name('transactions.parse-text');
     Route::controller(TransactionCleanupController::class)->prefix('transactions/cleanup')->name('cleanup.')->group(function () {
         Route::get('/', 'index')->name('index');
         Route::post('apply-all', 'applyAll')->name('applyAll');
