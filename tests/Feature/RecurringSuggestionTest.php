@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\PaymentService;
 use App\Services\RecurringPaymentService;
 use App\Services\RecurringSuggestionService;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Schema;
 
 use function Pest\Laravel\actingAs;
@@ -491,5 +492,5 @@ test('one user cannot have two dismissals for the same merchant', function () {
     DismissedRecurringSuggestion::factory()->create(['user_id' => $user->id, 'normalized_key' => 'cursor']);
 
     expect(fn () => DismissedRecurringSuggestion::factory()->create(['user_id' => $user->id, 'normalized_key' => 'cursor']))
-        ->toThrow(Illuminate\Database\QueryException::class);
+        ->toThrow(QueryException::class);
 });
