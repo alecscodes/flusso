@@ -185,9 +185,9 @@ test('a transfer between currencies matches the amount that arrived', function (
 test('imported and ignored lines are left alone and a statement without an account matches nothing', function () {
     [, $account, $statement] = statementsMatchSetup();
     $imported = statementsLine($statement, '2024-03-10', -7.00);
-    $imported->update(['match_status' => StatementLineStatus::Imported]);
+    $importedTransaction = statementsTransaction($account, '2024-03-10', 7.00);
+    $imported->update(['match_status' => StatementLineStatus::Imported, 'matched_transaction_id' => $importedTransaction->id]);
     $open = statementsLine($statement, '2024-03-10', -8.00);
-    statementsTransaction($account, '2024-03-10', 7.00);
     statementsTransaction($account, '2024-03-10', 8.00);
 
     $matcher = app(StatementMatcher::class);
