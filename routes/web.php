@@ -5,6 +5,7 @@ use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\CounterpartyController;
 use App\Http\Controllers\CurrencyController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\InsightsController;
 use App\Http\Controllers\LiquidityAlertController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\ReceiptController;
@@ -83,6 +84,7 @@ Route::middleware('auth')->group(function () {
         Route::post('{statement}/lines/{line}/ignore', 'ignore')->name('ignore-line');
         Route::post('{statement}/lines/{line}/restore', 'restore')->name('restore-line');
     });
+    Route::get('insights', [InsightsController::class, 'index'])->name('insights.index');
     Route::get('currency/rates', [CurrencyController::class, 'getRates'])->name('currency.rates');
 });
 

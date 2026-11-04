@@ -246,3 +246,90 @@ export interface CounterpartyBalance {
     name: string;
     balances: CounterpartyBalanceRow[];
 }
+
+export interface InsightsChange {
+    amount: number;
+    percent: number | null;
+}
+
+export interface InsightsSummary {
+    income: number;
+    expenses: number;
+    net: number;
+    transaction_count: number;
+}
+
+export interface InsightsCard {
+    period: Period & { is_current: boolean };
+    currency: string;
+    is_estimate: boolean;
+    summary: InsightsSummary;
+    expense_change: InsightsChange;
+    sentence: string;
+}
+
+export interface InsightsTopCategory {
+    category_id: number;
+    name: string;
+    color: string | null;
+    total: number;
+    previous_total: number;
+    change_amount: number;
+    change_percent: number | null;
+}
+
+export interface InsightsUnusualCategory {
+    category_id: number;
+    name: string;
+    total: number;
+    average: number;
+    ratio: number;
+}
+
+export interface InsightsExpense {
+    id: number;
+    date: string;
+    description: string | null;
+    category: string | null;
+    amount: number;
+    currency: string;
+    amount_primary: number;
+}
+
+export interface InsightsPaymentLine {
+    id: number;
+    name: string;
+    due_date: string;
+    amount: number;
+    currency: string;
+    type: string;
+}
+
+export interface InsightsPerson {
+    name: string;
+    currency: string;
+    balance: number;
+}
+
+export interface Insights extends InsightsCard {
+    previous_period: Period;
+    navigation: { previous: string; next: string | null };
+    previous_summary: InsightsSummary;
+    top_categories: InsightsTopCategory[];
+    unusual_categories: InsightsUnusualCategory[];
+    biggest_expenses: InsightsExpense[];
+    payments: {
+        days: number;
+        overdue: InsightsPaymentLine[];
+        upcoming: InsightsPaymentLine[];
+        overdue_total: number;
+        upcoming_total: number;
+    };
+    people: InsightsPerson[];
+    liquidity: string | null;
+}
+
+export interface InsightsNarrative {
+    text: string;
+    source: 'ai' | 'template';
+}

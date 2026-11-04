@@ -5,6 +5,7 @@ import { dashboard, logout } from '@/routes';
 import { index as accountsIndex } from '@/routes/accounts';
 import { index as categoriesIndex } from '@/routes/categories';
 import { index as counterpartiesIndex } from '@/routes/counterparties';
+import { index as insightsIndex } from '@/routes/insights';
 import { index as paymentsIndex } from '@/routes/payments';
 import { edit as profileEdit } from '@/routes/profile';
 import { index as recurringPaymentsIndex } from '@/routes/planned-payments';
@@ -23,6 +24,7 @@ import {
     Receipt,
     RefreshCw,
     Settings,
+    Sparkles,
     Sun,
     Tag,
     Users,
@@ -55,6 +57,7 @@ const navigation = [
 ];
 
 const secondaryNavigation = [
+    { name: 'Insights', href: insightsIndex.url(), icon: Sparkles },
     { name: 'Planned', href: recurringPaymentsIndex.url(), icon: RefreshCw },
     { name: 'Statements', href: statementsIndex.url(), icon: Archive },
     { name: 'Categories', href: categoriesIndex.url(), icon: Tag },

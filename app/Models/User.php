@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -116,12 +117,14 @@ class User extends Authenticatable implements OAuthenticatable
     /**
      * The current financial period, from the reset day to the day before the next
      * one. The reset day is clamped to the month's length (31 -> Feb 28/29).
+     * With `$at`, the period that contains that moment instead of the current one.
      *
      * @return array{start: CarbonImmutable, end: CarbonImmutable}
      */
-    public function getFinancialPeriod(): array
+    public function getFinancialPeriod(?CarbonInterface $at = null): array
     {
-        $month = now()->startOfMonth();
+        $now = CarbonImmutable::instance($at ?? now());
+        $month = $now->startOfMonth();
 
         if ($this->reset_date === null) {
             return ['start' => $month, 'end' => $month->endOfMonth()];
@@ -131,7 +134,7 @@ class User extends Authenticatable implements OAuthenticatable
 
         $start = $resetDayIn($month);
 
-        if (now()->lt($start)) {
+        if ($now->lt($start)) {
             $start = $resetDayIn($month->subMonth());
             $nextStart = $resetDayIn($month);
         } else {
