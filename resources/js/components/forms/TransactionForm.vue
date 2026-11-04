@@ -12,10 +12,16 @@ import { useDate } from '@/composables';
 import { options as counterpartyOptions } from '@/routes/counterparties';
 import { rates } from '@/routes/currency';
 import type { Account, Category, Transaction } from '@/types';
-import type { TransactionShortcut } from '@/types/suggestions';
-import { useForm, useHttp } from '@inertiajs/vue3';
+import type {
+    QuickEntry,
+    QuickEntryResult,
+    TransactionShortcut,
+} from '@/types/suggestions';
+import { parseText } from '@/routes/transactions';
+import { router, useForm, useHttp } from '@inertiajs/vue3';
 import { computed, nextTick, onMounted, ref, useId, watch } from 'vue';
 import CategorySuggestion from './CategorySuggestion.vue';
+import QuickEntryList from './QuickEntryList.vue';
 import TransactionShortcuts from './TransactionShortcuts.vue';
 
 type TransactionType = Transaction['type'];
@@ -339,6 +345,114 @@ async function applyShortcut(shortcut: TransactionShortcut) {
     form.description = shortcut.description ?? '';
 }
 
+// --- Quick entry (free text) -------------------------------------------------
+
+const quickParser = useHttp({ text: '' });
+const quickText = ref('');
+const quickEntries = ref<QuickEntry[]>([]);
+const quickMessage = ref('');
+const quickBusy = ref(false);
+const quickSavingIndex = ref<number | null>(null);
+
+// A read line only prefills: the owner still reviews and presses Add.
+async function applyQuickEntry(entry: QuickEntry) {
+    form.type = entry.type;
+    await nextTick();
+    form.account_id = entry.account_id?.toString() ?? form.account_id;
+    form.category_id = entry.category_id?.toString() ?? '';
+    form.amount = entry.amount;
+    form.description = entry.description ?? '';
+    form.date = entry.date;
+}
+
+async function readQuickEntry() {
+    const text = quickText.value.trim();
+
+    if (text === '' || quickBusy.value) {
+        return;
+    }
+
+    quickBusy.value = true;
+    quickMessage.value = '';
+    quickEntries.value = [];
+
+    try {
+        quickParser.text = text;
+        const result = (await quickParser.submit(
+            parseText(),
+        )) as QuickEntryResult;
+
+        if (result.entries.length === 0) {
+            quickMessage.value = 'No amount found. Try e.g. "cafea 2.5 cash".';
+        } else if (result.entries.length === 1) {
+            await applyQuickEntry(result.entries[0]);
+            quickText.value = '';
+        } else {
+            quickEntries.value = result.entries;
+            quickText.value = '';
+        }
+
+        if (result.entries.length > 0 && result.unparsed.length > 0) {
+            quickMessage.value = `Not understood: ${result.unparsed.join('; ')}`;
+        }
+    } catch {
+        quickMessage.value = 'Could not read that. Fill the form by hand.';
+    } finally {
+        quickBusy.value = false;
+    }
+}
+
+async function loadQuickEntry(index: number) {
+    const entry = quickEntries.value[index];
+
+    if (!entry) {
+        return;
+    }
+
+    quickEntries.value = quickEntries.value.filter((_, i) => i !== index);
+    await applyQuickEntry(entry);
+}
+
+function saveQuickEntry(index: number) {
+    const entry = quickEntries.value[index];
+
+    if (!entry || !entry.account_id || quickSavingIndex.value !== null) {
+        return;
+    }
+
+    quickSavingIndex.value = index;
+    router.post(
+        props.action,
+        {
+            type: entry.type,
+            account_id: entry.account_id,
+            category_id: entry.category_id ?? '',
+            amount: entry.amount,
+            description: entry.description ?? '',
+            date: entry.date,
+        },
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                quickEntries.value = quickEntries.value.filter(
+                    (_, i) => i !== index,
+                );
+
+                if (quickEntries.value.length === 0) {
+                    emit('success');
+                }
+            },
+            onError: () => {
+                quickMessage.value =
+                    'That entry could not be saved. Edit it in the form.';
+            },
+            onFinish: () => {
+                quickSavingIndex.value = null;
+            },
+        },
+    );
+}
+
 function handleFileChange(event: Event) {
     const target = event.target as HTMLInputElement;
     if (target.files) {
@@ -402,6 +516,40 @@ function submit() {
 <template>
     <form :id="formId" class="space-y-6" @submit.prevent="submit">
         <div class="space-y-4">
+            <div v-if="!isEditing && !isTransfer" class="space-y-2">
+                <Label for="quick_entry">Quick entry</Label>
+                <div class="flex gap-2">
+                    <Input
+                        id="quick_entry"
+                        v-model="quickText"
+                        maxlength="500"
+                        placeholder="e.g. cafea 2.5 cash, mama amazon 40 revolut ieri"
+                        autocomplete="off"
+                        @keydown.enter.prevent="readQuickEntry"
+                    />
+                    <Button
+                        type="button"
+                        variant="outline"
+                        :disabled="quickBusy || quickText.trim() === ''"
+                        @click="readQuickEntry"
+                    >
+                        Fill
+                    </Button>
+                </div>
+                <p v-if="quickMessage" class="text-xs text-muted-foreground">
+                    {{ quickMessage }}
+                </p>
+                <QuickEntryList
+                    v-if="quickEntries.length > 0"
+                    :entries="quickEntries"
+                    :accounts="accounts"
+                    :categories="categories"
+                    :saving-index="quickSavingIndex"
+                    @load="loadQuickEntry"
+                    @save="saveQuickEntry"
+                />
+            </div>
+
             <TransactionShortcuts
                 v-if="!isEditing && !isTransfer"
                 :accounts="accounts"

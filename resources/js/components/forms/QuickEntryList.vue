@@ -86,7 +86,10 @@ function load(index: number) {
                 class="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground"
             >
                 <span>{{ row.account?.name ?? 'No account found' }}</span>
-                <span v-if="row.category" class="inline-flex items-center gap-1">
+                <span
+                    v-if="row.category"
+                    class="inline-flex items-center gap-1"
+                >
                     <Sparkles
                         v-if="row.entry.source === 'ai'"
                         class="h-3 w-3"
@@ -108,12 +111,12 @@ function load(index: number) {
                     type="button"
                     size="sm"
                     :disabled="!row.canSave || savingIndex !== null"
-                    :title="
-                        row.canSave ? undefined : 'Choose an account first'
-                    "
+                    :title="row.canSave ? undefined : 'Choose an account first'"
                     @click="save(row.index)"
                 >
-                    {{ confirming === row.index ? 'Tap again to save' : 'Save' }}
+                    {{
+                        confirming === row.index ? 'Tap again to save' : 'Save'
+                    }}
                 </Button>
             </div>
         </li>
