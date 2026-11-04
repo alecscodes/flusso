@@ -60,7 +60,7 @@ class StatementImportRequest extends FormRequest
         return [
             'account_id.required' => 'Choose the account to import into.',
             'account_id.exists' => $this->route('statement')->account_id !== null
-                ? 'The statement\'s account is archived, so nothing can be imported into it.'
+                ? 'The account of this statement is archived, so nothing can be imported into it.'
                 : 'Choose one of your accounts.',
             'lines.required' => 'Select at least one line.',
             'lines.*.id.exists' => 'That line is not part of this statement.',

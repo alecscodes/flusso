@@ -568,7 +568,10 @@ function setAside(line: Line, restore: boolean): void {
                             class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm"
                         >
                             <Checkbox
-                                v-if="drafts[line.id] && line.match_status === 'unmatched'"
+                                v-if="
+                                    drafts[line.id] &&
+                                    line.match_status === 'unmatched'
+                                "
                                 v-model="drafts[line.id].selected"
                                 :aria-label="`Select ${line.description}`"
                             />
@@ -616,7 +619,10 @@ function setAside(line: Line, restore: boolean): void {
                         </div>
 
                         <div
-                            v-if="drafts[line.id]?.selected && line.match_status === 'unmatched'"
+                            v-if="
+                                drafts[line.id]?.selected &&
+                                line.match_status === 'unmatched'
+                            "
                             class="mt-2 grid gap-2 sm:grid-cols-2 sm:pl-8"
                         >
                             <Input
