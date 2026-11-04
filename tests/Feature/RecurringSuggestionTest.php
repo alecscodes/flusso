@@ -4,6 +4,7 @@ use App\Enums\SuggestionDismissalKind;
 use App\Models\Account;
 use App\Models\Category;
 use App\Models\DismissedRecurringSuggestion;
+use App\Models\Payment;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\PaymentService;
@@ -19,6 +20,16 @@ use function Pest\Laravel\delete;
 use function Pest\Laravel\post;
 
 beforeEach(fn () => $this->travelTo('2026-06-15 12:00:00'));
+
+/**
+ * Pays an occurrence; the service reads the owner, which lazy loading would otherwise refuse.
+ *
+ * @param  array<string, mixed>  $data
+ */
+function subscriptionsPay(Payment $payment, array $data = []): void
+{
+    app(PaymentService::class)->markAsPaid($payment->loadMissing('user'), $data);
+}
 
 /**
  * @return array{0: User, 1: Account, 2: Category}
@@ -407,7 +418,7 @@ test('a planned payment whose latest payment cost over 10 percent more or less s
     [$user] = subscriptionsSetup();
     $rule = plannedPayment($user, ['name' => 'Hosting', 'start_date' => '2026-06-01', 'amount' => 20, 'installments' => 3]);
 
-    app(PaymentService::class)->markAsPaid($rule->payments()->orderBy('occurrence')->first(), ['amount' => $paid]);
+    subscriptionsPay($rule->payments()->orderBy('occurrence')->first(), ['amount' => $paid]);
 
     $price = app(RecurringPaymentService::class)->getRecurringPaymentsForUser($user)->first()->price_change;
 
@@ -424,8 +435,8 @@ test('only the latest paid payment decides the price change', function () {
     $rule = plannedPayment($user, ['name' => 'Hosting', 'start_date' => '2026-04-15', 'amount' => 20, 'installments' => 3]);
     $payments = $rule->payments()->orderBy('occurrence')->get();
 
-    app(PaymentService::class)->markAsPaid($payments[0], ['amount' => 30, 'date' => '2026-04-15']);
-    app(PaymentService::class)->markAsPaid($payments[1], ['amount' => 20, 'date' => '2026-05-15']);
+    subscriptionsPay($payments[0], ['amount' => 30, 'date' => '2026-04-15']);
+    subscriptionsPay($payments[1], ['amount' => 20, 'date' => '2026-05-15']);
 
     expect(app(RecurringPaymentService::class)->getRecurringPaymentsForUser($user)->first()->price_change)->toBeNull();
 });
@@ -435,7 +446,7 @@ test('a payment made from an account in another currency is not compared', funct
     $ron = Account::factory()->create(['user_id' => $user->id, 'currency' => 'RON', 'balance' => 1000]);
     $rule = plannedPayment($user, ['name' => 'Hosting', 'start_date' => '2026-06-01', 'amount' => 20, 'installments' => 2]);
 
-    app(PaymentService::class)->markAsPaid($rule->payments()->orderBy('occurrence')->first(), ['amount' => 100, 'account_id' => $ron->id]);
+    subscriptionsPay($rule->payments()->orderBy('occurrence')->first(), ['amount' => 100, 'account_id' => $ron->id]);
 
     expect(app(RecurringPaymentService::class)->getRecurringPaymentsForUser($user)->first()->price_change)->toBeNull();
 });
@@ -443,7 +454,7 @@ test('a payment made from an account in another currency is not compared', funct
 test('a paused planned payment shows no price change', function () {
     [$user] = subscriptionsSetup();
     $rule = plannedPayment($user, ['name' => 'Hosting', 'start_date' => '2026-06-01', 'amount' => 20, 'installments' => 2]);
-    app(PaymentService::class)->markAsPaid($rule->payments()->orderBy('occurrence')->first(), ['amount' => 40]);
+    subscriptionsPay($rule->payments()->orderBy('occurrence')->first(), ['amount' => 40]);
     $rule->update(['is_active' => false]);
 
     expect(app(RecurringPaymentService::class)->getRecurringPaymentsForUser($user)->first()->price_change)->toBeNull();
@@ -453,7 +464,7 @@ test('a payment marked unpaid again no longer counts as the latest paid', functi
     [$user] = subscriptionsSetup();
     $rule = plannedPayment($user, ['name' => 'Hosting', 'start_date' => '2026-06-01', 'amount' => 20, 'installments' => 2]);
     $payment = $rule->payments()->orderBy('occurrence')->first();
-    app(PaymentService::class)->markAsPaid($payment, ['amount' => 40]);
+    subscriptionsPay($payment, ['amount' => 40]);
     app(PaymentService::class)->markAsUnpaid($payment->fresh());
 
     expect(app(RecurringPaymentService::class)->getRecurringPaymentsForUser($user)->first()->price_change)->toBeNull();
@@ -463,7 +474,7 @@ test('the price change reaches the planned payment pages of its owner only', fun
     [$user] = subscriptionsSetup();
     [$stranger] = subscriptionsSetup();
     $rule = plannedPayment($user, ['name' => 'Hosting', 'start_date' => '2026-06-01', 'amount' => 20, 'installments' => 2]);
-    app(PaymentService::class)->markAsPaid($rule->payments()->orderBy('occurrence')->first(), ['amount' => 25]);
+    subscriptionsPay($rule->payments()->orderBy('occurrence')->first(), ['amount' => 25]);
 
     actingAs($user)->get(route('planned-payments.index'))->assertInertia(fn ($page) => $page
         ->where('recurringPayments.0.price_change.rule_amount', '20.00')
