@@ -15,6 +15,19 @@ import { computed, useId } from 'vue';
 
 interface Props {
     recurringPayment?: RecurringPayment | null;
+    /** Starting values for a new planned payment (e.g. from a suggestion). */
+    prefill?: Partial<
+        Pick<
+            RecurringPayment,
+            | 'name'
+            | 'account_id'
+            | 'category_id'
+            | 'amount'
+            | 'interval_type'
+            | 'interval_value'
+            | 'start_date'
+        >
+    > | null;
     accounts: Account[];
     categories: Category[];
     action: string;
@@ -35,17 +48,21 @@ const { formatCurrency } = useCurrency();
 const formId = useId();
 
 const rule = props.recurringPayment;
+const prefill = props.prefill;
 const isEditing = computed(() => !!rule);
 
 const form = useForm({
-    name: rule?.name ?? '',
-    account_id: rule?.account_id?.toString() ?? '',
-    category_id: rule?.category_id?.toString() ?? '',
-    amount: rule?.amount ?? '',
+    name: rule?.name ?? prefill?.name ?? '',
+    account_id: (rule?.account_id ?? prefill?.account_id)?.toString() ?? '',
+    category_id: (rule?.category_id ?? prefill?.category_id)?.toString() ?? '',
+    amount: rule?.amount ?? prefill?.amount ?? '',
     repeat: (rule?.installments === 1 ? 'once' : 'repeat') as Repeat,
-    interval_value: rule?.interval_value?.toString() ?? '1',
-    interval_type: rule?.interval_type ?? 'months',
-    start_date: toInputFormat(rule?.start_date ?? new Date()),
+    interval_value:
+        (rule?.interval_value ?? prefill?.interval_value)?.toString() ?? '1',
+    interval_type: rule?.interval_type ?? prefill?.interval_type ?? 'months',
+    start_date: toInputFormat(
+        rule?.start_date ?? prefill?.start_date ?? new Date(),
+    ),
     ends: (rule?.installments && rule.installments > 1
         ? 'count'
         : rule?.end_date

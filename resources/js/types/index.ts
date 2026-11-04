@@ -89,6 +89,26 @@ export interface RecurringPayment {
     account?: Account;
     category?: Category;
     payments?: Payment[];
+    /** Only on the planned payments pages: the latest paid amount strays from the rule's by more than 10%. */
+    price_change?: { rule_amount: string; last_paid_amount: string } | null;
+}
+
+/** A charge that looks like a subscription; the owner decides whether to plan it. */
+export interface RecurringSuggestion {
+    /** The normalised merchant, stable across charges. */
+    key: string;
+    label: string;
+    interval_type: 'weeks' | 'months' | 'years';
+    interval_value: number;
+    amount: string;
+    previous_amount: string;
+    currency: string;
+    account_id: number;
+    category_id: number | null;
+    occurrences: number;
+    last_date: string;
+    next_expected: string;
+    price_jumped: boolean;
 }
 
 export interface TransactionFile {
