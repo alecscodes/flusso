@@ -71,22 +71,35 @@ class StatementImporter
             $result = ['imported' => 0, 'already_in_app' => 0, 'refused' => []];
 
             foreach ($lines as $line) {
+                $notOpen = 'Only lines that are not in Flusso can be imported.';
+
                 if ($line->match_status !== StatementLineStatus::Unmatched) {
-                    $result['refused'][] = ['line_id' => $line->id, 'reason' => 'Only lines that are not in Flusso can be imported.'];
+                    $result['refused'][] = ['line_id' => $line->id, 'reason' => $notOpen];
 
                     continue;
                 }
 
                 if (isset($matches[$line->id])) {
-                    $line->forceFill(['match_status' => StatementLineStatus::Matched, 'matched_transaction_id' => $matches[$line->id]])->save();
-                    $result['already_in_app']++;
+                    if ($this->claim($line, StatementLineStatus::Matched, $matches[$line->id])) {
+                        $result['already_in_app']++;
+                    } else {
+                        $result['refused'][] = ['line_id' => $line->id, 'reason' => $notOpen];
+                    }
 
                     continue;
                 }
 
+                $type = $this->typeFor($line);
                 $choice = $choices[$line->id] ?? [];
                 $categoryId = array_key_exists('category_id', $choice) ? $choice['category_id'] : ($suggested[$line->id] ?? null);
-                $reason = $this->refusal($line, $account, $categoryId, $categoryTypes);
+
+                if ($type === null) {
+                    $result['refused'][] = ['line_id' => $line->id, 'reason' => 'A line of 0.00 is not a transaction.'];
+
+                    continue;
+                }
+
+                $reason = $this->refusal($line, $account, $type, $categoryId, $categoryTypes);
 
                 if ($reason !== null) {
                     $result['refused'][] = ['line_id' => $line->id, 'reason' => $reason];
@@ -94,16 +107,24 @@ class StatementImporter
                     continue;
                 }
 
+                // Claim the line first (a conditional update that only one request can win), so a
+                // concurrent import of the same line can never create a second transaction.
+                if (! $this->claim($line, StatementLineStatus::Imported, null)) {
+                    $result['refused'][] = ['line_id' => $line->id, 'reason' => $notOpen];
+
+                    continue;
+                }
+
                 $transaction = $this->transactionService->createTransaction($user, [
                     'account_id' => $account->id,
-                    'type' => $this->typeFor($line) ?? TransactionType::Expense,
+                    'type' => $type,
                     'amount' => ltrim((string) $line->amount, '-'),
                     'date' => $line->posted_on->toDateString(),
                     'description' => filled($choice['description'] ?? null) ? $choice['description'] : $line->description,
                     'category_id' => $categoryId,
                 ]);
 
-                $line->forceFill(['match_status' => StatementLineStatus::Imported, 'matched_transaction_id' => $transaction->id])->save();
+                StatementLine::query()->whereKey($line->id)->update(['matched_transaction_id' => $transaction->id]);
                 $result['imported']++;
             }
 
@@ -141,18 +162,23 @@ class StatementImporter
     }
 
     /**
+     * Take an unmatched line out of the pool: only the request whose update changes the row gets it.
+     */
+    private function claim(StatementLine $line, StatementLineStatus $to, ?int $transactionId): bool
+    {
+        return StatementLine::query()
+            ->whereKey($line->id)
+            ->where('match_status', StatementLineStatus::Unmatched->value)
+            ->update(['match_status' => $to->value, 'matched_transaction_id' => $transactionId]) === 1;
+    }
+
+    /**
      * Why the line cannot be imported into the account, or null when it can.
      *
      * @param  array<int, string>  $categoryTypes  the owner's categories: type by id
      */
-    private function refusal(StatementLine $line, Account $account, ?int $categoryId, array $categoryTypes): ?string
+    private function refusal(StatementLine $line, Account $account, TransactionType $type, ?int $categoryId, array $categoryTypes): ?string
     {
-        $type = $this->typeFor($line);
-
-        if ($type === null) {
-            return 'A line of 0.00 is not a transaction.';
-        }
-
         if ($line->currency !== null && strtoupper($line->currency) !== strtoupper($account->currency)) {
             return "The line is in {$line->currency} but the account is in {$account->currency}; nothing is converted.";
         }

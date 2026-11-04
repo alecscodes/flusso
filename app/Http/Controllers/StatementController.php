@@ -182,6 +182,7 @@ class StatementController extends Controller
                 'parsed_at' => $statement->parsed_at?->toIso8601String(),
                 'has_text' => $textLength > 0,
                 'counts' => collect(StatementLineStatus::cases())->mapWithKeys(fn (StatementLineStatus $case) => [$case->value => (int) ($counts[$case->value] ?? 0)])->all(),
+                'unmatched_totals' => $this->unmatchedTotals($statement),
                 'can_reparse' => ($counts[StatementLineStatus::Imported->value] ?? 0) + ($counts[StatementLineStatus::Ignored->value] ?? 0) === 0,
             ],
             'lines' => $lines->through(fn (StatementLine $line) => [
@@ -258,6 +259,35 @@ class StatementController extends Controller
             Storage::disk('local')->path($statement->path),
             $statement->original_filename
         );
+    }
+
+    /**
+     * What "import all unmatched" would add, per currency, so the owner sees the size of the action.
+     *
+     * @return list<array{currency: string|null, count: int, income: float, expense: float}>
+     */
+    private function unmatchedTotals(Statement $statement): array
+    {
+        $totals = [];
+
+        $rows = $statement->lines()
+            ->where('match_status', StatementLineStatus::Unmatched->value)
+            ->selectRaw('currency, count(*) as total, sum(case when amount > 0 then amount else 0 end) as income, sum(case when amount < 0 then -amount else 0 end) as expense')
+            ->groupBy('currency')
+            ->orderBy('currency')
+            ->toBase()
+            ->get();
+
+        foreach ($rows as $row) {
+            $totals[] = [
+                'currency' => $row->currency !== null ? (string) $row->currency : null,
+                'count' => (int) $row->total,
+                'income' => round((float) $row->income, 2),
+                'expense' => round((float) $row->expense, 2),
+            ];
+        }
+
+        return $totals;
     }
 
     /**

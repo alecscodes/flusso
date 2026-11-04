@@ -44,6 +44,12 @@ interface StatementDetail {
     has_text: boolean;
     counts: Record<string, number>;
     can_reparse: boolean;
+    unmatched_totals: {
+        currency: string | null;
+        count: number;
+        income: number;
+        expense: number;
+    }[];
 }
 
 interface Line {
@@ -218,13 +224,22 @@ function categoriesFor(line: Line): CategoryOption[] {
     return props.categories.filter((category) => category.type === type);
 }
 
+function importAllSummary(): string {
+    const perCurrency = props.statement.unmatched_totals.map((total) => {
+        const currency = total.currency ?? props.statement.currency ?? 'EUR';
+
+        return `${currency}: ${total.count} lines, income ${formatCurrency(total.income, currency)}, expenses ${formatCurrency(total.expense, currency)}`;
+    });
+
+    return [
+        `Import all ${count('unmatched')} lines that are not in Flusso as transactions?`,
+        ...perCurrency,
+        'Lines already in Flusso are skipped, and a line in another currency than the account is refused.',
+    ].join('\n');
+}
+
 function submitImport(everyUnmatched: boolean): void {
-    if (
-        everyUnmatched &&
-        !window.confirm(
-            `Import all ${count('unmatched')} lines that are not in Flusso as transactions?`,
-        )
-    ) {
+    if (everyUnmatched && !window.confirm(importAllSummary())) {
         return;
     }
 

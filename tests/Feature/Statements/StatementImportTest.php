@@ -204,16 +204,12 @@ test('an unexpected error rolls the whole batch back, leaving no half-imported l
     $first = statementImportLine($statement, -1.00);
     $second = statementImportLine($statement, -2.00);
 
-    $real = app(TransactionService::class);
-    $calls = 0;
-    $this->mock(TransactionService::class, function ($mock) use ($real, &$calls) {
-        $mock->shouldReceive('createTransaction')->andReturnUsing(function (User $user, array $data) use ($real, &$calls) {
-            if (++$calls === 2) {
-                throw new RuntimeException('boom');
-            }
-
-            return $real->createTransaction($user, $data);
-        });
+    // A real failure in the middle of the batch, after the first transaction was created and its line updated.
+    $created = 0;
+    Transaction::creating(function () use (&$created) {
+        if (++$created === 2) {
+            throw new RuntimeException('boom');
+        }
     });
 
     $this->withoutExceptionHandling();
@@ -224,6 +220,7 @@ test('an unexpected error rolls the whole batch back, leaving no half-imported l
     expect(Transaction::query()->count())->toBe(0)
         ->and($first->fresh()->match_status)->toBe(StatementLineStatus::Unmatched)
         ->and($first->fresh()->matched_transaction_id)->toBeNull()
+        ->and($second->fresh()->match_status)->toBe(StatementLineStatus::Unmatched)
         ->and($account->fresh()->balance)->toBe('1000.00');
 });
 
@@ -505,4 +502,23 @@ test('the page offers categories of the owner only and suggests one from the his
         ->assertInertia(fn ($page) => $page
             ->where('statement.counts.imported', 1)
             ->where('statement.can_reparse', false));
+});
+
+test('the page tells what importing everything would add, per currency', function () {
+    [$user, , $statement] = statementImportSetup();
+    statementImportLine($statement, -13.70);
+    statementImportLine($statement, 1500.25);
+    statementImportLine($statement, -2.50, ['currency' => 'RON']);
+    statementImportLine($statement, -99.99, ['match_status' => StatementLineStatus::Ignored]);
+
+    actingAs($user)
+        ->get(route('statements.show', $statement))
+        ->assertInertia(fn ($page) => $page
+            ->has('statement.unmatched_totals', 2)
+            ->where('statement.unmatched_totals.0.currency', 'EUR')
+            ->where('statement.unmatched_totals.0.count', 2)
+            ->where('statement.unmatched_totals.0.income', 1500.25)
+            ->where('statement.unmatched_totals.0.expense', 13.7)
+            ->where('statement.unmatched_totals.1.currency', 'RON')
+            ->where('statement.unmatched_totals.1.expense', 2.5));
 });
