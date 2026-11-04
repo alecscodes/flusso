@@ -36,6 +36,7 @@ const formData = ref({
     currency: props.account?.currency || 'EUR',
     balance: props.account?.balance || '0',
     is_savings: props.account?.is_savings || false,
+    alert_threshold: props.account?.alert_threshold ?? '',
 });
 
 const popularCurrencies = [
@@ -132,6 +133,22 @@ const currencyOptions = computed(() => {
                 <p class="text-xs text-muted-foreground">
                     Savings accounts will be excluded from available balance
                     calculations
+                </p>
+            </div>
+
+            <div class="space-y-2">
+                <Label for="alert_threshold">Alert threshold</Label>
+                <Input
+                    id="alert_threshold"
+                    v-model="formData.alert_threshold"
+                    name="alert_threshold"
+                    type="number"
+                    step="0.01"
+                    placeholder="e.g., 100"
+                />
+                <p class="text-xs text-muted-foreground">
+                    Get a heads up when the balance is at or below this amount,
+                    in the account's currency. Leave empty for no alert.
                 </p>
             </div>
         </div>

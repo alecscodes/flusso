@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\PaymentType;
 use App\Models\Payment;
 use App\Models\RecurringPayment;
+use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -12,22 +13,78 @@ use Throwable;
 
 class RecurringPaymentService
 {
+    /** A paid amount this far (as a share) from the rule's amount is worth a notice. */
+    public const PRICE_CHANGE_THRESHOLD = 0.10;
+
     public function __construct(
         private CurrencyService $currencyService
     ) {}
 
     /**
-     * All rules of the user with their occurrences and a computed `status`.
+     * All rules of the user with their occurrences, a computed `status` and a `price_change` notice.
      *
      * @return Collection<int, RecurringPayment>
      */
     public function getRecurringPaymentsForUser(User $user): Collection
     {
-        return $user->recurringPayments()
+        $rules = $user->recurringPayments()
             ->with(['account', 'category', 'payments'])
             ->orderBy('name')
             ->get()
             ->each->append('status');
+
+        return $this->withPriceChanges($rules);
+    }
+
+    /**
+     * Sets `price_change` on every rule: null, or what the rule says against what was last paid.
+     *
+     * @param  Collection<int, RecurringPayment>  $rules
+     * @return Collection<int, RecurringPayment>
+     */
+    public function withPriceChanges(Collection $rules): Collection
+    {
+        $changes = $this->priceChanges($rules);
+
+        return $rules->each(fn (RecurringPayment $rule) => $rule->setAttribute('price_change', $changes[$rule->id] ?? null));
+    }
+
+    /**
+     * Active rules whose latest paid occurrence cost more than 10% off the rule's amount (same currency
+     * only: a payment may be made from another account). Keyed by rule id; amounts exactly as stored.
+     *
+     * @param  Collection<int, RecurringPayment>  $rules
+     * @return array<int, array{rule_amount: string, last_paid_amount: string}>
+     */
+    private function priceChanges(Collection $rules): array
+    {
+        $active = $rules->filter(fn (RecurringPayment $rule) => $rule->is_active)->keyBy('id');
+
+        if ($active->isEmpty()) {
+            return [];
+        }
+
+        $latestPaid = Transaction::query()
+            ->whereIn('recurring_payment_id', $active->keys()->all())
+            ->whereIn('id', Payment::query()->whereNotNull('transaction_id')->select('transaction_id'))
+            ->orderByDesc('date')
+            ->orderByDesc('id')
+            ->get(['id', 'recurring_payment_id', 'amount', 'currency', 'date'])
+            ->unique('recurring_payment_id');
+
+        $changes = [];
+
+        foreach ($latestPaid as $transaction) {
+            $rule = $active->get($transaction->recurring_payment_id);
+            $ruleAmount = (float) $rule?->amount;
+
+            if ($rule !== null && $rule->currency === $transaction->currency && $ruleAmount > 0
+                && abs((float) $transaction->amount - $ruleAmount) / $ruleAmount > self::PRICE_CHANGE_THRESHOLD) {
+                $changes[$rule->id] = ['rule_amount' => (string) $rule->amount, 'last_paid_amount' => (string) $transaction->amount];
+            }
+        }
+
+        return $changes;
     }
 
     /**

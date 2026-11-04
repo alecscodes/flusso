@@ -25,5 +25,15 @@ services:
       test: [CMD, pgrep, -f, schedule:work]
       interval: 10s
 
+  # Optional local model, off by default: `docker compose --profile ai up -d`,
+  # then `docker compose exec ollama ollama pull qwen3:4b` and point Settings > AI at http://ollama:11434.
+  ollama:
+    image: ollama/ollama
+    profiles: [ai]
+    restart: unless-stopped
+    volumes:
+      - ollama:/root/.ollama
+
 volumes:
   storage:
+  ollama:

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { AmountDisplay, TransactionRow } from '@/components/data-display';
+import ReceiptScanModal from '@/components/modals/ReceiptScanModal.vue';
 import TransactionDialogs from '@/components/modals/TransactionDialogs.vue';
 import {
     Button,
@@ -11,10 +12,11 @@ import {
 } from '@/components/ui';
 import { useTransactionActions } from '@/composables';
 import { debounce } from '@/lib/utils';
+import { index as cleanupIndex } from '@/routes/cleanup';
 import { index as transactionsIndex } from '@/routes/transactions';
 import type { Account, Category, PaginatedData, Transaction } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { ArrowLeftRight, Filter, Plus, Search, X } from '@lucide/vue';
+import { ArrowLeftRight, Filter, Plus, ScanLine, Search, X } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 
 interface Props {
@@ -28,6 +30,8 @@ interface Props {
     }>;
     hasDateFilters: boolean;
     primaryCurrency: string;
+    uncategorizedCount: number;
+    receiptScanEnabled: boolean;
 }
 
 const props = defineProps<Props>();
@@ -36,6 +40,7 @@ const page = usePage();
 const DEBOUNCE_MS = 350;
 
 const showFilters = ref(false);
+const scanningReceipt = ref(false);
 const { create, edit, view, remove } = useTransactionActions();
 
 const filters = ref(getFiltersFromUrl());
@@ -112,6 +117,13 @@ const debouncedApplyFilters = debounce(applyFilters, DEBOUNCE_MS);
 
     <div class="space-y-6">
         <TransactionDialogs :accounts="accounts" :categories="categories" />
+        <ReceiptScanModal
+            v-if="receiptScanEnabled"
+            :open="scanningReceipt"
+            :accounts="accounts"
+            :categories="categories"
+            @close="scanningReceipt = false"
+        />
 
         <div
             class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
@@ -124,7 +136,23 @@ const debouncedApplyFilters = debounce(applyFilters, DEBOUNCE_MS);
                     Track all your income, expenses, and transfers
                 </p>
             </div>
-            <div class="flex justify-between gap-3">
+            <div class="flex flex-wrap justify-between gap-3">
+                <Button
+                    v-if="uncategorizedCount > 0"
+                    variant="outline"
+                    :as="Link"
+                    :href="cleanupIndex.url()"
+                >
+                    Clean up ({{ uncategorizedCount }})
+                </Button>
+                <Button
+                    v-if="receiptScanEnabled"
+                    variant="outline"
+                    @click="scanningReceipt = true"
+                >
+                    <ScanLine class="h-4 w-4" />
+                    Scan receipt
+                </Button>
                 <Button variant="outline" @click="create('transfer')">
                     <ArrowLeftRight class="h-4 w-4" />
                     Transfer
