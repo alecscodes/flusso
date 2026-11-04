@@ -395,11 +395,13 @@ class InsightsService
     {
         $atRisk = $this->liquidityService->atRisk($user);
 
-        if ($atRisk->isEmpty()) {
+        $first = $atRisk->first();
+
+        if ($first === null) {
             return null;
         }
 
-        $line = $this->liquidityService->describe($atRisk->first());
+        $line = $this->liquidityService->describe($first);
         $others = $atRisk->count() - 1;
 
         return $others > 0 ? "{$line} (and {$others} more)" : $line;
