@@ -12,6 +12,7 @@ use App\Http\Controllers\RecurringPaymentController;
 use App\Http\Controllers\RecurringSuggestionController;
 use App\Http\Controllers\SettlementController;
 use App\Http\Controllers\StatementController;
+use App\Http\Controllers\StatementImportController;
 use App\Http\Controllers\TransactionCleanupController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\TransactionSuggestionController;
@@ -76,6 +77,11 @@ Route::middleware('auth')->group(function () {
         Route::delete('{statement}', 'destroy')->name('destroy');
         Route::get('{statement}/download', 'download')->name('download');
         Route::post('{statement}/reparse', 'reparse')->name('reparse');
+    });
+    Route::controller(StatementImportController::class)->prefix('statements')->name('statements.')->group(function () {
+        Route::post('{statement}/import-lines', 'store')->name('import-lines');
+        Route::post('{statement}/lines/{line}/ignore', 'ignore')->name('ignore-line');
+        Route::post('{statement}/lines/{line}/restore', 'restore')->name('restore-line');
     });
     Route::get('currency/rates', [CurrencyController::class, 'getRates'])->name('currency.rates');
 });

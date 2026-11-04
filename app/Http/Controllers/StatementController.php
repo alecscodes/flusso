@@ -6,12 +6,14 @@ use App\Enums\AiFeature;
 use App\Enums\StatementLineStatus;
 use App\Http\Requests\StatementUpdateRequest;
 use App\Http\Requests\StatementUploadRequest;
+use App\Models\Category;
 use App\Models\Statement;
 use App\Models\StatementLine;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\AccountService;
 use App\Services\Ai\AiManager;
+use App\Services\Statements\StatementImporter;
 use App\Services\Statements\StatementMatcher;
 use App\Services\Statements\StatementSearch;
 use App\Services\Statements\StatementService;
@@ -37,6 +39,7 @@ class StatementController extends Controller
         private readonly StatementMatcher $matcher,
         private readonly AccountService $accountService,
         private readonly AiManager $ai,
+        private readonly StatementImporter $importer,
     ) {}
 
     /**
@@ -154,6 +157,10 @@ class StatementController extends Controller
             ->withQueryString();
 
         $candidates = $this->matcher->candidates($statement);
+        $suggestedCategories = $this->importer->suggestCategories(
+            $request->user(),
+            $lines->getCollection()->filter(fn (StatementLine $line) => $line->match_status === StatementLineStatus::Unmatched),
+        );
         $pageIds = $lines->getCollection()->pluck('id')->all();
         $statement->load('account:id,name,currency')->loadCount([
             'lines',
@@ -175,6 +182,7 @@ class StatementController extends Controller
                 'parsed_at' => $statement->parsed_at?->toIso8601String(),
                 'has_text' => $textLength > 0,
                 'counts' => collect(StatementLineStatus::cases())->mapWithKeys(fn (StatementLineStatus $case) => [$case->value => (int) ($counts[$case->value] ?? 0)])->all(),
+                'unmatched_totals' => $this->unmatchedTotals($statement),
                 'can_reparse' => ($counts[StatementLineStatus::Imported->value] ?? 0) + ($counts[StatementLineStatus::Ignored->value] ?? 0) === 0,
             ],
             'lines' => $lines->through(fn (StatementLine $line) => [
@@ -186,6 +194,7 @@ class StatementController extends Controller
                 'parsed_by' => $line->parsed_by,
                 'match_status' => $line->match_status->value,
                 'matched_transaction' => $line->matchedTransaction ? $this->transactionSummary($line->matchedTransaction) : null,
+                'suggested_category_id' => $suggestedCategories[$line->id] ?? null,
             ]),
             'candidates' => (object) collect($candidates)
                 ->only($pageIds)
@@ -193,6 +202,9 @@ class StatementController extends Controller
                 ->all(),
             'status' => $status?->value,
             'accounts' => $this->accountOptions($request->user()),
+            'categories' => $request->user()->categories()->orderBy('name')->get(['id', 'name', 'type'])
+                ->map(fn (Category $category) => ['id' => $category->id, 'name' => $category->name, 'type' => $category->type->value])
+                ->all(),
         ]);
     }
 
@@ -247,6 +259,35 @@ class StatementController extends Controller
             Storage::disk('local')->path($statement->path),
             $statement->original_filename
         );
+    }
+
+    /**
+     * What "import all unmatched" would add, per currency, so the owner sees the size of the action.
+     *
+     * @return list<array{currency: string|null, count: int, income: float, expense: float}>
+     */
+    private function unmatchedTotals(Statement $statement): array
+    {
+        $totals = [];
+
+        $rows = $statement->lines()
+            ->where('match_status', StatementLineStatus::Unmatched->value)
+            ->selectRaw('currency, count(*) as total, sum(case when amount > 0 then amount else 0 end) as income, sum(case when amount < 0 then -amount else 0 end) as expense')
+            ->groupBy('currency')
+            ->orderBy('currency')
+            ->toBase()
+            ->get();
+
+        foreach ($rows as $row) {
+            $totals[] = [
+                'currency' => $row->currency !== null ? (string) $row->currency : null,
+                'count' => (int) $row->total,
+                'income' => round((float) $row->income, 2),
+                'expense' => round((float) $row->expense, 2),
+            ];
+        }
+
+        return $totals;
     }
 
     /**

@@ -4,6 +4,7 @@ import {
     Button,
     Card,
     CardContent,
+    Checkbox,
     EmptyState,
     Input,
     Label,
@@ -12,15 +13,18 @@ import { useCurrency, useDate } from '@/composables';
 import {
     destroy,
     download,
+    ignoreLine,
+    importLines,
     index,
     reparse,
+    restoreLine,
     show,
     update,
 } from '@/routes/statements';
 import type { PaginatedData } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { ArrowLeft, Download, FileText, RefreshCw, Trash2 } from '@lucide/vue';
-import { ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 
 interface StatementDetail {
     id: number;
@@ -40,6 +44,12 @@ interface StatementDetail {
     has_text: boolean;
     counts: Record<string, number>;
     can_reparse: boolean;
+    unmatched_totals: {
+        currency: string | null;
+        count: number;
+        income: number;
+        expense: number;
+    }[];
 }
 
 interface Line {
@@ -51,6 +61,19 @@ interface Line {
     parsed_by: string;
     match_status: string;
     matched_transaction: Candidate | null;
+    suggested_category_id: number | null;
+}
+
+interface CategoryOption {
+    id: number;
+    name: string;
+    type: string;
+}
+
+interface ImportDraft {
+    selected: boolean;
+    description: string;
+    category_id: string;
 }
 
 interface Candidate {
@@ -67,6 +90,7 @@ interface Props {
     candidates: Record<number, Candidate[]>;
     status: string | null;
     accounts: { id: number; name: string; currency: string }[];
+    categories: CategoryOption[];
 }
 
 const props = defineProps<Props>();
@@ -149,6 +173,114 @@ function money(amount: string, currency: string | null): string {
 
 function count(status: string): number {
     return props.statement.counts[status] ?? 0;
+}
+
+const drafts = reactive<Record<number, ImportDraft>>({});
+const importAccountId = ref(
+    props.statement.account_id ? String(props.statement.account_id) : '',
+);
+const importErrors = ref<Record<string, string>>({});
+const importing = ref(false);
+
+watch(
+    () => props.lines.data,
+    (lines) => {
+        for (const line of lines) {
+            if (line.match_status === 'unmatched' && !(line.id in drafts)) {
+                drafts[line.id] = {
+                    selected: false,
+                    description: line.description,
+                    category_id: line.suggested_category_id
+                        ? String(line.suggested_category_id)
+                        : '',
+                };
+            }
+        }
+    },
+    { immediate: true },
+);
+
+const unmatchedLines = computed(() =>
+    props.lines.data.filter((line) => line.match_status === 'unmatched'),
+);
+const selectedLines = computed(() =>
+    unmatchedLines.value.filter((line) => drafts[line.id]?.selected),
+);
+const allSelected = computed(
+    () =>
+        unmatchedLines.value.length > 0 &&
+        selectedLines.value.length === unmatchedLines.value.length,
+);
+
+function toggleAll(value: boolean): void {
+    for (const line of unmatchedLines.value) {
+        drafts[line.id].selected = value;
+    }
+}
+
+function categoriesFor(line: Line): CategoryOption[] {
+    const type = Number(line.amount) < 0 ? 'expense' : 'income';
+
+    return props.categories.filter((category) => category.type === type);
+}
+
+function importAllSummary(): string {
+    const perCurrency = props.statement.unmatched_totals.map((total) => {
+        const currency = total.currency ?? props.statement.currency ?? 'EUR';
+
+        return `${currency}: ${total.count} lines, income ${formatCurrency(total.income, currency)}, expenses ${formatCurrency(total.expense, currency)}`;
+    });
+
+    return [
+        `Import all ${count('unmatched')} lines that are not in Flusso as transactions?`,
+        ...perCurrency,
+        'Lines already in Flusso are skipped, and a line in another currency than the account is refused.',
+    ].join('\n');
+}
+
+function submitImport(everyUnmatched: boolean): void {
+    if (everyUnmatched && !window.confirm(importAllSummary())) {
+        return;
+    }
+
+    const chosen = everyUnmatched ? unmatchedLines.value : selectedLines.value;
+
+    router.post(
+        importLines.url(props.statement.id),
+        {
+            account_id: importAccountId.value,
+            import_all: everyUnmatched,
+            lines: chosen.map((line) => ({
+                id: line.id,
+                description: drafts[line.id].description,
+                category_id: drafts[line.id].category_id || null,
+            })),
+        },
+        {
+            preserveScroll: true,
+            onStart: () => {
+                importing.value = true;
+                importErrors.value = {};
+            },
+            onError: (errors) => {
+                importErrors.value = errors;
+            },
+            onSuccess: () => toggleAll(false),
+            onFinish: () => {
+                importing.value = false;
+            },
+        },
+    );
+}
+
+function setAside(line: Line, restore: boolean): void {
+    const route = restore ? restoreLine : ignoreLine;
+
+    router.post(
+        route.url({ statement: props.statement.id, line: line.id }),
+        {},
+        { preserveScroll: true },
+    );
 }
 </script>
 
@@ -365,6 +497,58 @@ function count(status: string): number {
             </Button>
         </div>
 
+        <Card v-if="count('unmatched') > 0">
+            <CardContent class="space-y-3 pt-6">
+                <div class="flex flex-wrap items-end gap-3">
+                    <div v-if="!statement.account_id" class="space-y-2">
+                        <Label for="import_account_id">Import into</Label>
+                        <select
+                            id="import_account_id"
+                            v-model="importAccountId"
+                            class="flex h-11 w-full rounded-xl border border-input bg-background px-4 py-2 text-base focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none md:text-sm"
+                        >
+                            <option value="">Choose an account</option>
+                            <option
+                                v-for="account in accounts"
+                                :key="account.id"
+                                :value="String(account.id)"
+                            >
+                                {{ account.name }} ({{ account.currency }})
+                            </option>
+                        </select>
+                    </div>
+                    <p v-else class="text-sm text-muted-foreground">
+                        Importing into {{ statement.account_name }}
+                    </p>
+                    <Button
+                        :disabled="selectedLines.length === 0 || importing"
+                        @click="submitImport(false)"
+                    >
+                        Import selected ({{ selectedLines.length }})
+                    </Button>
+                    <Button
+                        variant="outline"
+                        :disabled="importing"
+                        @click="submitImport(true)"
+                    >
+                        Import all unmatched ({{ count('unmatched') }})
+                    </Button>
+                </div>
+                <p class="text-xs text-muted-foreground">
+                    Tick the lines to add as transactions. Amounts are copied
+                    exactly; lines already in Flusso are detected and skipped.
+                </p>
+                <p
+                    v-for="(message, key) in importErrors"
+                    :key="key"
+                    class="text-sm text-destructive"
+                    role="alert"
+                >
+                    {{ message }}
+                </p>
+            </CardContent>
+        </Card>
+
         <EmptyState
             v-if="lines.data.length === 0"
             title="No lines to show"
@@ -382,11 +566,30 @@ function count(status: string): number {
 
         <Card v-else>
             <CardContent class="px-2 pt-4 sm:px-6 sm:pt-6">
+                <div
+                    v-if="unmatchedLines.length > 1"
+                    class="mb-2 flex items-center gap-2 px-2 text-sm text-muted-foreground"
+                >
+                    <Checkbox
+                        :model-value="allSelected"
+                        aria-label="Select all lines on this page"
+                        @update:model-value="toggleAll"
+                    />
+                    Select all on this page
+                </div>
                 <ul class="divide-y divide-border">
                     <li v-for="line in lines.data" :key="line.id" class="py-3">
                         <div
                             class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm"
                         >
+                            <Checkbox
+                                v-if="
+                                    drafts[line.id] &&
+                                    line.match_status === 'unmatched'
+                                "
+                                v-model="drafts[line.id].selected"
+                                :aria-label="`Select ${line.description}`"
+                            />
                             <span class="w-28 shrink-0 text-muted-foreground">
                                 {{ formatDate(line.posted_on) }}
                             </span>
@@ -412,6 +615,50 @@ function count(status: string): number {
                             <Badge :variant="statusVariant[line.match_status]">
                                 {{ line.match_status }}
                             </Badge>
+                            <Button
+                                v-if="line.match_status === 'unmatched'"
+                                size="sm"
+                                variant="ghost"
+                                @click="setAside(line, false)"
+                            >
+                                Ignore
+                            </Button>
+                            <Button
+                                v-else-if="line.match_status === 'ignored'"
+                                size="sm"
+                                variant="ghost"
+                                @click="setAside(line, true)"
+                            >
+                                Restore
+                            </Button>
+                        </div>
+
+                        <div
+                            v-if="
+                                drafts[line.id]?.selected &&
+                                line.match_status === 'unmatched'
+                            "
+                            class="mt-2 grid gap-2 sm:grid-cols-2 sm:pl-8"
+                        >
+                            <Input
+                                v-model="drafts[line.id].description"
+                                :aria-label="`Description for ${line.description}`"
+                                placeholder="Description"
+                            />
+                            <select
+                                v-model="drafts[line.id].category_id"
+                                :aria-label="`Category for ${line.description}`"
+                                class="flex h-11 w-full rounded-xl border border-input bg-background px-4 py-2 text-base focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none md:text-sm"
+                            >
+                                <option value="">No category</option>
+                                <option
+                                    v-for="category in categoriesFor(line)"
+                                    :key="category.id"
+                                    :value="String(category.id)"
+                                >
+                                    {{ category.name }}
+                                </option>
+                            </select>
                         </div>
 
                         <p
