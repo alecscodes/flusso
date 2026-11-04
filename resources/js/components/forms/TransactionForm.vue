@@ -5,13 +5,18 @@ import {
     Label,
     ModalFooter,
     SearchableSelect,
+    Switch,
     Textarea,
 } from '@/components/ui';
 import { useDate } from '@/composables';
+import { options as counterpartyOptions } from '@/routes/counterparties';
 import { rates } from '@/routes/currency';
 import type { Account, Category, Transaction } from '@/types';
+import type { TransactionShortcut } from '@/types/suggestions';
 import { useForm, useHttp } from '@inertiajs/vue3';
-import { computed, ref, useId, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, useId, watch } from 'vue';
+import CategorySuggestion from './CategorySuggestion.vue';
+import TransactionShortcuts from './TransactionShortcuts.vue';
 
 type TransactionType = Transaction['type'];
 
@@ -81,6 +86,9 @@ const form = useForm({
         ? toInputFormat(props.transaction.date)
         : toInputFormat(new Date()),
     files: [] as File[],
+    counterparty_id: props.transaction?.counterparty_id?.toString() ?? '',
+    counterparty_name: props.transaction?.counterparty?.name ?? '',
+    is_advance: props.transaction?.is_advance ?? false,
 });
 
 const isTransfer = computed(() => form.type === 'transfer');
@@ -94,6 +102,9 @@ const fieldErrorKeys = [
     'to_amount',
     'description',
     'date',
+    'counterparty_id',
+    'counterparty_name',
+    'is_advance',
 ];
 
 const fileErrors = computed(() =>
@@ -244,6 +255,56 @@ watch([() => form.account_id, () => form.to_account_id], () => {
     form.to_amount = convertedAmount();
 });
 
+// --- Person (advances) -------------------------------------------------------
+
+const people = ref<Array<{ id: number; name: string }>>([]);
+// Until the owner touches the field, an edited transaction keeps the person it has.
+const personEdited = ref(false);
+const personListId = `${formId}-people`;
+
+onMounted(async () => {
+    try {
+        const response = (await http.submit(counterpartyOptions())) as {
+            counterparties: Array<{ id: number; name: string }>;
+        };
+        people.value = response.counterparties;
+
+        if (!form.counterparty_name && form.counterparty_id) {
+            form.counterparty_name =
+                people.value.find(
+                    (p) => p.id.toString() === form.counterparty_id,
+                )?.name ?? '';
+        }
+    } catch {
+        // The field still works as free text.
+    }
+});
+
+const matchedPerson = computed(() =>
+    people.value.find(
+        (p) =>
+            p.name.toLowerCase() ===
+            form.counterparty_name.trim().toLowerCase(),
+    ),
+);
+
+// An income whose description names a known person: offered, never applied on its own.
+const suggestedPerson = computed(() => {
+    const text = form.description.toLowerCase();
+
+    if (
+        form.type !== 'income' ||
+        form.counterparty_name.trim() !== '' ||
+        text === ''
+    ) {
+        return undefined;
+    }
+
+    return [...people.value]
+        .sort((a, b) => b.name.length - a.name.length)
+        .find((p) => p.name !== '' && text.includes(p.name.toLowerCase()));
+});
+
 // --- Field resets -----------------------------------------------------------
 
 watch(
@@ -251,6 +312,10 @@ watch(
     () => {
         form.category_id = '';
         form.to_account_id = '';
+
+        if (form.type !== 'expense') {
+            form.is_advance = false;
+        }
     },
 );
 
@@ -262,6 +327,17 @@ watch(
         }
     },
 );
+
+// A shortcut only prefills: the owner still reviews and presses Add.
+async function applyShortcut(shortcut: TransactionShortcut) {
+    form.type = shortcut.type;
+    // Changing the type clears the category: wait for that before filling it in.
+    await nextTick();
+    form.account_id = shortcut.account_id.toString();
+    form.category_id = shortcut.category_id?.toString() ?? '';
+    form.amount = shortcut.amount;
+    form.description = shortcut.description ?? '';
+}
 
 function handleFileChange(event: Event) {
     const target = event.target as HTMLInputElement;
@@ -278,6 +354,37 @@ function removeFile(index: number) {
     form.files.splice(index, 1);
 }
 
+function personFields(data: {
+    counterparty_name: string;
+    is_advance: boolean;
+}) {
+    if (isTransfer.value) {
+        return {
+            counterparty_id: '',
+            counterparty_name: '',
+            is_advance: false,
+        };
+    }
+
+    // Untouched edit whose list of people never loaded: keep the person it has.
+    if (
+        !personEdited.value &&
+        props.transaction?.counterparty_id &&
+        people.value.length === 0
+    ) {
+        return {};
+    }
+
+    const name = data.counterparty_name.trim();
+    const known = matchedPerson.value;
+
+    return {
+        counterparty_id: known ? known.id.toString() : '',
+        counterparty_name: known || !name ? '' : name,
+        is_advance: form.type === 'expense' && !!name && data.is_advance,
+    };
+}
+
 function submit() {
     form.transform((data) => ({
         ...data,
@@ -285,6 +392,7 @@ function submit() {
         to_account_id: isTransfer.value ? data.to_account_id : '',
         // Same-currency transfers arrive 1:1, so the server fills it in.
         to_amount: needsReceivedAmount.value ? data.to_amount : '',
+        ...personFields(data),
     }))[isEditing.value ? 'put' : 'post'](props.action, {
         onSuccess: () => emit('success'),
     });
@@ -294,6 +402,13 @@ function submit() {
 <template>
     <form :id="formId" class="space-y-6" @submit.prevent="submit">
         <div class="space-y-4">
+            <TransactionShortcuts
+                v-if="!isEditing && !isTransfer"
+                :accounts="accounts"
+                :categories="categories"
+                @pick="applyShortcut"
+            />
+
             <div class="space-y-2">
                 <Label required>Transaction Type</Label>
                 <div class="grid grid-cols-3 gap-2">
@@ -448,6 +563,80 @@ function submit() {
                     class="text-sm text-destructive"
                 >
                     {{ form.errors.category_id }}
+                </p>
+                <CategorySuggestion
+                    :description="form.description"
+                    :type="form.type"
+                    :categories="categories"
+                    :has-category="form.category_id !== ''"
+                    @accept="(id) => (form.category_id = id.toString())"
+                />
+            </div>
+
+            <div v-if="!isTransfer" class="space-y-2">
+                <Label for="counterparty_name">
+                    {{ form.type === 'expense' ? 'For person' : 'From person' }}
+                </Label>
+                <Input
+                    id="counterparty_name"
+                    v-model="form.counterparty_name"
+                    name="counterparty_name"
+                    :list="personListId"
+                    maxlength="100"
+                    placeholder="Optional, e.g. Mama"
+                    autocomplete="off"
+                    @input="personEdited = true"
+                />
+                <datalist :id="personListId">
+                    <option v-for="p in people" :key="p.id" :value="p.name" />
+                </datalist>
+                <p
+                    v-if="form.counterparty_name.trim() && !matchedPerson"
+                    class="text-xs text-muted-foreground"
+                >
+                    A new person will be added.
+                </p>
+                <button
+                    v-if="suggestedPerson"
+                    type="button"
+                    class="text-xs text-primary hover:underline"
+                    @click="
+                        form.counterparty_name = suggestedPerson.name;
+                        personEdited = true;
+                    "
+                >
+                    Looks like {{ suggestedPerson.name }}: use them?
+                </button>
+                <p
+                    v-if="
+                        form.errors.counterparty_id ||
+                        form.errors.counterparty_name
+                    "
+                    class="text-sm text-destructive"
+                >
+                    {{
+                        form.errors.counterparty_id ||
+                        form.errors.counterparty_name
+                    }}
+                </p>
+            </div>
+
+            <div
+                v-if="form.type === 'expense' && form.counterparty_name.trim()"
+                class="space-y-1"
+            >
+                <div class="flex items-center justify-between gap-3">
+                    <Label for="is_advance">I paid this for them</Label>
+                    <Switch id="is_advance" v-model="form.is_advance" />
+                </div>
+                <p class="text-xs text-muted-foreground">
+                    They owe you this amount until you settle it.
+                </p>
+                <p
+                    v-if="form.errors.is_advance"
+                    class="text-sm text-destructive"
+                >
+                    {{ form.errors.is_advance }}
                 </p>
             </div>
 
