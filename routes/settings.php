@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Settings\AiController;
 use App\Http\Controllers\Settings\BannedIpsController;
 use App\Http\Controllers\Settings\ConnectedAppsController;
 use App\Http\Controllers\Settings\FinanceController;
@@ -34,6 +35,10 @@ Route::middleware('auth')->group(function () {
     Route::middleware('can:manage-instance')->group(function () {
         Route::get('settings/registration', [RegistrationController::class, 'edit'])->name('settings.registration.edit');
         Route::patch('settings/registration', [RegistrationController::class, 'update'])->name('settings.registration.update');
+
+        Route::get('settings/ai', [AiController::class, 'edit'])->name('settings.ai.edit');
+        Route::patch('settings/ai', [AiController::class, 'update'])->name('settings.ai.update');
+        Route::post('settings/ai/test', [AiController::class, 'test'])->middleware('throttle:6,1')->name('settings.ai.test');
 
         Route::get('settings/banned-ips', [BannedIpsController::class, 'index'])->name('settings.banned-ips.index');
         Route::delete('settings/banned-ips/unban', [BannedIpsController::class, 'destroy'])->name('settings.banned-ips.destroy');

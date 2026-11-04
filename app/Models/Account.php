@@ -21,6 +21,7 @@ class Account extends Model
         'currency',
         'initial_balance',
         'is_savings',
+        'alert_threshold',
     ];
 
     /** {@inheritdoc} */
@@ -30,6 +31,7 @@ class Account extends Model
             'balance' => 'decimal:2',
             'initial_balance' => 'decimal:2',
             'is_savings' => 'boolean',
+            'alert_threshold' => 'decimal:2',
         ];
     }
 

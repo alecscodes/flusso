@@ -156,6 +156,19 @@ function deleteRule() {
                                 size="xl"
                                 :show-sign="false"
                             />
+                            <p
+                                v-if="recurringPayment.price_change"
+                                class="mt-1 text-sm text-amber-600 dark:text-amber-400"
+                            >
+                                Price changed: was
+                                {{ recurringPayment.price_change.rule_amount }},
+                                last paid
+                                {{
+                                    recurringPayment.price_change
+                                        .last_paid_amount
+                                }}
+                                {{ recurringPayment.currency }}
+                            </p>
                             <p class="text-sm text-muted-foreground">
                                 {{
                                     recurringPayment.installments === 1
