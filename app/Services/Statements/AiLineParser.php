@@ -172,7 +172,7 @@ class AiLineParser
                 continue;
             }
 
-            $before = $match[1] ?? '';
+            $before = $match[1];
             $after = strtoupper(trim($match[3] ?? ''));
             $negative = $before === '-' || $before === '(' || $after === '-' || $after === ')' || $after === 'DR';
             $positive = ! $negative && ($before === '+' || $after === 'CR');
