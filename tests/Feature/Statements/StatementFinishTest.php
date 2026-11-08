@@ -13,6 +13,7 @@ use App\Services\Statements\PdfLineParser;
 use App\Services\Statements\StatementMatcher;
 use App\Services\Statements\StatementService;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
@@ -325,20 +326,27 @@ test('when the parsers find nothing and AI is on, the statement is kept and the 
         ->assertInertia(fn ($page) => $page->where('statements.data.0.parse_status', 'pending_ai'));
 });
 
-test('nothing is queued when AI is off or the deterministic parsers read the lines', function () {
+// One upload per case: the statements controller (and the PDF extractor it holds) is reused by
+// every request of a test, so a second upload would still read the first upload's fake text.
+test('nothing is queued when AI is off or the deterministic parsers read the lines', function (bool $aiOn, string $text) {
     Queue::fake();
+
+    if ($aiOn) {
+        statementsEnableAi();
+    }
+
     $user = User::factory()->create();
 
-    statementsFinishPdfUpload($user, statementsProseText(), 'prose.pdf');
-    statementsFinishPdfUpload($user, statementsFinishItalianText(), 'italian.pdf');
-
-    statementsEnableAi();
-    statementsFinishPdfUpload($user, statementsFinishUsText(), 'again.pdf');
+    statementsFinishPdfUpload($user, $text === 'prose' ? statementsProseText() : statementsFinishUsText());
 
     Queue::assertNothingPushed();
 
-    expect($user->statements()->pluck('parse_status')->unique()->values()->all())->toBe([StatementParseStatus::Done]);
-});
+    expect($user->statements()->firstOrFail()->parse_status)->toBe(StatementParseStatus::Done);
+})->with([
+    'AI off, nothing readable' => [false, 'prose'],
+    'AI off, readable' => [false, 'us'],
+    'AI on, readable' => [true, 'us'],
+]);
 
 test('the queued job reads the text with the model and replaces the lines', function () {
     [, $statement] = statementsFinishPendingStatement();
@@ -404,12 +412,13 @@ test('the job is one try, ten minutes, and unique per statement', function () {
         ->and($job->uniqueFor)->toBeGreaterThan($job->timeout);
 });
 
-test('a statement waiting for the AI can be read again and its lines imported', function () {
+test('a statement waiting for the AI can be read again without a second job, and its lines imported', function () {
     [$user, $statement] = statementsFinishPendingStatement();
 
     actingAs($user)->post(route('statements.reparse', $statement))->assertSessionHasNoErrors();
 
-    Queue::assertPushed(ParseStatementWithAi::class, 2);
+    // The job is unique per statement: the one already waiting will read the new text.
+    Queue::assertPushed(ParseStatementWithAi::class, 1);
 
     expect($statement->refresh()->parse_status)->toBe(StatementParseStatus::PendingAi);
 
@@ -427,6 +436,9 @@ test('a statement waiting for the AI can be read again and its lines imported', 
 test('reading again after a failed AI read tries the model once more', function () {
     [$user, $statement] = statementsFinishPendingStatement();
     $statement->update(['parse_status' => StatementParseStatus::AiFailed]);
+
+    // A failed job releases its unique lock; the fake queue never ran it, so release it here.
+    Cache::flush();
 
     actingAs($user)->post(route('statements.reparse', $statement));
 
