@@ -28,7 +28,8 @@ class SettlementController extends Controller
 
     public function destroy(Request $request, TransactionSettlement $settlement): RedirectResponse
     {
-        $settlement->load('income');
+        // A trashed income still owns its settlements: without it the relation would be null.
+        $settlement->load(['income' => fn ($query) => $query->withTrashed()]);
 
         abort_unless($settlement->income->user_id === $request->user()->id, 403);
 

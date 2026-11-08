@@ -192,7 +192,7 @@ class StatementController extends Controller
                     ->where('sign_uncertain', true)
                     ->whereIn('match_status', [StatementLineStatus::Unmatched->value, StatementLineStatus::Matched->value])
                     ->count(),
-                'can_reparse' =>($counts[StatementLineStatus::Imported->value] ?? 0) + ($counts[StatementLineStatus::Ignored->value] ?? 0) === 0,
+                'can_reparse' => ($counts[StatementLineStatus::Imported->value] ?? 0) + ($counts[StatementLineStatus::Ignored->value] ?? 0) === 0,
             ],
             'lines' => $lines->through(fn (StatementLine $line) => [
                 'id' => $line->id,

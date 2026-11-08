@@ -756,3 +756,13 @@ test('the transactions list carries the person for the edit form', function () {
             && $row['is_advance'] === true
             && $row['counterparty']['name'] === 'Mama')));
 });
+
+test('a settlement can still be removed while its income is in the trash', function () {
+    [$user] = advancesOverSettledSetup();
+    $settlement = TransactionSettlement::orderBy('id')->first();
+    $settlement->income()->withTrashed()->firstOrFail()->delete();
+
+    actingAs($user)->delete(route('settlements.destroy', $settlement))->assertRedirect();
+
+    expect(TransactionSettlement::query()->whereKey($settlement->id)->exists())->toBeFalse();
+});
