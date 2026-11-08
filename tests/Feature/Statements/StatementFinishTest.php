@@ -7,10 +7,13 @@ use App\Jobs\ParseStatementWithAi;
 use App\Models\Account;
 use App\Models\Statement;
 use App\Models\StatementLine;
+use App\Models\Transaction;
 use App\Models\User;
 use App\Services\Statements\PdfLineParser;
+use App\Services\Statements\StatementMatcher;
 use App\Services\Statements\StatementService;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 
@@ -60,6 +63,30 @@ function statementsFinishColumnsText(): string
         '08/03/2024 08/03/2024 COMMISSIONI                         -1,00',
         '09/03/2024 09/03/2024 MISTERO                                                           9,99',
     ]);
+}
+
+function statementsFinishAmountColumnText(): string
+{
+    return implode("\n", [
+        'Data       Descrizione                      Importo',
+        '05/03/2024 PAGAMENTO POS COOP                 45,30',
+        '06/03/2024 PAGAMENTO POS ENEL                 80,00',
+        '07/03/2024 COMMISSIONE                       -10,00',
+        '08/03/2024 RIMBORSO                           15,00 CR',
+    ]);
+}
+
+/**
+ * @return array{0: User, 1: Account, 2: Statement}
+ */
+function statementsFinishUnsignedStatement(): array
+{
+    $user = User::factory()->create();
+    $account = Account::factory()->create(['user_id' => $user->id, 'currency' => 'EUR', 'balance' => 1000]);
+
+    statementsFinishPdfUpload($user, statementsFinishAmountColumnText());
+
+    return [$user, $account, $user->statements()->firstOrFail()];
 }
 
 /**
@@ -187,10 +214,15 @@ test('debit and credit columns are found in English and Romanian headers, aligne
         ->and(array_map(fn ($line) => $line->amount, $romanian->lines))->toBe(['-45.30', '1850.00']);
 });
 
-test('a statement without debit and credit columns keeps its amounts as printed', function () {
-    $lines = app(PdfLineParser::class)->parse(statementsFinishItalianText())->lines;
+test('without debit and credit columns an amount with no sign of its own is flagged, one with a sign is not', function () {
+    $lines = app(PdfLineParser::class)->parse(statementsFinishAmountColumnText())->lines;
 
-    expect(array_map(fn ($line) => [$line->amount, $line->signUncertain], $lines))->toBe([['-23.40', false], ['1850.00', false]]);
+    expect(array_map(fn ($line) => [$line->amount, $line->signUncertain], $lines))->toBe([
+        ['45.30', true],
+        ['80.00', true],
+        ['-10.00', false],
+        ['15.00', false],
+    ]);
 });
 
 test('the show page lists the lines whose sign is uncertain', function () {
@@ -401,4 +433,197 @@ test('reading again after a failed AI read tries the model once more', function 
     Queue::assertPushed(ParseStatementWithAi::class, 2);
 
     expect($statement->refresh()->parse_status)->toBe(StatementParseStatus::PendingAi);
+});
+
+test('unsigned lines are not imported until the signs are confirmed, then they are income', function () {
+    [$user, $account, $statement] = statementsFinishUnsignedStatement();
+
+    expect($statement->lines()->where('sign_uncertain', true)->count())->toBe(2);
+
+    $payload = ['account_id' => $account->id, 'import_all' => true, 'lines' => []];
+
+    actingAs($user)->post(route('statements.import-lines', $statement), $payload);
+
+    expect(Transaction::query()->where('type', 'income')->count())->toBe(1);
+
+    actingAs($user)->post(route('statements.confirm-all-signs', $statement))->assertRedirect();
+
+    expect($statement->lines()->where('sign_uncertain', true)->count())->toBe(0)
+        ->and($statement->lines()->where('sign_reviewed', true)->count())->toBe(2);
+
+    actingAs($user)->post(route('statements.import-lines', $statement), $payload);
+
+    expect(Transaction::query()->where('type', 'income')->count())->toBe(3)
+        ->and(Transaction::query()->where('type', 'expense')->count())->toBe(1);
+});
+
+test('flipping all uncertain signs makes them expenses and leaves the signed lines alone', function () {
+    [$user, $account, $statement] = statementsFinishUnsignedStatement();
+
+    actingAs($user)->post(route('statements.flip-all-signs', $statement))->assertRedirect();
+
+    expect($statement->lines()->orderBy('posted_on')->get()->map(fn (StatementLine $line) => (float) $line->amount)->all())->toBe([-45.3, -80.0, -10.0, 15.0]);
+
+    actingAs($user)->post(route('statements.import-lines', $statement), ['account_id' => $account->id, 'import_all' => true, 'lines' => []]);
+
+    expect(Transaction::query()->where('type', 'expense')->count())->toBe(3)
+        ->and(Transaction::query()->where('type', 'income')->count())->toBe(1);
+});
+
+test('the sign actions of a whole statement belong to its owner and skip decided lines', function () {
+    [$user, , $statement] = statementsFinishUnsignedStatement();
+
+    actingAs(User::factory()->create())->post(route('statements.confirm-all-signs', $statement))->assertForbidden();
+    actingAs(User::factory()->create())->post(route('statements.flip-all-signs', $statement))->assertForbidden();
+
+    $ignored = $statement->lines()->where('sign_uncertain', true)->firstOrFail();
+    $ignored->update(['match_status' => StatementLineStatus::Ignored]);
+
+    actingAs($user)->post(route('statements.flip-all-signs', $statement));
+
+    expect((float) $ignored->refresh()->amount)->toBe(45.3)
+        ->and($statement->lines()->where('sign_uncertain', true)->count())->toBe(1);
+});
+
+test('reading again is refused once a sign was checked, and nothing is lost', function () {
+    [$user, , $statement] = statementsFinishUnsignedStatement();
+
+    actingAs($user)->post(route('statements.flip-all-signs', $statement));
+    actingAs($user)->get(route('statements.show', $statement))->assertInertia(fn ($page) => $page->where('statement.can_reparse', false));
+    actingAs($user)->post(route('statements.reparse', $statement));
+
+    expect($statement->lines()->where('sign_reviewed', true)->count())->toBe(2)
+        ->and((float) $statement->lines()->orderBy('posted_on')->firstOrFail()->amount)->toBe(-45.3);
+});
+
+test('a decided line that appears while the file is read again stops the replacement', function () {
+    [, , $statement] = statementsFinishUnsignedStatement();
+    $statement->lines()->firstOrFail()->update(['match_status' => StatementLineStatus::Imported]);
+
+    expect(app(StatementService::class)->process($statement))->toBeFalse()
+        ->and($statement->lines()->count())->toBe(4)
+        ->and(app(StatementService::class)->reprocess($statement))->toBeFalse();
+});
+
+test('money in does not match an expense of the same size, nor money out an income', function () {
+    [, $account, $statement] = statementsMatchSetup();
+    $refund = statementsLine($statement, '2024-03-10', 10.00, 'Refund');
+    statementsTransaction($account, '2024-03-10', 10.00);
+
+    expect(app(StatementMatcher::class)->match($statement))->toBe(['matched' => 0, 'unmatched' => 1])
+        ->and($refund->fresh()->match_status)->toBe(StatementLineStatus::Unmatched)
+        ->and(app(StatementMatcher::class)->candidates($statement))->toBe([]);
+
+    $payment = statementsLine($statement, '2024-03-20', -25.00);
+    statementsTransaction($account, '2024-03-20', 25.00, ['type' => 'income']);
+
+    expect(app(StatementMatcher::class)->match($statement))->toBe(['matched' => 0, 'unmatched' => 2])
+        ->and($payment->fresh()->matched_transaction_id)->toBeNull();
+});
+
+test('a transfer matches money out on its source and money in on its destination only', function () {
+    $user = User::factory()->create();
+    $from = Account::factory()->create(['user_id' => $user->id]);
+    $to = Account::factory()->create(['user_id' => $user->id]);
+    Transaction::factory()->transfer($to, 100)->create([
+        'user_id' => $user->id, 'account_id' => $from->id, 'amount' => 100, 'date' => '2024-03-10', 'description' => null,
+    ]);
+
+    $wrongOut = Statement::factory()->create(['user_id' => $user->id, 'account_id' => $from->id]);
+    $wrongIn = Statement::factory()->create(['user_id' => $user->id, 'account_id' => $to->id]);
+    statementsLine($wrongOut, '2024-03-10', 100.00);
+    statementsLine($wrongIn, '2024-03-10', -100.00);
+
+    $matcher = app(StatementMatcher::class);
+
+    expect($matcher->match($wrongOut))->toBe(['matched' => 0, 'unmatched' => 1])
+        ->and($matcher->match($wrongIn))->toBe(['matched' => 0, 'unmatched' => 1]);
+});
+
+test('matching skips a line that was imported or ignored since it was loaded', function () {
+    [, $account, $statement] = statementsMatchSetup();
+    $line = statementsLine($statement, '2024-03-10', -12.50);
+    statementsTransaction($account, '2024-03-10', 12.50);
+
+    $listener = 'eloquent.retrieved: '.Transaction::class;
+    Event::listen($listener, fn () => StatementLine::query()->whereKey($line->id)->update(['match_status' => StatementLineStatus::Ignored->value]));
+
+    try {
+        app(StatementMatcher::class)->match($statement);
+    } finally {
+        Event::forget($listener);
+    }
+
+    expect($line->fresh()->match_status)->toBe(StatementLineStatus::Ignored)
+        ->and($line->fresh()->matched_transaction_id)->toBeNull();
+});
+
+test('candidates for the lines of a page are the same as for the whole statement', function () {
+    [, $account, $statement] = statementsMatchSetup();
+    $first = statementsLine($statement, '2024-03-10', -9.99, 'A');
+    $second = statementsLine($statement, '2024-03-12', -4.00, 'B');
+    statementsTransaction($account, '2024-03-10', 9.99);
+    statementsTransaction($account, '2024-03-10', 9.99);
+    statementsTransaction($account, '2024-03-12', 4.00);
+    statementsTransaction($account, '2024-03-12', 4.00);
+
+    $matcher = app(StatementMatcher::class);
+    $all = $matcher->candidates($statement);
+    $page = $matcher->candidates($statement, [$second->id]);
+
+    $ids = fn (array $candidates) => array_map(fn (array $transactions) => collect($transactions)->pluck('id')->sort()->values()->all(), $candidates);
+
+    expect(array_keys($all))->toBe([$first->id, $second->id])
+        ->and($ids($page))->toBe([$second->id => $ids($all)[$second->id]]);
+});
+
+test('when the model fails on a later chunk, the lines read so far are kept but marked as partial', function () {
+    statementsEnableAi();
+    Queue::fake();
+
+    $user = User::factory()->create();
+    $filler = implode("\n", array_map(fn (int $i) => "Nota informativa numero {$i} senza alcun importo da riportare qui", range(1, 200)));
+
+    statementsFinishPdfUpload($user, statementsProseText()."\n".$filler);
+
+    $statement = $user->statements()->firstOrFail();
+    $calls = 0;
+
+    StatementLinesAgent::fake(function () use (&$calls) {
+        if (++$calls > 1) {
+            throw new RuntimeException('model down');
+        }
+
+        return ['lines' => [['date' => '2024-03-04', 'description' => 'FARMACIA CENTRALE', 'amount' => -23.40]]];
+    });
+
+    (new ParseStatementWithAi($statement->id))->handle(app(StatementService::class));
+
+    expect($statement->refresh()->parse_status)->toBe(StatementParseStatus::AiPartial)
+        ->and($statement->lines()->count())->toBe(1);
+
+    actingAs($user)->get(route('statements.show', $statement))
+        ->assertInertia(fn ($page) => $page->where('statement.parse_status', 'ai_partial'));
+});
+
+test('an AI amount whose sign contradicts the text is flagged as uncertain', function () {
+    statementsEnableAi();
+    Queue::fake();
+
+    $user = User::factory()->create();
+
+    statementsFinishPdfUpload($user, "Estratto conto\nPagamento carta presso FARMACIA CENTRALE del 4 marzo 2024 importo -23,40 euro\nAccredito del 9 marzo 2024 di 150,00 euro");
+
+    $statement = $user->statements()->firstOrFail();
+
+    StatementLinesAgent::fake([[
+        'lines' => [
+            ['date' => '2024-03-04', 'description' => 'FARMACIA CENTRALE', 'amount' => 23.40],
+            ['date' => '2024-03-09', 'description' => 'Accredito', 'amount' => 150],
+        ],
+    ]]);
+
+    (new ParseStatementWithAi($statement->id))->handle(app(StatementService::class));
+
+    expect($statement->lines()->orderBy('posted_on')->get()->map(fn (StatementLine $line) => $line->sign_uncertain)->all())->toBe([true, false]);
 });

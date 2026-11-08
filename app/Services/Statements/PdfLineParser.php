@@ -127,7 +127,7 @@ class PdfLineParser
         $start = mb_strlen(substr($line, 0, $amounts[0]['offset']));
 
         return [
-            'dates' => array_values(array_filter([$matches[1][0], $matches[2][0] ?? ''], fn (string $value) => $value !== '')),
+            'dates' => array_filter([$matches[1][0], $matches[2][0]], fn (string $value) => $value !== ''),
             'description' => $description,
             'token' => $amounts[0]['token'],
             'start' => $start,
@@ -140,7 +140,7 @@ class PdfLineParser
     /**
      * The signed amount of a row and whether its sign is a guess. An amount that
      * carries its own sign is taken as printed; an unsigned one in a debit column is
-     * money out.
+     * money out, in a credit column money in, and anywhere else a guess (flagged).
      *
      * @param  Row  $row
      * @return array{0: string|null, 1: bool}
@@ -149,8 +149,13 @@ class PdfLineParser
     {
         $value = Normalizer::amount($row['token']);
 
-        if ($value === null || $row['markers'] === null || (float) $value === 0.0 || $this->hasOwnSign($row['token'])) {
+        if ($value === null || (float) $value === 0.0 || $this->hasOwnSign($row['token'])) {
             return [$value, false];
+        }
+
+        // No sign of its own and no debit/credit columns to tell: money in or out is a guess.
+        if ($row['markers'] === null) {
+            return [$value, true];
         }
 
         return match ($this->columnOf($row['start'], $row['end'], $row['markers'])) {

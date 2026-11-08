@@ -11,7 +11,9 @@ import {
 } from '@/components/ui';
 import { useCurrency, useDate } from '@/composables';
 import {
+    confirmAllSigns,
     confirmLineSign,
+    flipAllSigns,
     destroy,
     download,
     flipLineSign,
@@ -42,7 +44,7 @@ interface StatementDetail {
     lines_truncated: boolean;
     text_truncated: boolean;
     date_order_assumed: boolean;
-    parse_status: 'done' | 'pending_ai' | 'ai_failed';
+    parse_status: 'done' | 'pending_ai' | 'ai_partial' | 'ai_failed';
     sign_uncertain_count: number;
     lines_count: number;
     parsed_at: string | null;
@@ -287,6 +289,22 @@ function confirmSign(line: Line): void {
     );
 }
 
+function changeAllSigns(flip: boolean): void {
+    const action = flip ? flipAllSigns : confirmAllSigns;
+    const count = props.statement.sign_uncertain_count;
+    const question = flip
+        ? `Turn all ${count} uncertain lines into money OUT (expenses)? Use this only when every unsigned amount in this statement is money out.`
+        : `Confirm all ${count} uncertain lines as money IN (income)?`;
+
+    if (window.confirm(question)) {
+        router.post(
+            action.url(props.statement.id),
+            {},
+            { preserveScroll: true },
+        );
+    }
+}
+
 function flipSign(line: Line): void {
     router.post(
         flipLineSign.url({ statement: props.statement.id, line: line.id }),
@@ -380,6 +398,13 @@ function setAside(line: Line, restore: boolean): void {
                 <Button variant="outline" @click="editing = !editing">
                     Edit details
                 </Button>
+                <p
+                    v-if="!statement.can_reparse"
+                    class="self-center text-xs text-muted-foreground"
+                >
+                    Not read again once a line was imported, ignored or had its
+                    sign checked.
+                </p>
                 <Button
                     v-if="statement.can_reparse"
                     variant="outline"
@@ -490,6 +515,14 @@ function setAside(line: Line, restore: boolean): void {
             when it is done.
         </p>
         <p
+            v-else-if="statement.parse_status === 'ai_partial'"
+            class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300"
+            role="status"
+        >
+            Only part of this file was read by the AI. The text is complete and
+            searchable; you can try Read again.
+        </p>
+        <p
             v-else-if="statement.parse_status === 'ai_failed'"
             class="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
             role="alert"
@@ -505,21 +538,42 @@ function setAside(line: Line, restore: boolean): void {
             Date order assumed: day/month. Nothing in this statement shows
             whether 03/04 means 3 April or 4 March, so check the dates.
         </p>
-        <p
+        <div
             v-if="statement.sign_uncertain_count > 0"
-            class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300"
+            class="space-y-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300"
             role="status"
         >
-            {{ statement.sign_uncertain_count }}
-            {{
-                statement.sign_uncertain_count === 1 ? 'line has' : 'lines have'
-            }}
-            a sign that could not be told from the debit and credit columns and
-            {{ statement.sign_uncertain_count === 1 ? 'is' : 'are' }} shown as
-            money in. They are not imported until you check them: use Flip sign
-            where the amount is money out, or Sign is right where it is money
-            in.
-        </p>
+            <p>
+                {{ statement.sign_uncertain_count }}
+                {{
+                    statement.sign_uncertain_count === 1
+                        ? 'line has'
+                        : 'lines have'
+                }}
+                a sign that could not be told from the debit and credit columns
+                and
+                {{ statement.sign_uncertain_count === 1 ? 'is' : 'are' }} shown
+                as money in. They are not imported until you check them: use
+                Flip sign where the amount is money out, or Sign is right where
+                it is money in.
+            </p>
+            <div class="flex flex-wrap gap-2">
+                <Button
+                    size="sm"
+                    variant="outline"
+                    @click="changeAllSigns(false)"
+                >
+                    Confirm all signs
+                </Button>
+                <Button
+                    size="sm"
+                    variant="outline"
+                    @click="changeAllSigns(true)"
+                >
+                    Flip all uncertain signs
+                </Button>
+            </div>
+        </div>
         <p
             v-if="statement.lines_truncated"
             class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300"

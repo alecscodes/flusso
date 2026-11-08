@@ -54,12 +54,27 @@ class StatementMatcher
                 }
 
                 if ($line->match_status !== $status || $line->matched_transaction_id !== $transactionId) {
-                    $line->forceFill(['match_status' => $status, 'matched_transaction_id' => $transactionId])->save();
+                    $this->store($line, $status, $transactionId);
                 }
             }
         });
 
         return ['matched' => $matched, 'unmatched' => $unmatched];
+    }
+
+    /**
+     * Write a result only if the line is still as it was loaded (a conditional update): a line
+     * that was imported, ignored or matched meanwhile is skipped, never overwritten.
+     */
+    private function store(StatementLine $line, StatementLineStatus $status, ?int $transactionId): void
+    {
+        StatementLine::query()
+            ->whereKey($line->id)
+            ->where('match_status', $line->match_status->value)
+            ->where(fn ($query) => $line->matched_transaction_id === null
+                ? $query->whereNull('matched_transaction_id')
+                : $query->where('matched_transaction_id', $line->matched_transaction_id))
+            ->update(['match_status' => $status->value, 'matched_transaction_id' => $transactionId, 'updated_at' => now()]);
     }
 
     /**
@@ -77,11 +92,12 @@ class StatementMatcher
      * For each unmatched line that has look-alikes, the transactions that nearly fit
      * (and are not already matched by another line of the statement).
      *
+     * @param  list<int>|null  $lineIds  only these lines (the page being shown), or all of them
      * @return array<int, list<Transaction>> keyed by statement line id
      */
-    public function candidates(Statement $statement): array
+    public function candidates(Statement $statement, ?array $lineIds = null): array
     {
-        $analysis = $this->analyze($statement);
+        $analysis = $this->analyze($statement, null, $lineIds);
 
         $alreadyMatched = $statement->lines()
             ->whereNotNull('matched_transaction_id')
@@ -110,12 +126,16 @@ class StatementMatcher
     }
 
     /**
+     * @param  list<int>|null  $onlyLineIds  analyse only these open lines
      * @return array{lines: Collection<int, StatementLine>, matches: array<int, int>, options: array<int, list<Entry>>}
      */
-    private function analyze(Statement $statement, ?int $forAccountId = null): array
+    private function analyze(Statement $statement, ?int $forAccountId = null, ?array $onlyLineIds = null): array
     {
+        $open = [StatementLineStatus::Unmatched->value, StatementLineStatus::Matched->value];
+
         $lines = $statement->lines()
-            ->whereIn('match_status', [StatementLineStatus::Unmatched->value, StatementLineStatus::Matched->value])
+            ->whereIn('match_status', $open)
+            ->when($onlyLineIds !== null, fn ($query) => $query->whereIn('id', $onlyLineIds))
             ->orderBy('posted_on')
             ->orderBy('id')
             ->get();
@@ -140,7 +160,7 @@ class StatementMatcher
                 ->where(fn ($query) => $query->where('account_id', $accountId)->orWhere('id', $statement->id))
                 ->select('id'))
             ->whereNotNull('matched_transaction_id')
-            ->whereNotIn('id', $lines->modelKeys())
+            ->whereNotIn('id', $statement->lines()->whereIn('match_status', $open)->select('id'))
             ->pluck('matched_transaction_id')
             ->flip()
             ->all();
@@ -172,7 +192,8 @@ class StatementMatcher
             foreach ($pool[$this->cents((float) $line->amount)] ?? [] as $candidate) {
                 $days = abs($this->dayNumber($candidate['transaction']->date->toDateString()) - $lineDay);
 
-                if ($days > self::DAY_WINDOW) {
+                // Money out only matches money out (an expense, the source of a transfer), money in only money in.
+                if ($days > self::DAY_WINDOW || ($candidate['signed'] > 0) !== ((float) $line->amount > 0)) {
                     continue;
                 }
 
@@ -185,7 +206,7 @@ class StatementMatcher
             }
 
             $options[$line->id] = $entries;
-            $chosen = $this->choose($entries, (float) $line->amount > 0);
+            $chosen = $this->choose($entries);
 
             if ($chosen !== null) {
                 $claims[$chosen['transaction']->id][] = ['line' => $line->id, 'days' => $chosen['days'], 'score' => $chosen['score']];
@@ -224,17 +245,13 @@ class StatementMatcher
      * @param  list<Entry>  $entries
      * @return Entry|null
      */
-    private function choose(array $entries, bool $incoming): ?array
+    private function choose(array $entries): ?array
     {
         if (count($entries) <= 1) {
             return $entries[0] ?? null;
         }
 
-        $set = $this->narrow($entries, fn (array $entry) => ($entry['signed'] > 0) === $incoming);
-
-        if (count($set) > 1) {
-            $set = $this->narrow($set, fn (array $entry) => $entry['score'] > 0);
-        }
+        $set = $this->narrow($entries, fn (array $entry) => $entry['score'] > 0);
 
         if (count($set) > 1) {
             $set = $this->narrow($set, fn (array $entry) => $entry['days'] === 0);

@@ -38,11 +38,15 @@ class AiLineParser
         $lines = [];
         $chunks = $this->chunks($text);
         $truncated = count($chunks) > $maxChunks;
+        $partial = false;
 
         foreach (array_slice($chunks, 0, $maxChunks) as $chunk) {
             $response = $this->ai->prompt(new StatementLinesAgent, "Bank statement text:\n\n".$chunk, [], self::TIMEOUT_SECONDS);
 
             if ($response === null) {
+                // A later chunk the model could not read: what was read so far is only part of the file.
+                $partial = true;
+
                 break;
             }
 
@@ -60,7 +64,7 @@ class AiLineParser
             }
         }
 
-        return $lines === [] ? null : new ParseResult($lines, 'ai', null, $truncated);
+        return $lines === [] ? null : new ParseResult($lines, 'ai', null, $truncated, false, $partial);
     }
 
     /**
@@ -104,6 +108,7 @@ class AiLineParser
     private function validated(array $returned, string $chunk): array
     {
         $numbers = $this->numbersIn($chunk);
+        $signs = $this->printedSigns($chunk);
         $lines = [];
 
         foreach ($returned as $row) {
@@ -123,10 +128,68 @@ class AiLineParser
                 continue;
             }
 
-            $lines[] = new ParsedLine($date, mb_substr($description, 0, 500), $amount, null, $description, 'ai');
+            $lines[] = new ParsedLine($date, mb_substr($description, 0, 500), $amount, null, $description, 'ai', $this->contradicts($amount, $signs));
         }
 
         return $lines;
+    }
+
+    /**
+     * Whether the text prints the amount only with the opposite sign of the one the model gave
+     * (e.g. "-23,40" in the text, +23.40 from the model): then the model's sign is not trusted.
+     *
+     * @param  array<string, array{negative: bool, positive: bool, plain: bool}>  $signs
+     */
+    private function contradicts(string $amount, array $signs): bool
+    {
+        $seen = $signs[ltrim($amount, '-')] ?? null;
+
+        if ($seen === null || $seen['plain']) {
+            return false;
+        }
+
+        return str_starts_with($amount, '-')
+            ? $seen['positive'] && ! $seen['negative']
+            : $seen['negative'] && ! $seen['positive'];
+    }
+
+    /**
+     * How each number in the text is printed: with a minus (or brackets, trailing minus, DR),
+     * with a plus (or CR), or plain. Keyed like numbersIn().
+     *
+     * @return array<string, array{negative: bool, positive: bool, plain: bool}>
+     */
+    private function printedSigns(string $text): array
+    {
+        $signs = [];
+
+        preg_match_all('/(?<![\p{L}\d])([-+(])?\s?(\d+(?:[.,\']\d{3})*[.,]\d{2})(?!\d)([-)]|\s?(?:DR|CR)\b)?/iu', $text, $matches, PREG_SET_ORDER);
+
+        foreach ($matches as $match) {
+            $number = Normalizer::amount($match[2]);
+
+            if ($number === null) {
+                continue;
+            }
+
+            $before = $match[1] ?? '';
+            $after = strtoupper(trim($match[3] ?? ''));
+            $negative = $before === '-' || $before === '(' || $after === '-' || $after === ')' || $after === 'DR';
+            $positive = ! $negative && ($before === '+' || $after === 'CR');
+
+            $key = ltrim($number, '-');
+            $signs[$key] ??= ['negative' => false, 'positive' => false, 'plain' => false];
+
+            if ($negative) {
+                $signs[$key]['negative'] = true;
+            } elseif ($positive) {
+                $signs[$key]['positive'] = true;
+            } else {
+                $signs[$key]['plain'] = true;
+            }
+        }
+
+        return $signs;
     }
 
     /**

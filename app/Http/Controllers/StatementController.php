@@ -161,38 +161,39 @@ class StatementController extends Controller
             ->paginate(self::LINES_PER_PAGE)
             ->withQueryString();
 
-        $candidates = $this->matcher->candidates($statement);
+        $pageIds = $lines->getCollection()->pluck('id')->all();
+        $candidates = $this->matcher->candidates($statement, $pageIds);
         $suggestedCategories = $this->importer->suggestCategories(
             $request->user(),
             $lines->getCollection()->filter(fn (StatementLine $line) => $line->match_status === StatementLineStatus::Unmatched),
         );
-        $pageIds = $lines->getCollection()->pluck('id')->all();
-        $statement->load('account:id,name,currency')->loadCount([
-            'lines',
-            'lines as matched_lines_count' => fn ($query) => $query->where('match_status', StatementLineStatus::Matched->value),
-            'lines as unmatched_lines_count' => fn ($query) => $query->where('match_status', StatementLineStatus::Unmatched->value),
-        ]);
+        $statement->load('account:id,name,currency');
 
-        $textLength = (int) Statement::query()->whereKey($statement->id)->selectRaw('length(extracted_text) as text_length')->value('text_length');
-
-        $counts = $statement->lines()
-            ->selectRaw('match_status, count(*) as total')
+        // One grouped query for every count the page shows.
+        $groups = $statement->lines()
+            ->selectRaw('match_status, count(*) as total, sum(case when sign_uncertain = 1 then 1 else 0 end) as uncertain, sum(case when sign_reviewed = 1 then 1 else 0 end) as reviewed')
             ->groupBy('match_status')
-            ->pluck('total', 'match_status');
+            ->toBase()
+            ->get()
+            ->keyBy('match_status');
+
+        $counts = $groups->map(fn (object $group) => (int) $group->total);
+        $openStatuses = [StatementLineStatus::Unmatched->value, StatementLineStatus::Matched->value];
+
+        $statement->setAttribute('lines_count', (int) $counts->sum());
+        $statement->setAttribute('matched_lines_count', $counts[StatementLineStatus::Matched->value] ?? 0);
+        $statement->setAttribute('unmatched_lines_count', $counts[StatementLineStatus::Unmatched->value] ?? 0);
 
         return Inertia::render('Statements/Show', [
             'statement' => [
                 ...$this->summary($statement),
                 'currency' => $statement->account?->currency,
                 'parsed_at' => $statement->parsed_at?->toIso8601String(),
-                'has_text' => $textLength > 0,
+                'has_text' => filled($statement->extracted_text),
                 'counts' => collect(StatementLineStatus::cases())->mapWithKeys(fn (StatementLineStatus $case) => [$case->value => (int) ($counts[$case->value] ?? 0)])->all(),
                 'unmatched_totals' => $this->unmatchedTotals($statement),
-                'sign_uncertain_count' => $statement->lines()
-                    ->where('sign_uncertain', true)
-                    ->whereIn('match_status', [StatementLineStatus::Unmatched->value, StatementLineStatus::Matched->value])
-                    ->count(),
-                'can_reparse' => ($counts[StatementLineStatus::Imported->value] ?? 0) + ($counts[StatementLineStatus::Ignored->value] ?? 0) === 0,
+                'sign_uncertain_count' => (int) $groups->only($openStatuses)->sum(fn (object $group) => (int) $group->uncertain),
+                'can_reparse' => (int) $groups->sum(fn (object $group) => (int) $group->reviewed) === 0 && ($counts[StatementLineStatus::Imported->value] ?? 0) + ($counts[StatementLineStatus::Ignored->value] ?? 0) === 0,
             ],
             'lines' => $lines->through(fn (StatementLine $line) => [
                 'id' => $line->id,
@@ -244,7 +245,7 @@ class StatementController extends Controller
                 ? 'Statement read again. The AI is reading it, which can take a few minutes.'
                 : 'Statement read again.');
         } else {
-            FlashToast::error('Some lines were already imported or ignored, so the statement is not read again.');
+            FlashToast::error('Some lines were already imported, ignored or had their sign checked, so the statement is not read again.');
         }
 
         return redirect()->back(fallback: route('statements.show', $statement));

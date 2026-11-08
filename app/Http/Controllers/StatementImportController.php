@@ -5,11 +5,13 @@ namespace App\Http\Controllers;
 use App\Enums\StatementLineStatus;
 use App\Http\Requests\StatementImportRequest;
 use App\Http\Requests\StatementLineSignRequest;
+use App\Http\Requests\StatementSignsRequest;
 use App\Models\Statement;
 use App\Models\StatementLine;
 use App\Services\Statements\StatementImporter;
 use App\Services\Statements\StatementMatcher;
 use App\Support\FlashToast;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
 
@@ -90,7 +92,7 @@ class StatementImportController extends Controller
             ->where('user_id', $request->user()->id)
             ->whereIn('match_status', [StatementLineStatus::Unmatched->value, StatementLineStatus::Matched->value])
             ->where('amount', '!=', 0)
-            ->update(['amount' => DB::raw('-amount'), 'sign_uncertain' => false]);
+            ->update(['amount' => DB::raw('-amount'), 'sign_uncertain' => false, 'sign_reviewed' => true]);
 
         if ($flipped === 1) {
             $this->matcher->match($statement);
@@ -112,13 +114,56 @@ class StatementImportController extends Controller
             ->where('user_id', $request->user()->id)
             ->where('sign_uncertain', true)
             ->whereIn('match_status', [StatementLineStatus::Unmatched->value, StatementLineStatus::Matched->value])
-            ->update(['sign_uncertain' => false]);
+            ->update(['sign_uncertain' => false, 'sign_reviewed' => true]);
 
         $confirmed === 1
             ? FlashToast::success('Sign confirmed.')
             : FlashToast::error('Only a line with an uncertain sign that is not imported or ignored can be confirmed.');
 
         return redirect()->back(fallback: route('statements.show', $statement));
+    }
+
+    /**
+     * The owner checked every line with an uncertain sign and they are right as read.
+     */
+    public function confirmAllSigns(StatementSignsRequest $request, Statement $statement): RedirectResponse
+    {
+        $confirmed = $this->uncertainLines($statement)->update(['sign_uncertain' => false, 'sign_reviewed' => true]);
+
+        FlashToast::success($confirmed === 1 ? '1 sign confirmed.' : "{$confirmed} signs confirmed.");
+
+        return redirect()->back(fallback: route('statements.show', $statement));
+    }
+
+    /**
+     * Every line with an uncertain sign is the other way round (for a statement that prints
+     * all amounts unsigned and they are all money out). One conditional update, then matching again.
+     */
+    public function flipAllSigns(StatementSignsRequest $request, Statement $statement): RedirectResponse
+    {
+        $flipped = $this->uncertainLines($statement)
+            ->where('amount', '!=', 0)
+            ->update(['amount' => DB::raw('-amount'), 'sign_uncertain' => false, 'sign_reviewed' => true]);
+
+        $this->matcher->match($statement);
+
+        FlashToast::success($flipped === 1 ? '1 sign flipped.' : "{$flipped} signs flipped.");
+
+        return redirect()->back(fallback: route('statements.show', $statement));
+    }
+
+    /**
+     * The statement's lines with an uncertain sign that are still open (not imported or ignored).
+     *
+     * @return Builder<StatementLine>
+     */
+    private function uncertainLines(Statement $statement): Builder
+    {
+        return StatementLine::query()
+            ->where('statement_id', $statement->id)
+            ->where('user_id', $statement->user_id)
+            ->where('sign_uncertain', true)
+            ->whereIn('match_status', [StatementLineStatus::Unmatched->value, StatementLineStatus::Matched->value]);
     }
 
     /**

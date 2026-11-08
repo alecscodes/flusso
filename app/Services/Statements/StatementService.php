@@ -87,9 +87,10 @@ class StatementService
     /**
      * Read the file again: text, lines (replacing the open ones), search index and matching.
      * The deterministic parsers answer here; when they find nothing and the model may be
-     * asked, the statement waits for the queued ParseStatementWithAi job.
+     * asked, the statement waits for the queued ParseStatementWithAi job. False when the owner
+     * decided on a line meanwhile (see replaceLines), in which case nothing was changed.
      */
-    public function process(Statement $statement): void
+    public function process(Statement $statement): bool
     {
         $disk = Storage::disk('local');
 
@@ -103,15 +104,17 @@ class StatementService
         $result = $this->parser->parse($text, ! $statement->isPdf());
         $needsAi = $result->lines === [] && $text !== '' && $this->parser->canUseAi();
 
-        $this->replaceLines($statement, $result, [
+        $replaced = $this->replaceLines($statement, $result, [
             'extracted_text' => $text === '' ? null : $text,
             'text_truncated' => $textTruncated,
             'parse_status' => $needsAi ? StatementParseStatus::PendingAi : StatementParseStatus::Done,
         ]);
 
-        if ($needsAi) {
+        if ($replaced && $needsAi) {
             $this->dispatchAiParse($statement);
         }
+
+        return $replaced;
     }
 
     /**
@@ -132,7 +135,9 @@ class StatementService
             return;
         }
 
-        $this->replaceLines($statement, $result, ['parse_status' => StatementParseStatus::Done]);
+        $this->replaceLines($statement, $result, [
+            'parse_status' => $result->partial ? StatementParseStatus::AiPartial : StatementParseStatus::Done,
+        ]);
     }
 
     /**
@@ -148,34 +153,47 @@ class StatementService
 
     /**
      * Parse again (for example after turning AI on). Refused once a line was imported or
-     * ignored, because re-reading would lose that decision.
+     * ignored, or had its sign checked, because re-reading would lose that decision.
      */
     public function reprocess(Statement $statement): bool
     {
-        $decided = $statement->lines()
-            ->whereIn('match_status', [StatementLineStatus::Imported->value, StatementLineStatus::Ignored->value])
-            ->exists();
-
-        if ($decided) {
+        if ($this->hasDecidedLines($statement)) {
             return false;
         }
 
-        $this->process($statement);
+        return $this->process($statement);
+    }
 
-        return true;
+    /**
+     * A line the owner imported, ignored or checked the sign of: re-reading the file would lose it.
+     */
+    private function hasDecidedLines(Statement $statement): bool
+    {
+        return $statement->lines()
+            ->where(fn ($query) => $query
+                ->whereIn('match_status', [StatementLineStatus::Imported->value, StatementLineStatus::Ignored->value])
+                ->orWhere('sign_reviewed', true))
+            ->exists();
     }
 
     /**
      * Swap the statement's lines for the parse result, then update its search index and matches.
+     * The check for decided lines, the delete and the insert are one transaction on the locked
+     * statement row, so a concurrent import cannot be lost; false (nothing changed) when there is one.
      *
      * @param  array<string, mixed>  $attributes  what else to save on the statement
      */
-    private function replaceLines(Statement $statement, ParseResult $result, array $attributes): void
+    private function replaceLines(Statement $statement, ParseResult $result, array $attributes): bool
     {
-        // The index rows of the old lines are found through the lines, so forget first.
-        $this->index->forget($statement);
+        $replaced = DB::transaction(function () use ($statement, $result, $attributes) {
+            Statement::query()->whereKey($statement->id)->lockForUpdate()->value('id');
 
-        DB::transaction(function () use ($statement, $result, $attributes) {
+            if ($this->hasDecidedLines($statement)) {
+                return false;
+            }
+
+            // The index rows of the old lines are found through the lines, so forget first.
+            $this->index->forget($statement);
             $statement->lines()->delete();
 
             $now = now();
@@ -207,12 +225,20 @@ class StatementService
                 'period_start' => $statement->period_start ?? $result->periodStart(),
                 'period_end' => $statement->period_end ?? $result->periodEnd(),
             ])->save();
+
+            return true;
         });
+
+        if (! $replaced) {
+            return false;
+        }
 
         $statement->refresh();
 
         $this->index->index($statement);
         $this->matcher->match($statement);
+
+        return true;
     }
 
     /**

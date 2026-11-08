@@ -16,6 +16,7 @@ final readonly class ParseResult
         public ?string $institution = null,
         public bool $truncated = false,
         public bool $dateOrderAssumed = false,
+        public bool $partial = false,
     ) {}
 
     /**

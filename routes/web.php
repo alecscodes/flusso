@@ -84,6 +84,8 @@ Route::middleware('auth')->group(function () {
         Route::post('{statement}/import-lines', 'store')->name('import-lines');
         Route::post('{statement}/lines/{line}/ignore', 'ignore')->name('ignore-line');
         Route::post('{statement}/lines/{line}/restore', 'restore')->name('restore-line');
+        Route::post('{statement}/confirm-all-signs', 'confirmAllSigns')->name('confirm-all-signs');
+        Route::post('{statement}/flip-all-signs', 'flipAllSigns')->name('flip-all-signs');
         Route::post('{statement}/lines/{line}/flip-sign', 'flipSign')->name('flip-line-sign');
         Route::post('{statement}/lines/{line}/confirm-sign', 'confirmSign')->name('confirm-line-sign');
     });

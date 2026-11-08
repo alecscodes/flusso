@@ -28,6 +28,7 @@ class StatementLine extends Model
         'raw_line',
         'parsed_by',
         'sign_uncertain',
+        'sign_reviewed',
         'matched_transaction_id',
         'match_status',
     ];
@@ -38,6 +39,7 @@ class StatementLine extends Model
             'posted_on' => DateOnly::class,
             'amount' => 'decimal:2',
             'sign_uncertain' => 'boolean',
+            'sign_reviewed' => 'boolean',
             'match_status' => StatementLineStatus::class,
         ];
     }

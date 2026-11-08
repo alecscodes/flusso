@@ -51,6 +51,7 @@ return new class extends Migration
             $table->text('raw_line')->nullable();
             $table->string('parsed_by', 16)->default('csv');
             $table->boolean('sign_uncertain')->default(false);
+            $table->boolean('sign_reviewed')->default(false);
             $table->foreignId('matched_transaction_id')->nullable()->constrained('transactions')->nullOnDelete();
             $table->string('match_status', 16)->default('unmatched');
             $table->timestamps();

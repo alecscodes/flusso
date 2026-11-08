@@ -59,6 +59,6 @@ class StatementParser
             return $result;
         }
 
-        return new ParseResult(array_slice($result->lines, 0, self::MAX_LINES), $result->parser, $result->institution, true, $result->dateOrderAssumed);
+        return new ParseResult(array_slice($result->lines, 0, self::MAX_LINES), $result->parser, $result->institution, true, $result->dateOrderAssumed, $result->partial);
     }
 }
