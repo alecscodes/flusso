@@ -83,6 +83,7 @@ abstract class FlussoTool extends Tool
             'currency' => $account->currency,
             'balance' => (float) $account->balance,
             'is_savings' => $account->is_savings,
+            'alert_threshold' => $account->alert_threshold === null ? null : (float) $account->alert_threshold,
         ];
     }
 

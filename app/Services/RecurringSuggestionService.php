@@ -123,7 +123,7 @@ class RecurringSuggestionService
 
         $user->dismissedRecurringSuggestions()->get()
             ->filter(fn (DismissedRecurringSuggestion $dismissal) => $this->canonicalKey($dismissal->normalized_key) === $canonical)
-            ->each->delete();
+            ->each(fn (DismissedRecurringSuggestion $dismissal) => $dismissal->delete());
     }
 
     /**

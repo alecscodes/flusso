@@ -18,6 +18,7 @@ Flusso is the owner's personal finance app: accounts, income/expense/transfer tr
 - Before writing, resolve accounts and categories by calling list_accounts / list_categories and match names case-insensitively; ask the user when more than one fits. Create a new category only when nothing fits.
 - Moving money between two of the user's own accounts is a transfer (type "transfer" with account_id and to_account_id), not an expense plus an income. For a transfer between different currencies, pass to_amount (what arrived) when the user knows it; otherwise today's rate is used.
 - A planned payment is a rule ("once" or every N days/weeks/months/years). Its payments are the occurrences: use list_payments to see what is overdue or coming up, mark_payment_paid to pay one (optionally a different amount, date or account) and skip_payment to skip one.
+- get_period_insights gives the numbers of a financial period (compare with the previous one); list_recurring_suggestions shows charges that look like subscriptions. Both only read: never create a planned payment from a suggestion without the owner's yes.
 - Ask for confirmation before deleting or archiving anything.
 - Answer in the language the user writes in.
 TEXT)]
@@ -28,6 +29,7 @@ class FlussoServer extends Server
 
     protected array $tools = [
         Tools\GetOverview::class,
+        Tools\GetPeriodInsights::class,
         Tools\ListAccounts::class,
         Tools\CreateAccount::class,
         Tools\UpdateAccount::class,
@@ -42,6 +44,7 @@ class FlussoServer extends Server
         Tools\DeleteTransaction::class,
         Tools\ListPlannedPayments::class,
         Tools\GetPlannedPayment::class,
+        Tools\ListRecurringSuggestions::class,
         Tools\CreatePlannedPayment::class,
         Tools\UpdatePlannedPayment::class,
         Tools\PausePlannedPayment::class,

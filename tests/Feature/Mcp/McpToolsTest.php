@@ -30,9 +30,11 @@ test('tools are listed with snake_case names and read/destructive hints', functi
     $server = app(FlussoServer::class, ['transport' => new FakeTransporter]);
     $tools = collect((fn () => $this->tools)->call($server))->map(fn ($class) => app($class)->toArray())->keyBy('name');
 
-    expect($tools)->toHaveCount(26)
+    expect($tools)->toHaveCount(28)
         ->and($tools['get_overview']['annotations']['readOnlyHint'])->toBeTrue()
         ->and($tools['list_payments']['annotations']['readOnlyHint'])->toBeTrue()
+        ->and($tools['get_period_insights']['annotations']['readOnlyHint'])->toBeTrue()
+        ->and($tools['list_recurring_suggestions']['annotations']['readOnlyHint'])->toBeTrue()
         ->and($tools['delete_transaction']['annotations']['destructiveHint'])->toBeTrue()
         ->and($tools['archive_account']['annotations']['destructiveHint'])->toBeTrue()
         ->and($tools['create_transaction']['annotations']['destructiveHint'])->toBeFalse()
@@ -229,6 +231,55 @@ test('accounts can be created, updated (currency locked once used) and archived'
 
     expect($this->eur->fresh()->trashed())->toBeTrue()->and(Transaction::count())->toBe(1);
     mcp(Tools\ListAccounts::class)->assertDontSee('Main');
+});
+
+test('the alert threshold of an account can be set, kept, cleared and is validated', function () {
+    mcp(Tools\CreateAccount::class, ['name' => 'Cash', 'currency' => 'EUR', 'alert_threshold' => 50.5])->assertOk()->assertSee('"alert_threshold":50.5');
+    $cash = Account::where('name', 'Cash')->firstOrFail();
+
+    mcp(Tools\UpdateAccount::class, ['id' => $cash->id, 'name' => 'Wallet'])->assertOk();
+    expect($cash->fresh()->alert_threshold)->toBe('50.50');
+
+    mcp(Tools\UpdateAccount::class, ['id' => $cash->id, 'alert_threshold' => 100])->assertOk()->assertSee('"alert_threshold":100');
+    expect($cash->fresh()->alert_threshold)->toBe('100.00');
+
+    mcp(Tools\UpdateAccount::class, ['id' => $cash->id, 'alert_threshold' => 1.005])->assertHasErrors(['alert threshold']);
+    mcp(Tools\CreateAccount::class, ['name' => 'Bad', 'currency' => 'EUR', 'alert_threshold' => 'lots'])->assertHasErrors(['alert threshold']);
+
+    mcp(Tools\UpdateAccount::class, ['id' => $cash->id, 'alert_threshold' => null])->assertOk()->assertSee('"alert_threshold":null');
+    expect($cash->fresh()->alert_threshold)->toBeNull();
+
+    $this->eur->forceFill(['alert_threshold' => 20])->save();
+    mcp(Tools\ListAccounts::class)->assertSee(['"name":"Revolut"', '"alert_threshold":20']);
+});
+
+test('get_period_insights returns the numbers of the period and only the owner\'s', function () {
+    $other = User::factory()->create();
+    $theirAccount = Account::factory()->create(['user_id' => $other->id, 'currency' => 'EUR']);
+    Transaction::factory()->create(['user_id' => $other->id, 'account_id' => $theirAccount->id, 'type' => 'expense', 'amount' => 999, 'date' => '2026-05-09', 'description' => 'Secret spend']);
+    Transaction::factory()->create(['user_id' => $this->user->id, 'account_id' => $this->eur->id, 'category_id' => $this->food->id, 'type' => 'expense', 'amount' => 25, 'date' => '2026-05-09']);
+
+    mcp(Tools\GetPeriodInsights::class)->assertOk()
+        ->assertSee(['"expenses":25', '"top_categories"', '"is_current":true'])
+        ->assertDontSee('Secret spend');
+    mcp(Tools\GetPeriodInsights::class, ['date' => '2026-05-09'])->assertOk()->assertSee('"expenses":25');
+    mcp(Tools\GetPeriodInsights::class, ['date' => '2024-01-15'])->assertOk()->assertSee('"expenses":0')->assertDontSee('"is_current":true');
+    mcp(Tools\GetPeriodInsights::class, ['date' => 'tomorrow'])->assertHasErrors(['date']);
+});
+
+test('list_recurring_suggestions shows the owner\'s repeating charges only', function () {
+    $other = User::factory()->create();
+    $theirAccount = Account::factory()->create(['user_id' => $other->id, 'currency' => 'EUR']);
+
+    foreach (['2026-03-20', '2026-04-20'] as $date) {
+        Transaction::factory()->create(['user_id' => $this->user->id, 'account_id' => $this->eur->id, 'type' => 'expense', 'amount' => 22, 'description' => 'Cursor', 'date' => $date]);
+        Transaction::factory()->create(['user_id' => $other->id, 'account_id' => $theirAccount->id, 'type' => 'expense', 'amount' => 9, 'description' => 'Secretflix', 'date' => $date]);
+    }
+
+    mcp(Tools\ListRecurringSuggestions::class)->assertOk()
+        ->assertSee(['"key":"cursor"', '"interval_type":"months"', '"next_expected":"2026-05-20"'])
+        ->assertDontSee('Secretflix');
+    mcp(Tools\ListRecurringSuggestions::class, as: $other)->assertSee('Secretflix')->assertDontSee('Cursor');
 });
 
 test('planned payments can be created once or repeating, updated, paused, resumed and deleted', function () {
