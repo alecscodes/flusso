@@ -11,14 +11,15 @@ use App\Notifications\LiquidityAlert;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * Will an account run dry? Deterministic: every figure is plain arithmetic on the ledger
  * balance and the payments still owed, never a model's guess. Savings accounts are left out
  * (they are not available money), and so are paid, skipped, paused and archived payments.
  *
- * @phpstan-type PaymentLine array{id: int, name: string, due_date: string, amount: float, overdue: bool, is_estimate: bool}
- * @phpstan-type AccountForecast array{account_id: int, account_name: string, currency: string, balance: float, balance_after: float, alert_threshold: float|null, below_threshold: bool, due_total: float, shortfall: float, needed_by: string|null, negative_on: string|null, threshold_crossed_on: string|null, is_at_risk: bool, is_estimate: bool, days: int, payments: list<PaymentLine>}
+ * @phpstan-type PaymentLine array{id: int, name: string, due_date: string, amount: float, currency: string, overdue: bool, is_estimate: bool, rate_missing: bool}
+ * @phpstan-type AccountForecast array{account_id: int, account_name: string, currency: string, balance: float, balance_after: float, alert_threshold: float|null, below_threshold: bool, due_total: float, shortfall: float, needed_by: string|null, negative_on: string|null, threshold_crossed_on: string|null, is_at_risk: bool, is_estimate: bool, has_unconverted_payments: bool, days: int, payments: list<PaymentLine>}
  */
 class LiquidityService
 {
@@ -29,6 +30,8 @@ class LiquidityService
     public const KIND_THRESHOLD = 'threshold';
 
     public const KIND_SHORTFALL = 'shortfall';
+
+    public const KIND_UNCONVERTED = 'unconverted';
 
     public function __construct(private CurrencyService $currencyService) {}
 
@@ -95,7 +98,41 @@ class LiquidityService
             default => $head,
         };
 
-        return $row['is_estimate'] ? "{$sentence} (estimate)" : $sentence;
+        if ($row['is_estimate']) {
+            $sentence .= ' (estimate)';
+        }
+
+        $unconverted = $this->describeUnconverted($row);
+
+        return $unconverted === null ? $sentence : "{$sentence}. {$unconverted}";
+    }
+
+    /**
+     * "1 payment in EUR could not be converted: add a rate or check it", or null when every payment was converted.
+     *
+     * @param  AccountForecast  $row
+     */
+    private function describeUnconverted(array $row): ?string
+    {
+        $counts = [];
+
+        foreach ($row['payments'] as $line) {
+            if ($line['rate_missing']) {
+                $counts[$line['currency']] = ($counts[$line['currency']] ?? 0) + 1;
+            }
+        }
+
+        if ($counts === []) {
+            return null;
+        }
+
+        $parts = [];
+
+        foreach ($counts as $currency => $count) {
+            $parts[] = $count.' '.Str::plural('payment', $count)." in {$currency}";
+        }
+
+        return implode(', ', $parts).' could not be converted: add a rate or check it';
     }
 
     /**
@@ -161,6 +198,12 @@ class LiquidityService
             $kinds[self::KIND_SHORTFALL] = $this->cents($row['shortfall']).':'.($row['needed_by'] ?? 'now');
         }
 
+        $unconvertedIds = array_column(array_filter($row['payments'], fn (array $line): bool => $line['rate_missing']), 'id');
+
+        if ($unconvertedIds !== []) {
+            $kinds[self::KIND_UNCONVERTED] = md5(implode(',', $unconvertedIds));
+        }
+
         return $kinds;
     }
 
@@ -176,6 +219,7 @@ class LiquidityService
         $running = $balance;
         $dueTotal = 0;
         $isEstimate = false;
+        $hasUnconverted = false;
         $negativeOn = $balance < 0 ? $today : null;
         $thresholdOn = $threshold !== null && $balance <= $threshold ? $today : null;
         $neededBy = null;
@@ -185,6 +229,22 @@ class LiquidityService
             [$amount, $estimated] = $this->inAccountCurrency($payment, $account);
             $dueDate = $payment->due_date->toDateString();
             $effectiveDate = max($dueDate, $today);
+
+            if ($amount === null) {
+                $hasUnconverted = true;
+                $lines[] = [
+                    'id' => $payment->id,
+                    'name' => $payment->recurringPayment->name,
+                    'due_date' => $dueDate,
+                    'amount' => $this->money($this->cents($payment->amount)),
+                    'currency' => (string) $payment->currency,
+                    'overdue' => $dueDate < $today,
+                    'is_estimate' => false,
+                    'rate_missing' => true,
+                ];
+
+                continue;
+            }
 
             $running -= $amount;
             $dueTotal += $amount;
@@ -204,8 +264,10 @@ class LiquidityService
                 'name' => $payment->recurringPayment->name,
                 'due_date' => $dueDate,
                 'amount' => $this->money($amount),
+                'currency' => $account->currency,
                 'overdue' => $dueDate < $today,
                 'is_estimate' => $estimated,
+                'rate_missing' => false,
             ];
         }
 
@@ -224,8 +286,9 @@ class LiquidityService
             'needed_by' => $neededBy,
             'negative_on' => $negativeOn,
             'threshold_crossed_on' => $thresholdOn,
-            'is_at_risk' => $shortfall > 0 || $thresholdOn !== null,
+            'is_at_risk' => $shortfall > 0 || $thresholdOn !== null || $hasUnconverted,
             'is_estimate' => $isEstimate,
+            'has_unconverted_payments' => $hasUnconverted,
             'days' => $days,
             'payments' => $lines,
         ];
@@ -233,9 +296,10 @@ class LiquidityService
 
     /**
      * A payment is normally in its account's currency already; when it is not, the
-     * app's conversion path is used and the result is an estimate.
+     * app's conversion path is used and the result is an estimate. Without a rate the
+     * amount is null: it is never counted 1:1, which would understate what is owed.
      *
-     * @return array{0: int, 1: bool} Cents in the account currency, and whether it is an estimate.
+     * @return array{0: int|null, 1: bool} Cents in the account currency (null when it cannot be converted), and whether it is an estimate.
      */
     private function inAccountCurrency(Payment $payment, Account $account): array
     {
@@ -247,7 +311,7 @@ class LiquidityService
 
         $converted = $this->currencyService->convert($amount, $payment->currency, $account->currency);
 
-        return [$this->cents($converted ?? $amount), true];
+        return [$converted === null ? null : $this->cents($converted), $converted !== null];
     }
 
     private function money(int $cents): float

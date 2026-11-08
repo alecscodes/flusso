@@ -197,8 +197,10 @@ export interface LiquidityPaymentLine {
     name: string;
     due_date: string;
     amount: number;
+    currency: string;
     overdue: boolean;
     is_estimate: boolean;
+    rate_missing: boolean;
 }
 
 export interface LiquidityForecast {
@@ -216,6 +218,7 @@ export interface LiquidityForecast {
     threshold_crossed_on: string | null;
     is_at_risk: boolean;
     is_estimate: boolean;
+    has_unconverted_payments: boolean;
     days: number;
     message: string;
     payments: LiquidityPaymentLine[];

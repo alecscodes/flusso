@@ -164,6 +164,57 @@ test('a payment in another currency than its account is converted and labelled a
         ->and(app(LiquidityService::class)->describe($row))->toEndWith('(estimate)');
 });
 
+test('a payment that cannot be converted is never counted 1:1 and says so plainly', function () {
+    $this->mock(CurrencyService::class)->shouldReceive('convert')->andReturnNull();
+    $user = User::factory()->create();
+    $account = Account::factory()->create(['user_id' => $user->id, 'name' => 'Enzfox', 'currency' => 'RON', 'balance' => 20]);
+    liquidityPayment($account, 100, '2026-11-10', ['currency' => 'EUR']);
+
+    $row = liquidityRow($user);
+
+    expect($row)->toMatchArray(['due_total' => 0.0, 'shortfall' => 0.0, 'balance_after' => 20.0, 'is_estimate' => false, 'has_unconverted_payments' => true, 'is_at_risk' => true])
+        ->and($row['payments'])->toHaveCount(1)
+        ->and($row['payments'][0])->toMatchArray(['amount' => 100.0, 'currency' => 'EUR', 'rate_missing' => true])
+        ->and(app(LiquidityService::class)->describe($row))->toBe('Enzfox: 20 RON. 1 payment in EUR could not be converted: add a rate or check it')
+        ->and(app(LiquidityService::class)->atRisk($user))->toHaveCount(1);
+});
+
+test('unconverted payments are described per currency', function () {
+    $this->mock(CurrencyService::class)->shouldReceive('convert')->andReturnNull();
+    $user = User::factory()->create();
+    $account = Account::factory()->create(['user_id' => $user->id, 'name' => 'Enzfox', 'currency' => 'RON', 'balance' => 20]);
+    liquidityPayment($account, 10, '2026-11-08', ['currency' => 'EUR']);
+    liquidityPayment($account, 15, '2026-11-09');
+    liquidityPayment($account, 5, '2026-11-10', ['currency' => 'EUR']);
+
+    $row = liquidityRow($user);
+
+    expect($row)->toMatchArray(['due_total' => 15.0, 'shortfall' => 0.0, 'balance_after' => 5.0, 'has_unconverted_payments' => true])
+        ->and(collect($row['payments'])->pluck('rate_missing')->all())->toBe([true, false, true])
+        ->and(app(LiquidityService::class)->describe($row))->toBe('Enzfox: 20 RON. 2 payments in EUR could not be converted: add a rate or check it');
+});
+
+test('an unconverted payment alerts once per state and re-arms when it clears', function () {
+    $this->mock(CurrencyService::class)->shouldReceive('convert')->andReturnNull();
+    $user = User::factory()->create();
+    $account = Account::factory()->create(['user_id' => $user->id, 'name' => 'Main', 'currency' => 'RON', 'balance' => 500]);
+    $payment = liquidityPayment($account, 100, '2026-11-05', ['currency' => 'EUR']);
+
+    $this->artisan('liquidity:notify')->assertSuccessful();
+    $this->artisan('liquidity:notify')->assertSuccessful();
+
+    expect($user->notifications()->count())->toBe(1)
+        ->and($user->notifications()->first()->data)->toMatchArray(['kind' => 'unconverted', 'account_id' => $account->id])
+        ->and($user->notifications()->first()->data['message'])->toContain('1 payment in EUR could not be converted');
+
+    $payment->update(['skipped_at' => now()]);
+    $this->artisan('liquidity:notify');
+    $payment->update(['skipped_at' => null]);
+    $this->artisan('liquidity:notify');
+
+    expect($user->notifications()->count())->toBe(2);
+});
+
 test('a user only ever sees their own accounts', function () {
     $user = User::factory()->create();
     $stranger = User::factory()->create();
