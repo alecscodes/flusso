@@ -111,6 +111,15 @@ export interface RecurringSuggestion {
     price_jumped: boolean;
 }
 
+/** A suggestion the owner hid and can bring back. */
+export interface DismissedSuggestion {
+    key: string;
+    label: string;
+    kind: 'not_recurring' | 'temporary';
+    /** Only for a temporary one: the day it comes back. */
+    snooze_until: string | null;
+}
+
 export interface TransactionFile {
     id: number;
     transaction_id: number;

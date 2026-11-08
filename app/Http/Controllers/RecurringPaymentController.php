@@ -35,6 +35,7 @@ class RecurringPaymentController extends Controller
             'accounts' => $this->accountService->getAccountsForUser($user),
             'categories' => $this->categoryService->getCategoriesForUser($user),
             'suggestions' => Inertia::defer(fn () => $this->suggestionService->suggestionsFor($user)),
+            'dismissedSuggestions' => $this->suggestionService->dismissedFor($user),
         ]);
     }
 
