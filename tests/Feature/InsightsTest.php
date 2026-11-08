@@ -16,6 +16,8 @@ use App\Services\InsightsNarrationService;
 use App\Services\InsightsService;
 use App\Services\SettlementService;
 use App\Services\TransactionService;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Laravel\Ai\Prompts\AgentPrompt;
 
@@ -263,6 +265,41 @@ test('overdue and upcoming payments and the accounts at risk are reported', func
         ->and($insights['payments']['overdue_total'])->toEqual(100)
         ->and($insights['payments']['upcoming_total'])->toEqual(100)
         ->and($insights['liquidity'])->toContain('Main');
+});
+
+test('the dashboard card equals the matching fields of the full insights with far fewer queries', function () {
+    [$user, $account] = insightsSetup(15);
+    $food = insightsCategory($user, 'Food');
+    $rent = insightsCategory($user, 'Rent');
+    insightsBook($user, $account, 'expense', 80, '2026-10-20', $food);
+    insightsBook($user, $account, 'expense', 300, '2026-10-21', $rent);
+    insightsBook($user, $account, 'expense', 50, '2026-09-20', $food);
+    insightsBook($user, $account, 'income', 2000, '2026-10-15', insightsCategory($user, 'Salary', 'income'));
+
+    $service = app(InsightsService::class);
+    $countQueries = function (callable $callback): int {
+        $count = 0;
+        DB::listen(function () use (&$count): void {
+            $count++;
+        });
+        $callback();
+
+        return $count;
+    };
+
+    $card = null;
+    $full = null;
+    $cardQueries = $countQueries(function () use ($service, $user, &$card): void {
+        $card = $service->cardFor($user);
+    });
+    $fullQueries = $countQueries(function () use ($service, $user, &$full): void {
+        $full = $service->forPeriod($user);
+    });
+
+    expect($card)->toEqual(Arr::only($full, ['period', 'currency', 'is_estimate', 'summary', 'expense_change', 'sentence']))
+        ->and($card['sentence'])->toContain('mostly on Rent')
+        ->and($cardQueries)->toBeLessThanOrEqual(15)
+        ->and($cardQueries * 2)->toBeLessThanOrEqual($fullQueries);
 });
 
 test('another user\'s data never appears', function () {
