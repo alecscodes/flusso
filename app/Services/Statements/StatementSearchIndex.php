@@ -17,7 +17,8 @@ class StatementSearchIndex
 {
     private const TABLE = 'statement_search';
 
-    private const MAX_IDS = 5000;
+    /** Most rows one search reads back; when a search reaches it, its results are flagged as truncated. */
+    public const MAX_IDS = 5000;
 
     public function isAvailable(): bool
     {
@@ -86,6 +87,38 @@ class StatementSearchIndex
         }
 
         return ['statements' => $statements, 'lines' => $lines];
+    }
+
+    /**
+     * A short excerpt of the statement's own text around the matching words, made by FTS5 so the
+     * full text is never loaded. Null when the statement's text does not match.
+     *
+     * @param  list<string>  $terms
+     * @return list<array{text: string, hit: bool}>|null
+     */
+    public function snippet(int $statementId, array $terms): ?array
+    {
+        $rows = DB::select(
+            'SELECT snippet('.self::TABLE.', 0, ?, ?, ?, 24) AS excerpt FROM '.self::TABLE.' WHERE '.self::TABLE.' MATCH ? AND rowid = ?',
+            ["\x02", "\x03", '…', self::matchExpression($terms), -$statementId],
+        );
+
+        if ($rows === []) {
+            return null;
+        }
+
+        $parts = preg_split('/\x02(.*?)\x03/su', (string) $rows[0]->excerpt, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [];
+        $segments = [];
+
+        foreach ($parts as $index => $part) {
+            $text = (string) preg_replace('/\s+/u', ' ', $part);
+
+            if ($text !== '') {
+                $segments[] = ['text' => $text, 'hit' => $index % 2 === 1];
+            }
+        }
+
+        return $segments;
     }
 
     /**

@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\StatementLineStatus;
+use App\Enums\StatementReadOutcome;
 use App\Models\Account;
 use App\Models\Statement;
 use App\Models\StatementLine;
@@ -336,7 +337,7 @@ test('reading a statement again replaces its lines, unless some were already dec
 
     $statement->lines()->first()->update(['match_status' => StatementLineStatus::Ignored]);
 
-    expect(app(StatementService::class)->reprocess($statement))->toBeFalse()
+    expect(app(StatementService::class)->reprocess($statement))->toBe(StatementReadOutcome::Refused)
         ->and($statement->lines()->count())->toBe(2);
 });
 

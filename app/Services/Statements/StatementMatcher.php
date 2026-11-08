@@ -90,14 +90,15 @@ class StatementMatcher
 
     /**
      * For each unmatched line that has look-alikes, the transactions that nearly fit
-     * (and are not already matched by another line of the statement).
+     * (and are not already matched by another line of the same statement).
      *
      * @param  list<int>|null  $lineIds  only these lines (the page being shown), or all of them
+     * @param  int|null  $accountId  the account to look in (the statement's own by default)
      * @return array<int, list<Transaction>> keyed by statement line id
      */
-    public function candidates(Statement $statement, ?array $lineIds = null): array
+    public function candidates(Statement $statement, ?array $lineIds = null, ?int $accountId = null): array
     {
-        $analysis = $this->analyze($statement, null, $lineIds);
+        $analysis = $this->analyze($statement, $accountId, $lineIds);
 
         $alreadyMatched = $statement->lines()
             ->whereNotNull('matched_transaction_id')
@@ -151,14 +152,10 @@ class StatementMatcher
         $from = gmdate('Y-m-d', (int) (($dayNumbers->min() - self::DAY_WINDOW) * 86400));
         $to = gmdate('Y-m-d', (int) (($dayNumbers->max() + self::DAY_WINDOW) * 86400));
 
-        // Transactions already matched to (or imported from) lines outside this open set are taken,
-        // but only by statements of this same account (or this very statement, which may have no account
-        // of its own): a transfer is legitimately on two accounts' statements.
-        $taken = StatementLine::query()
-            ->where('user_id', $statement->user_id)
-            ->whereIn('statement_id', Statement::query()
-                ->where(fn ($query) => $query->where('account_id', $accountId)->orWhere('id', $statement->id))
-                ->select('id'))
+        // A transaction is matched by at most one line per statement, not across statements (a
+        // quarterly statement overlaps the monthly ones): only the transactions of this statement's
+        // own imported lines are taken.
+        $taken = $statement->lines()
             ->whereNotNull('matched_transaction_id')
             ->whereNotIn('id', $statement->lines()->whereIn('match_status', $open)->select('id'))
             ->pluck('matched_transaction_id')

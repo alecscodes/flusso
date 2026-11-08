@@ -42,7 +42,10 @@ class GenericCsvParser
             $columns = $this->columns($row);
 
             if ($columns !== null) {
-                return new ParseResult($this->lines(array_slice($rows, $index + 1), $columns), 'csv', null, $truncated);
+                $data = array_slice($rows, $index + 1);
+                $order = Normalizer::dateOrder(array_map(fn (array $row) => $row[$columns['date']] ?? '', $data));
+
+                return new ParseResult($this->lines($data, $columns, $order['dayFirst']), 'csv', null, $truncated, $order['assumed']);
             }
         }
 
@@ -108,9 +111,8 @@ class GenericCsvParser
      * @param  array{date: int, description: list<int>, amount: int|null, debit: int|null, credit: int|null, currency: int|null}  $columns
      * @return list<ParsedLine>
      */
-    private function lines(array $rows, array $columns): array
+    private function lines(array $rows, array $columns, bool $dayFirst): array
     {
-        $dayFirst = Normalizer::detectDayFirst(array_map(fn (array $row) => $row[$columns['date']] ?? '', $rows));
         $lines = [];
 
         foreach ($rows as $row) {

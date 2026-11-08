@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\CategorySuggestionService;
 use App\Services\TransactionService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * Turns chosen statement lines into transactions. A line is only ever imported
@@ -25,10 +26,13 @@ use Illuminate\Support\Facades\DB;
  * TransactionService (the ledger keeps the balances), with the amount exactly as
  * printed on the statement, never converted.
  *
- * @phpstan-type ImportResult array{imported: int, already_in_app: int, refused: list<array{line_id: int, reason: string}>}
+ * @phpstan-type ImportResult array{imported: int, already_in_app: int, refused: list<array{line_id: int, reason: string}>, remaining: int}
  */
 class StatementImporter
 {
+    /** The most lines one request takes, so a big statement cannot time out and roll everything back. */
+    public const MAX_LINES_PER_IMPORT = 500;
+
     public function __construct(
         private readonly StatementMatcher $matcher,
         private readonly TransactionService $transactionService,
@@ -36,17 +40,26 @@ class StatementImporter
     ) {}
 
     /**
-     * @param  array<int, array{description?: string|null, category_id?: int|null}>  $choices  per line id: the description and category the owner chose
-     * @param  bool  $allUnmatched  also import every unmatched line of the statement that has no choice (the category then comes from the owner's history)
+     * @param  array<int, array{description?: string|null, category_id?: int|null, force?: bool}>  $choices  per line id: the description and category the owner chose, and `force` to import a line that may already be in the app
+     * @param  bool  $allUnmatched  also import the unmatched lines of the statement that have no choice (the category then comes from the owner's history), up to the cap per request
      * @return ImportResult
      */
     public function import(User $user, Statement $statement, Account $account, array $choices, bool $allUnmatched = false): array
     {
         return DB::transaction(function () use ($user, $statement, $account, $choices, $allUnmatched) {
-            $ids = array_keys($choices);
+            $ids = array_slice(array_keys($choices), 0, self::MAX_LINES_PER_IMPORT);
+            $remaining = count($choices) - count($ids);
 
             if ($allUnmatched) {
-                $ids = [...$ids, ...$statement->lines()->where('match_status', StatementLineStatus::Unmatched->value)->pluck('id')->all()];
+                $rest = StatementLine::query()
+                    ->where('statement_id', $statement->id)
+                    ->where('user_id', $user->id)
+                    ->where('match_status', StatementLineStatus::Unmatched->value)
+                    ->whereNotIn('id', array_keys($choices));
+
+                $taken = (clone $rest)->orderBy('posted_on')->orderBy('id')->limit(max(0, self::MAX_LINES_PER_IMPORT - count($ids)))->pluck('id')->all();
+                $remaining += (clone $rest)->count() - count($taken);
+                $ids = [...$ids, ...$taken];
             }
 
             $lines = StatementLine::query()
@@ -59,6 +72,7 @@ class StatementImporter
                 ->get();
 
             $matches = $this->matcher->matchesFor($statement, $account->id);
+            $lookAlikes = $this->matcher->candidates($statement, $lines->pluck('id')->map(fn ($id) => (int) $id)->values()->all(), $account->id);
 
             $categoryTypes = $user->categories()->get(['id', 'type'])
                 ->mapWithKeys(fn (Category $category) => [$category->id => $category->type->value])
@@ -68,7 +82,7 @@ class StatementImporter
                 ? $this->suggestCategories($user, $lines->filter(fn (StatementLine $line) => ! isset($choices[$line->id])))
                 : [];
 
-            $result = ['imported' => 0, 'already_in_app' => 0, 'refused' => []];
+            $result = ['imported' => 0, 'already_in_app' => 0, 'refused' => [], 'remaining' => $remaining];
 
             foreach ($lines as $line) {
                 $notOpen = 'Only lines that are not in Flusso can be imported.';
@@ -91,6 +105,16 @@ class StatementImporter
 
                 $type = $this->typeFor($line);
                 $choice = $choices[$line->id] ?? [];
+
+                // Several transactions of the app fit this line: creating another could duplicate one of them.
+                $lookAlike = count($lookAlikes[$line->id] ?? []);
+
+                if ($lookAlike > 0 && ! ($choice['force'] ?? false)) {
+                    $result['refused'][] = ['line_id' => $line->id, 'reason' => "Matches {$lookAlike} ".($lookAlike === 1 ? 'transaction' : 'transactions').' already in the app: ignore it or import it on its own.'];
+
+                    continue;
+                }
+
                 $categoryId = array_key_exists('category_id', $choice) ? $choice['category_id'] : ($suggested[$line->id] ?? null);
 
                 if ($type === null) {
@@ -142,6 +166,7 @@ class StatementImporter
     {
         $history = [];
         $suggested = [];
+        $remembered = [];
 
         foreach ($lines as $line) {
             $type = $this->typeFor($line);
@@ -150,8 +175,15 @@ class StatementImporter
                 continue;
             }
 
-            $history[$type->value] ??= $this->categorySuggestions->history($user, $type);
-            $match = $this->categorySuggestions->fromHistory($history[$type->value], $line->description);
+            // The same description gets the same answer: look it up once per request.
+            $key = $type->value.'|'.Str::lower(trim((string) preg_replace('/\s+/u', ' ', $line->description)));
+
+            if (! array_key_exists($key, $remembered)) {
+                $history[$type->value] ??= $this->categorySuggestions->history($user, $type);
+                $remembered[$key] = $this->categorySuggestions->fromHistory($history[$type->value], $line->description);
+            }
+
+            $match = $remembered[$key];
 
             if ($match !== null) {
                 $suggested[$line->id] = $match['category_id'];

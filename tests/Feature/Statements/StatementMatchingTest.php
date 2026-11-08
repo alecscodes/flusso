@@ -102,7 +102,7 @@ test('a transaction matches only one line', function () {
         ->and($second->fresh()->matched_transaction_id)->toBeNull();
 });
 
-test('a transaction already matched by another statement is not used again', function () {
+test('overlapping statements of the same account match the same transactions', function () {
     [$user, $account, $statement] = statementsMatchSetup();
     $other = Statement::factory()->create(['user_id' => $user->id, 'account_id' => $account->id]);
     $transaction = statementsTransaction($account, '2024-03-10', 2.00);
@@ -113,8 +113,8 @@ test('a transaction already matched by another statement is not used again', fun
     $matcher = app(StatementMatcher::class);
 
     expect($matcher->match($other))->toBe(['matched' => 1, 'unmatched' => 0])
-        ->and($matcher->match($statement))->toBe(['matched' => 0, 'unmatched' => 1])
-        ->and(StatementLine::query()->where('matched_transaction_id', $transaction->id)->count())->toBe(1);
+        ->and($matcher->match($statement))->toBe(['matched' => 1, 'unmatched' => 0])
+        ->and(StatementLine::query()->where('matched_transaction_id', $transaction->id)->count())->toBe(2);
 });
 
 test('ambiguous candidates leave the line unmatched and are listed as candidates', function () {

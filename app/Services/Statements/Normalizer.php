@@ -14,7 +14,10 @@ final class Normalizer
     public const DATE_PATTERN = '\d{4}-\d{2}-\d{2}|\d{1,2}[\/.\-]\d{1,2}[\/.\-](?:\d{4}|\d{2})|\d{1,2}[ \-]\p{L}{3,9}\.?[ \-](?:\d{4}|\d{2})|\p{L}{3,9}\.? \d{1,2}, \d{4}';
 
     /** An amount with two decimals, either 1.234,56 or 1,234.56 (regex fragment, needs the /u and /i flags). */
-    public const AMOUNT_PATTERN = '[-+]?\(?[€$£]?\s?(?:\d{1,3}(?:[.,\']\d{3})+|\d+)[.,]\d{2}\)?(?:-|\s?(?:CR|DR)\b)?';
+    public const AMOUNT_PATTERN = '[-+\x{2212}\x{2013}\x{2014}\x{FE63}\x{FF0D}]?\(?[€$£]?\s?(?:\d{1,3}(?:[.,\']\d{3})+|\d+)[.,]\d{2}\)?(?:[-\x{2212}\x{2013}\x{2014}\x{FE63}\x{FF0D}]|\s?(?:CR|DR)\b)?';
+
+    /** Characters PDFs and spreadsheets print for a minus: U+2212, en dash, em dash, small hyphen-minus, fullwidth hyphen-minus. */
+    private const MINUS_CHARACTERS = ["\u{2212}", "\u{2013}", "\u{2014}", "\u{FE63}", "\u{FF0D}"];
 
     private const MONTHS = [
         'gen' => 1, 'jan' => 1, 'feb' => 2, 'mar' => 3, 'apr' => 4, 'mag' => 5, 'may' => 5,
@@ -28,7 +31,7 @@ final class Normalizer
      */
     public static function amount(string $value): ?string
     {
-        $value = trim(str_replace(["\u{00A0}", "\u{2009}", "\u{202F}"], ' ', $value));
+        $value = trim(str_replace(["\u{00A0}", "\u{2009}", "\u{202F}"], ' ', self::unifyMinus($value)));
         $negative = false;
 
         if (preg_match('/^\((.*)\)$/u', $value, $matches) === 1) {
@@ -62,6 +65,14 @@ final class Normalizer
         $number = round((float) $value, 2);
 
         return ($negative && $number != 0 ? '-' : '').number_format($number, 2, '.', '');
+    }
+
+    /**
+     * Every kind of minus sign turned into a plain "-", before anything else is stripped from a number.
+     */
+    public static function unifyMinus(string $value): string
+    {
+        return str_replace(self::MINUS_CHARACTERS, '-', $value);
     }
 
     /**

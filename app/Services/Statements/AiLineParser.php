@@ -162,6 +162,7 @@ class AiLineParser
     private function printedSigns(string $text): array
     {
         $signs = [];
+        $text = Normalizer::unifyMinus($text);
 
         preg_match_all('/(?<![\p{L}\d])([-+(])?\s?(\d+(?:[.,\']\d{3})*[.,]\d{2})(?!\d)([-)]|\s?(?:DR|CR)\b)?/iu', $text, $matches, PREG_SET_ORDER);
 

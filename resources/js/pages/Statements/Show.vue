@@ -44,7 +44,7 @@ interface StatementDetail {
     lines_truncated: boolean;
     text_truncated: boolean;
     date_order_assumed: boolean;
-    parse_status: 'done' | 'pending_ai' | 'ai_partial' | 'ai_failed';
+    parse_status: 'done' | 'pending_ai' | 'ai_partial' | 'ai_failed' | 'failed';
     sign_uncertain_count: number;
     lines_count: number;
     parsed_at: string | null;
@@ -253,6 +253,24 @@ function submitImport(everyUnmatched: boolean): void {
 
     const chosen = everyUnmatched ? unmatchedLines.value : selectedLines.value;
 
+    // A selected line that looks like transactions already in Flusso is only imported after an explicit "Import anyway".
+    const lookAlikes = everyUnmatched
+        ? []
+        : chosen.filter((line) => props.candidates[line.id]?.length);
+    const force = new Set<number>();
+
+    if (lookAlikes.length > 0) {
+        if (
+            !window.confirm(
+                `${lookAlikes.length} selected line(s) look like transactions that are already in Flusso (see "Could be one of"). Importing them would create duplicates.\n\nImport anyway?`,
+            )
+        ) {
+            return;
+        }
+
+        lookAlikes.forEach((line) => force.add(line.id));
+    }
+
     router.post(
         importLines.url(props.statement.id),
         {
@@ -262,6 +280,7 @@ function submitImport(everyUnmatched: boolean): void {
                 id: line.id,
                 description: drafts[line.id].description,
                 category_id: drafts[line.id].category_id || null,
+                force: force.has(line.id),
             })),
         },
         {
@@ -521,6 +540,13 @@ function setAside(line: Line, restore: boolean): void {
         >
             Only part of this file was read by the AI. The text is complete and
             searchable; you can try Read again.
+        </p>
+        <p
+            v-else-if="statement.parse_status === 'failed'"
+            class="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+            role="alert"
+        >
+            This file could not be read. It is kept; you can try Read again.
         </p>
         <p
             v-else-if="statement.parse_status === 'ai_failed'"

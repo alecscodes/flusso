@@ -6,7 +6,7 @@ use App\Models\Statement;
 use App\Models\StatementLine;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**
@@ -23,9 +23,12 @@ class StatementSearch
 
     public const MAX_LINES_PER_STATEMENT = 6;
 
-    private const MAX_LINES = 1000;
-
     private const MAX_TERMS = 8;
+
+    /** The window of text shown around the first hit when FTS5 is not available. */
+    private const SNIPPET_BEFORE = 80;
+
+    private const SNIPPET_LENGTH = 240;
 
     public function __construct(private readonly StatementSearchIndex $index) {}
 
@@ -65,24 +68,22 @@ class StatementSearch
 
         $textIds = [];
         $lineIds = null;
+        $capped = false;
 
         if ($terms !== []) {
             $matches = $this->matchingIds($user, $terms);
             $textIds = $matches['statements'];
             $lineIds = $matches['lines'];
+            $capped = count($textIds) >= StatementSearchIndex::MAX_IDS || count($lineIds) >= StatementSearchIndex::MAX_IDS;
         }
 
-        $linesByStatement = new Collection;
-
-        if ($terms !== [] || $hasAmount) {
-            $linesByStatement = $this->matchingLines($user, $filters, $lineIds)->groupBy('statement_id');
-        }
+        $counts = ($terms !== [] || $hasAmount) ? $this->lineCounts($user, $filters, $lineIds) : [];
 
         $query = $this->statementQuery($user, $filters);
 
         if ($terms !== [] || $hasAmount) {
             $ids = $hasAmount ? [] : $textIds;
-            $ids = array_values(array_unique([...$ids, ...$linesByStatement->keys()->map(fn ($id) => (int) $id)->all()]));
+            $ids = array_values(array_unique([...$ids, ...array_keys($counts)]));
 
             if ($ids === []) {
                 return ['results' => [], 'truncated' => false];
@@ -98,13 +99,12 @@ class StatementSearch
             ->limit(self::MAX_STATEMENTS + 1)
             ->get();
 
-        $truncated = $statements->count() > self::MAX_STATEMENTS;
+        $truncated = $statements->count() > self::MAX_STATEMENTS || $capped;
         $textMatched = array_flip($hasAmount ? [] : $textIds);
         $results = [];
 
         foreach ($statements->take(self::MAX_STATEMENTS) as $statement) {
-            /** @var Collection<int, StatementLine> $lines */
-            $lines = $linesByStatement->get($statement->id, new Collection);
+            $lines = isset($counts[$statement->id]) ? $this->topLines($user, $filters, $lineIds, $statement->id) : [];
 
             $results[] = [
                 'id' => $statement->id,
@@ -115,15 +115,15 @@ class StatementSearch
                 'period_start' => $statement->period_start?->toDateString(),
                 'period_end' => $statement->period_end?->toDateString(),
                 'snippet' => isset($textMatched[$statement->id]) ? $this->snippetFor($statement, $terms) : null,
-                'lines_total' => $lines->count(),
-                'lines' => $lines->take(self::MAX_LINES_PER_STATEMENT)->map(fn (StatementLine $line) => [
+                'lines_total' => $counts[$statement->id] ?? 0,
+                'lines' => array_map(fn (StatementLine $line) => [
                     'id' => $line->id,
                     'posted_on' => $line->posted_on->toDateString(),
                     'amount' => $line->amount,
                     'currency' => $line->currency,
                     'description' => self::highlight($line->description, $terms),
                     'match_status' => $line->match_status->value,
-                ])->values()->all(),
+                ], $lines),
             ];
         }
 
@@ -217,18 +217,61 @@ class StatementSearch
     }
 
     /**
+     * How many lines match per statement, counted in SQL so no cap hides a statement or its total.
+     *
+     * @param  Filters  $filters
+     * @param  list<int>|null  $lineIds
+     * @return array<int, int> line count by statement id
+     */
+    private function lineCounts(User $user, array $filters, ?array $lineIds): array
+    {
+        if ($lineIds === []) {
+            return [];
+        }
+
+        $counts = [];
+
+        $rows = $this->lineQuery($user, $filters, $lineIds)
+            ->selectRaw('statement_id, count(*) as total')
+            ->groupBy('statement_id')
+            ->toBase()
+            ->get();
+
+        foreach ($rows as $row) {
+            $counts[(int) $row->statement_id] = (int) $row->total;
+        }
+
+        return $counts;
+    }
+
+    /**
+     * The newest few matching lines of one statement.
+     *
+     * @param  Filters  $filters
+     * @param  list<int>|null  $lineIds
+     * @return list<StatementLine>
+     */
+    private function topLines(User $user, array $filters, ?array $lineIds, int $statementId): array
+    {
+        return $this->lineQuery($user, $filters, $lineIds)
+            ->where('statement_id', $statementId)
+            ->orderByDesc('posted_on')
+            ->orderBy('id')
+            ->limit(self::MAX_LINES_PER_STATEMENT)
+            ->get()
+            ->values()
+            ->all();
+    }
+
+    /**
      * The lines matching the search words (when given), the amount and the date range.
      *
      * @param  Filters  $filters
      * @param  list<int>|null  $lineIds
-     * @return Collection<int, StatementLine>
+     * @return Builder<StatementLine>
      */
-    private function matchingLines(User $user, array $filters, ?array $lineIds): Collection
+    private function lineQuery(User $user, array $filters, ?array $lineIds): Builder
     {
-        if ($lineIds === []) {
-            return new Collection;
-        }
-
         return StatementLine::query()
             ->where('user_id', $user->id)
             ->whereIn('statement_id', $this->statementQuery($user, $filters)->select('id'))
@@ -236,11 +279,7 @@ class StatementSearch
             ->when(is_numeric($filters['amount_min'] ?? null), fn (Builder $query) => $query->whereRaw('abs(amount) >= cast(? as real)', [(float) $filters['amount_min']]))
             ->when(is_numeric($filters['amount_max'] ?? null), fn (Builder $query) => $query->whereRaw('abs(amount) <= cast(? as real)', [(float) $filters['amount_max']]))
             ->when(filled($filters['date_from'] ?? null), fn (Builder $query) => $query->where('posted_on', '>=', $filters['date_from']))
-            ->when(filled($filters['date_to'] ?? null), fn (Builder $query) => $query->where('posted_on', '<=', $filters['date_to']))
-            ->orderByDesc('posted_on')
-            ->orderBy('id')
-            ->limit(self::MAX_LINES)
-            ->get();
+            ->when(filled($filters['date_to'] ?? null), fn (Builder $query) => $query->where('posted_on', '<=', $filters['date_to']));
     }
 
     /**
@@ -270,8 +309,8 @@ class StatementSearch
         }
 
         return [
-            'statements' => $statements->limit(2000)->pluck('id')->map(fn ($id) => (int) $id)->all(),
-            'lines' => $lines->limit(5000)->pluck('id')->map(fn ($id) => (int) $id)->all(),
+            'statements' => $statements->limit(StatementSearchIndex::MAX_IDS)->pluck('id')->map(fn ($id) => (int) $id)->all(),
+            'lines' => $lines->limit(StatementSearchIndex::MAX_IDS)->pluck('id')->map(fn ($id) => (int) $id)->all(),
         ];
     }
 
@@ -281,9 +320,55 @@ class StatementSearch
      */
     private function snippetFor(Statement $statement, array $terms): array
     {
-        $text = Statement::query()->whereKey($statement->id)->value('extracted_text');
+        if ($this->index->isAvailable()) {
+            try {
+                $segments = $this->index->snippet($statement->id, $terms);
 
-        return is_string($text) ? self::snippet($text, $terms) : [];
+                if ($segments !== null) {
+                    return $segments;
+                }
+            } catch (Throwable) {
+                // Fall back to LIKE below.
+            }
+        }
+
+        return $this->likeSnippet($statement->id, $terms);
+    }
+
+    /**
+     * The excerpt without FTS5: the database finds the first hit and cuts a window around it,
+     * so the full text (up to millions of characters) never reaches PHP.
+     *
+     * @param  list<string>  $terms
+     * @return list<Segment>
+     */
+    private function likeSnippet(int $statementId, array $terms): array
+    {
+        $columns = [];
+        $bindings = [];
+
+        foreach ($terms as $index => $term) {
+            $columns[] = "instr(lower(extracted_text), ?) as hit_{$index}";
+            $bindings[] = strtolower($term);
+        }
+
+        $row = DB::selectOne('select '.implode(', ', $columns).' from statements where id = ?', [...$bindings, $statementId]);
+
+        if ($row === null) {
+            return [];
+        }
+
+        $positions = array_filter(array_map(fn (mixed $position) => (int) $position, (array) $row), fn (int $position) => $position > 0);
+        $start = max(1, ($positions === [] ? 1 : min($positions)) - self::SNIPPET_BEFORE);
+
+        $excerpt = (string) DB::scalar('select substr(extracted_text, ?, ?) from statements where id = ?', [$start, self::SNIPPET_LENGTH, $statementId]);
+        $excerpt = trim((string) preg_replace('/\s+/u', ' ', $excerpt));
+
+        if ($excerpt === '') {
+            return [];
+        }
+
+        return self::highlight(($start > 1 ? '…' : '').$excerpt.(mb_strlen($excerpt) >= self::SNIPPET_LENGTH - 10 ? '…' : ''), $terms);
     }
 
     private static function escapeLike(string $value): string

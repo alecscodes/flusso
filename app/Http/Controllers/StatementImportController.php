@@ -39,7 +39,7 @@ class StatementImportController extends Controller
 
         $message = $this->summary($result);
 
-        if ($result['refused'] !== []) {
+        if ($result['refused'] !== [] || $result['remaining'] > 0) {
             FlashToast::warning($message);
         } elseif ($result['imported'] > 0) {
             FlashToast::success($message);
@@ -185,13 +185,17 @@ class StatementImportController extends Controller
     }
 
     /**
-     * @param  array{imported: int, already_in_app: int, refused: list<array{line_id: int, reason: string}>}  $result
+     * @param  array{imported: int, already_in_app: int, refused: list<array{line_id: int, reason: string}>, remaining: int}  $result
      */
     private function summary(array $result): string
     {
         $parts = [
             "Imported {$result['imported']} ".($result['imported'] === 1 ? 'line' : 'lines').'.',
         ];
+
+        if ($result['remaining'] > 0) {
+            $parts[] = "{$result['remaining']} remain: run it again.";
+        }
 
         if ($result['already_in_app'] > 0) {
             $parts[] = "{$result['already_in_app']} already in the app, so not imported again.";

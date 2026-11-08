@@ -14,6 +14,9 @@ use Illuminate\Http\UploadedFile;
  */
 class StatementUploadRequest extends FormRequest
 {
+    /** Files read in one request: each is parsed before the page answers (pdftotext may take up to a minute). */
+    public const MAX_FILES = 5;
+
     public function authorize(): bool
     {
         return $this->user()->can('create', Statement::class);
@@ -25,7 +28,7 @@ class StatementUploadRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'files' => ['required', 'array', 'min:1', 'max:20'],
+            'files' => ['required', 'array', 'min:1', 'max:'.self::MAX_FILES],
             'files.*' => [
                 'required',
                 'file',
@@ -44,6 +47,7 @@ class StatementUploadRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'files.max' => 'Upload at most '.self::MAX_FILES.' statements at a time.',
             'files.*.extensions' => 'Only PDF and CSV statements can be uploaded.',
             'files.*.mimetypes' => 'Only PDF and CSV statements can be uploaded.',
             'files.*.max' => 'A statement can be at most 20 MB.',

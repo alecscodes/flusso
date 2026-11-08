@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\AiFeature;
 use App\Enums\StatementLineStatus;
 use App\Enums\StatementParseStatus;
+use App\Enums\StatementReadOutcome;
 use App\Http\Requests\StatementUpdateRequest;
 use App\Http\Requests\StatementUploadRequest;
 use App\Models\Category;
@@ -240,13 +241,15 @@ class StatementController extends Controller
     {
         $this->authorize('update', $statement);
 
-        if ($this->statementService->reprocess($statement)) {
-            FlashToast::success($statement->parse_status === StatementParseStatus::PendingAi
+        match ($this->statementService->reprocess($statement)) {
+            StatementReadOutcome::Replaced => FlashToast::success($statement->parse_status === StatementParseStatus::PendingAi
                 ? 'Statement read again. The AI is reading it, which can take a few minutes.'
-                : 'Statement read again.');
-        } else {
-            FlashToast::error('Some lines were already imported, ignored or had their sign checked, so the statement is not read again.');
-        }
+                : 'Statement read again.'),
+            StatementReadOutcome::Kept => FlashToast::warning($statement->parse_status === StatementParseStatus::PendingAi
+                ? 'Nothing could be read directly this time, so the lines stay as they were. The AI is trying, which can take a few minutes.'
+                : 'Nothing could be read from this file this time, so its lines stay as they were.'),
+            StatementReadOutcome::Refused => FlashToast::error('Some lines were already imported, ignored or had their sign checked, so the statement is not read again.'),
+        };
 
         return redirect()->back(fallback: route('statements.show', $statement));
     }

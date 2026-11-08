@@ -4,6 +4,7 @@ namespace App\Services\Statements;
 
 use App\Enums\StatementLineStatus;
 use App\Enums\StatementParseStatus;
+use App\Enums\StatementReadOutcome;
 use App\Jobs\ParseStatementWithAi;
 use App\Models\Statement;
 use App\Models\StatementLine;
@@ -13,6 +14,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -53,7 +55,9 @@ class StatementService
         $path = 'statements/'.$user->id.'/'.Str::uuid()->toString().($isPdf ? '.pdf' : '.csv');
 
         // Streamed to the disk, so a 20 MB upload is not held in memory.
-        Storage::disk('local')->putFileAs(dirname($path), $file, basename($path));
+        if (Storage::disk('local')->putFileAs(dirname($path), $file, basename($path)) === false) {
+            throw new RuntimeException('The statement file could not be stored.');
+        }
 
         try {
             $statement = $user->statements()->create([
@@ -79,7 +83,14 @@ class StatementService
             throw $exception;
         }
 
-        $this->process($statement);
+        try {
+            $this->process($statement);
+        } catch (Throwable $exception) {
+            // The file is kept; the statement shows that it could not be read and can be read again.
+            report($exception);
+
+            $statement->forceFill(['parse_status' => StatementParseStatus::Failed])->save();
+        }
 
         return ['statement' => $statement->refresh(), 'created' => true];
     }
@@ -87,10 +98,10 @@ class StatementService
     /**
      * Read the file again: text, lines (replacing the open ones), search index and matching.
      * The deterministic parsers answer here; when they find nothing and the model may be
-     * asked, the statement waits for the queued ParseStatementWithAi job. False when the owner
-     * decided on a line meanwhile (see replaceLines), in which case nothing was changed.
+     * asked, the statement waits for the queued ParseStatementWithAi job. Lines it already has
+     * are only replaced once new ones exist.
      */
-    public function process(Statement $statement): bool
+    public function process(Statement $statement): StatementReadOutcome
     {
         $disk = Storage::disk('local');
 
@@ -104,17 +115,17 @@ class StatementService
         $result = $this->parser->parse($text, ! $statement->isPdf());
         $needsAi = $result->lines === [] && $text !== '' && $this->parser->canUseAi();
 
-        $replaced = $this->replaceLines($statement, $result, [
+        $outcome = $this->replaceLines($statement, $result, [
             'extracted_text' => $text === '' ? null : $text,
             'text_truncated' => $textTruncated,
             'parse_status' => $needsAi ? StatementParseStatus::PendingAi : StatementParseStatus::Done,
         ]);
 
-        if ($replaced && $needsAi) {
+        if ($needsAi && $outcome !== StatementReadOutcome::Refused) {
             $this->dispatchAiParse($statement);
         }
 
-        return $replaced;
+        return $outcome;
     }
 
     /**
@@ -155,10 +166,10 @@ class StatementService
      * Parse again (for example after turning AI on). Refused once a line was imported or
      * ignored, or had its sign checked, because re-reading would lose that decision.
      */
-    public function reprocess(Statement $statement): bool
+    public function reprocess(Statement $statement): StatementReadOutcome
     {
         if ($this->hasDecidedLines($statement)) {
-            return false;
+            return StatementReadOutcome::Refused;
         }
 
         return $this->process($statement);
@@ -179,17 +190,25 @@ class StatementService
     /**
      * Swap the statement's lines for the parse result, then update its search index and matches.
      * The check for decided lines, the delete and the insert are one transaction on the locked
-     * statement row, so a concurrent import cannot be lost; false (nothing changed) when there is one.
+     * statement row, so a concurrent import cannot be lost. A result without lines never deletes
+     * the lines the statement already has (Kept); a decided line stops everything (Refused).
      *
      * @param  array<string, mixed>  $attributes  what else to save on the statement
      */
-    private function replaceLines(Statement $statement, ParseResult $result, array $attributes): bool
+    private function replaceLines(Statement $statement, ParseResult $result, array $attributes): StatementReadOutcome
     {
-        $replaced = DB::transaction(function () use ($statement, $result, $attributes) {
+        $outcome = DB::transaction(function () use ($statement, $result, $attributes) {
             Statement::query()->whereKey($statement->id)->lockForUpdate()->value('id');
 
             if ($this->hasDecidedLines($statement)) {
-                return false;
+                return StatementReadOutcome::Refused;
+            }
+
+            if ($result->lines === [] && $statement->lines()->exists()) {
+                // Nothing new to put in their place: keep the old lines (and the old text if none was read).
+                $statement->forceFill(array_filter($attributes, fn (mixed $value, string $key) => $key !== 'extracted_text' || $value !== null, ARRAY_FILTER_USE_BOTH))->save();
+
+                return StatementReadOutcome::Kept;
             }
 
             // The index rows of the old lines are found through the lines, so forget first.
@@ -226,11 +245,11 @@ class StatementService
                 'period_end' => $statement->period_end ?? $result->periodEnd(),
             ])->save();
 
-            return true;
+            return StatementReadOutcome::Replaced;
         });
 
-        if (! $replaced) {
-            return false;
+        if ($outcome === StatementReadOutcome::Refused) {
+            return $outcome;
         }
 
         $statement->refresh();
@@ -238,7 +257,7 @@ class StatementService
         $this->index->index($statement);
         $this->matcher->match($statement);
 
-        return true;
+        return $outcome;
     }
 
     /**

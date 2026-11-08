@@ -3,14 +3,22 @@
 use App\Ai\Agents\StatementLinesAgent;
 use App\Enums\StatementLineStatus;
 use App\Enums\StatementParseStatus;
+use App\Enums\StatementReadOutcome;
 use App\Jobs\ParseStatementWithAi;
 use App\Models\Account;
 use App\Models\Statement;
 use App\Models\StatementLine;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Services\CategorySuggestionService;
+use App\Services\Statements\GenericCsvParser;
+use App\Services\Statements\Normalizer;
 use App\Services\Statements\PdfLineParser;
+use App\Services\Statements\PdfTextExtractor;
+use App\Services\Statements\StatementImporter;
 use App\Services\Statements\StatementMatcher;
+use App\Services\Statements\StatementSearch;
+use App\Services\Statements\StatementSearchIndex;
 use App\Services\Statements\StatementService;
 use Illuminate\Bus\UniqueLock;
 use Illuminate\Http\UploadedFile;
@@ -18,6 +26,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use Mockery\MockInterface;
 
 use function Pest\Laravel\actingAs;
 
@@ -514,9 +523,9 @@ test('a decided line that appears while the file is read again stops the replace
     [, , $statement] = statementsFinishUnsignedStatement();
     $statement->lines()->firstOrFail()->update(['match_status' => StatementLineStatus::Imported]);
 
-    expect(app(StatementService::class)->process($statement))->toBeFalse()
+    expect(app(StatementService::class)->process($statement))->toBe(StatementReadOutcome::Refused)
         ->and($statement->lines()->count())->toBe(4)
-        ->and(app(StatementService::class)->reprocess($statement))->toBeFalse();
+        ->and(app(StatementService::class)->reprocess($statement))->toBe(StatementReadOutcome::Refused);
 });
 
 test('money in does not match an expense of the same size, nor money out an income', function () {
@@ -641,3 +650,257 @@ test('an AI amount whose sign contradicts the text is flagged as uncertain', fun
 
     expect($statement->lines()->orderBy('posted_on')->get()->map(fn (StatementLine $line) => $line->sign_uncertain)->all())->toBe([true, false]);
 });
+
+dataset('statementsFinishMinuses', [
+    'minus sign' => "\u{2212}",
+    'en dash' => "\u{2013}",
+    'em dash' => "\u{2014}",
+    'small hyphen-minus' => "\u{FE63}",
+    'fullwidth hyphen-minus' => "\u{FF0D}",
+]);
+
+test('every kind of minus sign makes an amount negative, in numbers, CSV and PDF lines', function (string $minus) {
+    $csv = app(GenericCsvParser::class)->parse("Date,Description,Amount\n2024-03-02,Coffee,{$minus}3.50\n");
+    $pdf = app(PdfLineParser::class)->parse("01/03/2024  PAGAMENTO POS COOP        {$minus}45,30\n");
+
+    expect(Normalizer::amount("{$minus}12,50"))->toBe('-12.50')
+        ->and($csv->lines[0]->amount)->toBe('-3.50')
+        ->and($pdf->lines[0]->amount)->toBe('-45.30')
+        ->and($pdf->lines[0]->signUncertain)->toBeFalse();
+})->with('statementsFinishMinuses');
+
+test('an AI amount is checked against a minus sign of any kind in the text', function (string $minus) {
+    statementsEnableAi();
+    Queue::fake();
+
+    $user = User::factory()->create();
+
+    statementsFinishPdfUpload($user, "Estratto conto\nPagamento carta presso FARMACIA CENTRALE del 4 marzo 2024 importo {$minus}23,40 euro");
+
+    $statement = $user->statements()->firstOrFail();
+
+    StatementLinesAgent::fake([['lines' => [['date' => '2024-03-04', 'description' => 'FARMACIA CENTRALE', 'amount' => 23.40]]]]);
+
+    (new ParseStatementWithAi($statement->id))->handle(app(StatementService::class));
+
+    expect($statement->lines()->firstOrFail()->sign_uncertain)->toBeTrue();
+})->with('statementsFinishMinuses');
+
+test('a CSV whose dates cannot tell their order is flagged like a PDF', function () {
+    $user = User::factory()->create();
+
+    actingAs($user)->post(route('statements.store'), [
+        'files' => [UploadedFile::fake()->createWithContent('ambiguous.csv', "Date,Description,Amount\n03/04/2024,Coffee,-1.00\n05/04/2024,Tea,-2.00\n")],
+    ])->assertSessionHasNoErrors();
+
+    $statement = $user->statements()->firstOrFail();
+
+    expect($statement->date_order_assumed)->toBeTrue();
+
+    actingAs($user)->get(route('statements.show', $statement))
+        ->assertInertia(fn ($page) => $page->where('statement.date_order_assumed', true));
+});
+
+test('a statement overlapping an imported one matches the same transactions and duplicates nothing', function () {
+    [$user, $account, $january] = statementImportSetup();
+    $line = statementImportLine($january, -20.00, ['posted_on' => '2024-01-10']);
+
+    actingAs($user)->post(route('statements.import-lines', $january), statementImportPayload([$line], ['account_id' => $account->id]));
+
+    $quarter = Statement::factory()->create(['user_id' => $user->id, 'account_id' => $account->id]);
+    $again = statementImportLine($quarter, -20.00, ['posted_on' => '2024-01-10']);
+    statementImportLine($quarter, -30.00, ['posted_on' => '2024-02-05']);
+
+    app(StatementMatcher::class)->match($quarter);
+
+    expect($again->refresh()->match_status)->toBe(StatementLineStatus::Matched)
+        ->and($again->matched_transaction_id)->toBe($line->refresh()->matched_transaction_id);
+
+    actingAs($user)->post(route('statements.import-lines', $quarter), ['account_id' => $account->id, 'import_all' => true, 'lines' => []]);
+
+    expect(Transaction::query()->count())->toBe(2);
+});
+
+test('two identical lines of one statement still match two different transactions', function () {
+    [, $account, $statement] = statementsMatchSetup();
+    $first = statementsLine($statement, '2024-03-10', -5.00);
+    $second = statementsLine($statement, '2024-03-10', -5.00);
+    statementsTransaction($account, '2024-03-10', 5.00);
+    statementsTransaction($account, '2024-03-10', 5.00);
+
+    expect(app(StatementMatcher::class)->match($statement))->toBe(['matched' => 2, 'unmatched' => 0])
+        ->and($first->fresh()->matched_transaction_id)->not->toBe($second->fresh()->matched_transaction_id);
+});
+
+test('a line that several transactions fit is refused unless it is imported on its own with an explicit force', function () {
+    [$user, $account, $statement] = statementImportSetup();
+    statementImportTransaction($account, '2024-03-10', 9.99, ['description' => 'Lunch']);
+    statementImportTransaction($account, '2024-03-10', 9.99, ['description' => 'Book']);
+    $line = statementImportLine($statement, -9.99, ['posted_on' => '2024-03-10', 'description' => 'CARD']);
+
+    actingAs($user)->post(route('statements.import-lines', $statement), ['account_id' => $account->id, 'import_all' => true, 'lines' => []]);
+    actingAs($user)->post(route('statements.import-lines', $statement), statementImportPayload([$line]));
+
+    expect(Transaction::query()->count())->toBe(2)
+        ->and($line->refresh()->match_status)->toBe(StatementLineStatus::Unmatched);
+
+    actingAs($user)->post(route('statements.import-lines', $statement), ['lines' => [['id' => $line->id, 'force' => true]]]);
+
+    expect(Transaction::query()->count())->toBe(3)
+        ->and($line->refresh()->match_status)->toBe(StatementLineStatus::Imported);
+});
+
+test('one import takes at most the cap and says how many remain', function () {
+    [$user, $account, $statement] = statementImportSetup();
+    $now = now();
+
+    StatementLine::query()->insert(array_map(fn (int $i) => [
+        'statement_id' => $statement->id, 'user_id' => $user->id, 'posted_on' => '2024-03-10', 'amount' => -1.00 - $i,
+        'currency' => 'USD', 'description' => "Line {$i}", 'parsed_by' => 'csv', 'match_status' => 'unmatched',
+        'created_at' => $now, 'updated_at' => $now,
+    ], range(1, StatementImporter::MAX_LINES_PER_IMPORT + 5)));
+
+    $result = app(StatementImporter::class)->import($user, $statement, $account, [], true);
+
+    expect($result['remaining'])->toBe(5)
+        ->and($result['imported'])->toBe(0)
+        ->and(count($result['refused']))->toBe(StatementImporter::MAX_LINES_PER_IMPORT);
+});
+
+test('a category is looked up once per description in one request', function () {
+    [$user, , $statement] = statementImportSetup();
+
+    $this->partialMock(CategorySuggestionService::class, fn (MockInterface $mock) => $mock->shouldReceive('fromHistory')->once()->andReturn(null));
+
+    $lines = [
+        statementImportLine($statement, -1.00, ['description' => 'Lidl  Market']),
+        statementImportLine($statement, -2.00, ['description' => 'lidl market']),
+        statementImportLine($statement, -3.00, ['description' => 'LIDL MARKET ']),
+    ];
+
+    expect(app(StatementImporter::class)->suggestCategories($user, $lines))->toBe([]);
+});
+
+test('lines are kept when a re-read finds nothing, and when the AI fails, but replaced when it reads more', function () {
+    statementsEnableAi();
+    Queue::fake();
+
+    $user = User::factory()->create();
+    $statement = statementsStoredFor($user);
+    $service = app(StatementService::class);
+
+    expect($service->process($statement))->toBe(StatementReadOutcome::Replaced)
+        ->and($statement->lines()->count())->toBe(1);
+
+    Storage::disk('local')->put($statement->path, 'Compra del 5 marzo 2024 per 12,00 euro');
+
+    expect($service->reprocess($statement))->toBe(StatementReadOutcome::Kept)
+        ->and($statement->refresh()->parse_status)->toBe(StatementParseStatus::PendingAi)
+        ->and($statement->lines()->count())->toBe(1);
+
+    StatementLinesAgent::fake([['lines' => []]]);
+    (new ParseStatementWithAi($statement->id))->handle($service);
+
+    expect($statement->refresh()->parse_status)->toBe(StatementParseStatus::AiFailed)
+        ->and($statement->lines()->count())->toBe(1);
+
+    (new UniqueLock(Cache::driver()))->release(new ParseStatementWithAi($statement->id));
+    $service->reprocess($statement);
+    StatementLinesAgent::fake([['lines' => [['date' => '2024-03-05', 'description' => 'Compra', 'amount' => -12.00]]]]);
+    (new ParseStatementWithAi($statement->id))->handle($service);
+
+    expect($statement->refresh()->parse_status)->toBe(StatementParseStatus::Done)
+        ->and($statement->lines()->pluck('description')->all())->toBe(['Compra']);
+});
+
+test('lines are kept when AI is off and the re-read finds nothing', function () {
+    $user = User::factory()->create();
+    $statement = statementsStoredFor($user);
+    $service = app(StatementService::class);
+
+    $service->process($statement);
+    Storage::disk('local')->put($statement->path, 'nothing to read here');
+
+    actingAs($user)->post(route('statements.reparse', $statement))->assertSessionHasNoErrors();
+
+    expect($statement->lines()->count())->toBe(1)
+        ->and($statement->refresh()->parser)->toBe('csv');
+});
+
+test('a file that fails while being read is still kept, marked as unreadable and can be read again', function () {
+    app()->instance(PdfTextExtractor::class, new class extends PdfTextExtractor
+    {
+        public function extract(string $path): ?string
+        {
+            throw new RuntimeException('pdftotext crashed');
+        }
+    });
+
+    $user = User::factory()->create();
+
+    actingAs($user)->post(route('statements.store'), [
+        'files' => [UploadedFile::fake()->createWithContent('crash.pdf', '%PDF-1.4 crash')],
+    ])->assertSessionHasNoErrors();
+
+    $statement = $user->statements()->firstOrFail();
+
+    expect($statement->parse_status)->toBe(StatementParseStatus::Failed);
+
+    actingAs($user)->get(route('statements.show', $statement))
+        ->assertInertia(fn ($page) => $page->where('statement.parse_status', 'failed'));
+
+    statementsFakePdfText(statementsFinishItalianText());
+    actingAs($user)->post(route('statements.reparse', $statement));
+
+    expect($statement->refresh()->parse_status)->toBe(StatementParseStatus::Done)
+        ->and($statement->lines()->count())->toBe(2);
+});
+
+test('at most five files are read in one upload', function () {
+    $user = User::factory()->create();
+    $files = array_map(fn (int $i) => UploadedFile::fake()->createWithContent("s{$i}.csv", "Date,Description,Amount\n2024-03-0{$i},Coffee,-{$i}.00\n"), range(1, 6));
+
+    actingAs($user)->post(route('statements.store'), ['files' => $files])->assertSessionHasErrors('files');
+
+    expect($user->statements()->count())->toBe(0);
+});
+
+test('a search excerpt is cut in the database around the first hit, with or without FTS5', function (bool $withoutFts) {
+    if ($withoutFts) {
+        statementsWithoutFts();
+    }
+
+    $user = User::factory()->create();
+    $text = str_repeat('lorem ipsum dolor ', 2000).' sanzione amministrativa '.str_repeat('amet consectetur ', 2000);
+    $statement = statementsArchive($user, $text);
+
+    $result = statementsSearchResults($user, ['q' => 'sanzione'])['results'][0];
+    $length = array_sum(array_map(fn (array $segment) => mb_strlen($segment['text']), $result['snippet']));
+
+    expect($result['id'])->toBe($statement->id)
+        ->and($length)->toBeLessThan(400)
+        ->and(collect($result['snippet'])->contains(fn (array $segment) => $segment['hit'] && strtolower($segment['text']) === 'sanzione'))->toBeTrue();
+})->with('statementsSearchBackends');
+
+test('line totals are counted in SQL, so no cap hides matches', function (bool $withoutFts) {
+    if ($withoutFts) {
+        statementsWithoutFts();
+    }
+
+    $user = User::factory()->create();
+    $big = statementsArchive($user, 'Big file');
+    $small = statementsArchive($user, 'Small file', [['2024-03-01', 'Coffee bar', 3]]);
+    $now = now();
+
+    StatementLine::query()->insert(array_map(fn (int $i) => [
+        'statement_id' => $big->id, 'user_id' => $user->id, 'posted_on' => '2024-04-10', 'amount' => -1.5,
+        'description' => 'Coffee beans', 'parsed_by' => 'csv', 'match_status' => 'unmatched', 'created_at' => $now, 'updated_at' => $now,
+    ], range(1, 1100)));
+    app(StatementSearchIndex::class)->index($big);
+
+    $results = collect(statementsSearchResults($user, ['q' => 'coffee'])['results'])->keyBy('id');
+
+    expect($results[$big->id]['lines_total'])->toBe(1100)
+        ->and($results[$big->id]['lines'])->toHaveCount(StatementSearch::MAX_LINES_PER_STATEMENT)
+        ->and($results[$small->id]['lines_total'])->toBe(1);
+})->with('statementsSearchBackends');

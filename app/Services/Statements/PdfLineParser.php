@@ -149,7 +149,7 @@ class PdfLineParser
     {
         $value = Normalizer::amount($row['token']);
 
-        if ($value === null || (float) $value === 0.0 || $this->hasOwnSign($row['token'])) {
+        if ($value === null || (float) $value === 0.0 || $this->hasOwnSign(Normalizer::unifyMinus($row['token']))) {
             return [$value, false];
         }
 

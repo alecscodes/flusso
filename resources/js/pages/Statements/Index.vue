@@ -30,7 +30,7 @@ interface StatementSummary {
     parser: string | null;
     lines_truncated: boolean;
     text_truncated: boolean;
-    parse_status: 'done' | 'pending_ai' | 'ai_partial' | 'ai_failed';
+    parse_status: 'done' | 'pending_ai' | 'ai_partial' | 'ai_failed' | 'failed';
     lines_count: number;
     matched_lines_count: number;
     unmatched_lines_count: number;
@@ -580,6 +580,12 @@ const statusVariant: Record<
                             variant="warning"
                         >
                             Only part of this file was read by the AI
+                        </Badge>
+                        <Badge
+                            v-else-if="statement.parse_status === 'failed'"
+                            variant="destructive"
+                        >
+                            Could not be read
                         </Badge>
                         <Badge
                             v-else-if="statement.parse_status === 'ai_failed'"

@@ -12,4 +12,5 @@ enum StatementParseStatus: string
     case PendingAi = 'pending_ai';
     case AiPartial = 'ai_partial';
     case AiFailed = 'ai_failed';
+    case Failed = 'failed';
 }

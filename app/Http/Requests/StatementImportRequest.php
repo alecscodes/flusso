@@ -49,6 +49,7 @@ class StatementImportRequest extends FormRequest
             ],
             'lines.*.description' => ['nullable', 'string', 'max:1000'],
             'lines.*.category_id' => ['nullable', 'integer', $user->ownedCategoryRule()],
+            'lines.*.force' => ['nullable', 'boolean'],
         ];
     }
 
@@ -71,7 +72,7 @@ class StatementImportRequest extends FormRequest
     /**
      * The owner's choices keyed by line id.
      *
-     * @return array<int, array{description: string|null, category_id: int|null}>
+     * @return array<int, array{description: string|null, category_id: int|null, force: bool}>
      */
     public function choices(): array
     {
@@ -81,6 +82,7 @@ class StatementImportRequest extends FormRequest
             $choices[(int) $line['id']] = [
                 'description' => $line['description'] ?? null,
                 'category_id' => isset($line['category_id']) ? (int) $line['category_id'] : null,
+                'force' => (bool) ($line['force'] ?? false),
             ];
         }
 
