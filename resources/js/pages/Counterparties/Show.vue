@@ -52,12 +52,25 @@ interface Settlement {
     amount: number;
 }
 
+interface OverSettled {
+    transaction_id: number;
+    side: 'expense' | 'income';
+    currency: string;
+    date: string;
+    description: string | null;
+    amount: number;
+    settled: number;
+    over: number;
+    settlement_ids: number[];
+}
+
 interface Props {
     counterparty: { id: number; name: string };
     balances: CounterpartyBalanceRow[];
     advances: Advance[];
     repayments: Repayment[];
     settlements: Settlement[];
+    over_settled: OverSettled[];
 }
 
 const props = defineProps<Props>();
@@ -182,6 +195,10 @@ const repaymentById = computed(
     () => new Map(props.repayments.map((r) => [r.id, r])),
 );
 
+const settlementById = computed(
+    () => new Map(props.settlements.map((s) => [s.id, s])),
+);
+
 const formErrors = computed(() => Object.values(form.errors));
 </script>
 
@@ -214,6 +231,74 @@ const formErrors = computed(() => Object.values(form.errors));
                     :name="counterparty.name"
                     :balances="balances"
                 />
+            </CardContent>
+        </Card>
+
+        <Card
+            v-if="over_settled.length > 0"
+            class="border-destructive"
+            role="alert"
+        >
+            <CardHeader>
+                <CardTitle class="text-destructive">Over-settled</CardTitle>
+            </CardHeader>
+            <CardContent class="space-y-4">
+                <div
+                    v-for="item in over_settled"
+                    :key="`${item.side}-${item.transaction_id}`"
+                    class="space-y-2"
+                >
+                    <p class="text-sm">
+                        <span class="font-semibold tabular-nums">
+                            Over-settled by
+                            {{ formatCurrency(item.over, item.currency) }}:
+                        </span>
+                        the
+                        {{ item.side === 'expense' ? 'advance' : 'repayment' }}
+                        “{{ item.description || formatDate(item.date) }}” of
+                        {{ formatCurrency(item.amount, item.currency) }} has
+                        {{ formatCurrency(item.settled, item.currency) }}
+                        {{ item.side === 'expense' ? 'settled' : 'allocated' }}.
+                        Remove one of these settlements:
+                    </p>
+                    <div
+                        v-for="id in item.settlement_ids"
+                        :key="id"
+                        class="flex items-center justify-between gap-3 rounded-xl p-3 hover:bg-muted/50"
+                    >
+                        <p class="min-w-0 text-sm tabular-nums">
+                            {{
+                                formatCurrency(
+                                    settlementById.get(id)?.amount ?? 0,
+                                    item.currency,
+                                )
+                            }}
+                            from
+                            {{
+                                formatDate(
+                                    repaymentById.get(
+                                        settlementById.get(id)?.income_id ?? 0,
+                                    )?.date ?? '',
+                                )
+                            }}
+                            towards
+                            {{
+                                advanceById.get(
+                                    settlementById.get(id)?.expense_id ?? 0,
+                                )?.description || 'an advance'
+                            }}
+                        </p>
+                        <Button
+                            v-if="settlementById.has(id)"
+                            variant="ghost"
+                            size="sm"
+                            class="text-destructive hover:text-destructive"
+                            @click="removeSettlement(settlementById.get(id)!)"
+                        >
+                            Remove
+                        </Button>
+                    </div>
+                </div>
             </CardContent>
         </Card>
 

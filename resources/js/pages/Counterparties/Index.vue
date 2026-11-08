@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { BalanceSummary } from '@/components/data-display';
 import {
+    Badge,
     Button,
     Card,
     CardContent,
@@ -145,6 +146,12 @@ function link(suggestion: Suggestion) {
                         <CardTitle class="flex items-center gap-2">
                             <Users class="size-5" />
                             {{ person.name }}
+                            <Badge
+                                v-if="person.over_settled_count > 0"
+                                variant="destructive"
+                            >
+                                Over-settled
+                            </Badge>
                         </CardTitle>
                     </CardHeader>
                     <CardContent>

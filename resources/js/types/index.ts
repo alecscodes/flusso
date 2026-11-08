@@ -244,6 +244,7 @@ export interface CounterpartyBalanceRow {
 export interface CounterpartyBalance {
     id: number;
     name: string;
+    over_settled_count: number;
     balances: CounterpartyBalanceRow[];
 }
 

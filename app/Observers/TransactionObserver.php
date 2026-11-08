@@ -6,7 +6,6 @@ use App\Enums\TransactionType;
 use App\Models\Account;
 use App\Models\Payment;
 use App\Models\Transaction;
-use App\Services\SettlementService;
 use RuntimeException;
 
 /**
@@ -82,11 +81,12 @@ class TransactionObserver
         $this->recalculate($transaction);
     }
 
+    /**
+     * Its settlements count again as they were: any over-settlement this causes is
+     * shown to the owner (see CounterpartyService::overSettled), never fixed silently.
+     */
     public function restored(Transaction $transaction): void
     {
-        // Its settlements count again; trim any that the other side has meanwhile been settled past.
-        app(SettlementService::class)->reconcileRestored($transaction);
-
         $this->recalculate($transaction);
     }
 

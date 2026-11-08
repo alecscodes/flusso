@@ -554,7 +554,13 @@ test('a deleted transaction keeps its settlements but they count for nothing unt
     expect(TransactionSettlement::live()->count())->toBe(1);
 });
 
-test('restoring a transaction trims settlements that were made past its counterpart meanwhile', function () {
+/**
+ * An expense of 100 settled by income A, A deleted, income B settling it too, then A restored.
+ *
+ * @return array{0: User, 1: Counterparty, 2: Transaction, 3: Transaction, 4: Transaction}
+ */
+function advancesOverSettledSetup(): array
+{
     [$user, $account, $person] = advancesSetup();
     $expense = advancesBook($user, $account, 'expense', 100, $person);
     $first = advancesBook($user, $account, 'income', 100, $person);
@@ -566,9 +572,86 @@ test('restoring a transaction trims settlements that were made past its counterp
     $service->allocate($user, $second, advancesAllocation($expense, 100));
     $first->restore();
 
-    expect($service->settledCents([$expense->id], TransactionType::Expense))->toBe([$expense->id => 10000])
-        ->and($service->settledCents([$first->id], TransactionType::Income))->toBe([])
-        ->and(TransactionSettlement::live()->count())->toBe(1);
+    return [$user, $person, $expense, $first, $second];
+}
+
+test('restoring a transaction never changes a settlement, even when that over-settles the other side', function () {
+    [, , $expense, $first] = advancesOverSettledSetup();
+
+    expect(TransactionSettlement::live()->count())->toBe(2)
+        ->and(TransactionSettlement::pluck('amount')->all())->toBe(['100.00', '100.00'])
+        ->and(app(SettlementService::class)->settledCents([$expense->id], TransactionType::Expense))->toBe([$expense->id => 20000])
+        ->and(app(SettlementService::class)->settledCents([$first->id], TransactionType::Income))->toBe([$first->id => 10000]);
+});
+
+test('an over-settled advance is reported with the settlements to remove and the balance stays honest', function () {
+    [$user, $person, $expense, $first, $second] = advancesOverSettledSetup();
+    $settlementIds = TransactionSettlement::orderBy('id')->pluck('id')->all();
+
+    $props = actingAs($user)->get(route('counterparties.show', $person))->assertSuccessful()->viewData('page')['props'];
+
+    expect($props['over_settled'])->toHaveCount(1)
+        ->and($props['over_settled'][0])->toMatchArray([
+            'transaction_id' => $expense->id, 'side' => 'expense', 'currency' => 'EUR',
+            'amount' => 100.0, 'settled' => 200.0, 'over' => 100.0, 'settlement_ids' => $settlementIds,
+        ])
+        ->and($props['balances'][0])->toMatchArray(['advanced' => 100.0, 'settled' => 200.0, 'outstanding' => -100.0, 'received' => 200.0, 'balance' => -100.0])
+        ->and(actingAs($user)->get(route('counterparties.index'))->viewData('page')['props']['counterparties'][0]['over_settled_count'])->toBe(1);
+});
+
+test('an income allocated past its amount is reported too', function () {
+    [$user, $account, $person] = advancesSetup();
+    $income = advancesBook($user, $account, 'income', 100, $person);
+    $firstExpense = advancesBook($user, $account, 'expense', 100, $person);
+    $secondExpense = advancesBook($user, $account, 'expense', 100, $person);
+    $service = app(SettlementService::class);
+    $service->allocate($user, $income, advancesAllocation($firstExpense, 100));
+    app(TransactionService::class)->deleteTransaction($firstExpense);
+    $service->allocate($user, $income, advancesAllocation($secondExpense, 100));
+    $firstExpense->restore();
+
+    $over = app(CounterpartyService::class)->overSettled($user);
+
+    expect($over)->toHaveCount(1)
+        ->and($over[0])->toMatchArray(['transaction_id' => $income->id, 'side' => 'income', 'amount' => 100.0, 'settled' => 200.0, 'over' => 100.0]);
+});
+
+test('removing one of the settlements clears the over-settlement', function () {
+    [$user, $person] = advancesOverSettledSetup();
+    $service = app(CounterpartyService::class);
+    $settlement = TransactionSettlement::orderBy('id')->first();
+
+    expect($service->overSettled($user))->toHaveCount(1);
+
+    actingAs($user)->delete(route('settlements.destroy', $settlement))->assertRedirect();
+
+    expect($service->overSettled($user))->toBe([])
+        ->and($service->balances($user)->first()['over_settled_count'])->toBe(0)
+        ->and(actingAs($user)->get(route('counterparties.show', $person))->viewData('page')['props']['over_settled'])->toBe([]);
+});
+
+test('over-settlements are only reported to their owner', function () {
+    [$user] = advancesOverSettledSetup();
+    $stranger = User::factory()->create();
+
+    expect(app(CounterpartyService::class)->overSettled($user))->toHaveCount(1)
+        ->and(app(CounterpartyService::class)->overSettled($stranger))->toBe([]);
+});
+
+test('settled amounts are compared in cents, so float noise is not an over-settlement', function () {
+    [$user, $account, $person] = advancesSetup();
+    $expense = advancesBook($user, $account, 'expense', 0.3, $person);
+    $small = advancesBook($user, $account, 'income', 0.1, $person);
+    $big = advancesBook($user, $account, 'income', 0.2, $person);
+    $extra = advancesBook($user, $account, 'income', 0.1, $person);
+    TransactionSettlement::create(['income_transaction_id' => $small->id, 'expense_transaction_id' => $expense->id, 'amount' => '0.10']);
+    TransactionSettlement::create(['income_transaction_id' => $big->id, 'expense_transaction_id' => $expense->id, 'amount' => '0.20']);
+
+    expect(app(CounterpartyService::class)->overSettled($user))->toBe([]);
+
+    TransactionSettlement::create(['income_transaction_id' => $extra->id, 'expense_transaction_id' => $expense->id, 'amount' => '0.01']);
+
+    expect(app(CounterpartyService::class)->overSettled($user)[0])->toMatchArray(['amount' => 0.3, 'settled' => 0.31, 'over' => 0.01]);
 });
 
 test('deleting a person unlinks their transactions and drops the settlements', function () {

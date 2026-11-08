@@ -280,41 +280,6 @@ class SettlementService
     }
 
     /**
-     * After a restore the transaction's settlements count again. If its counterpart was settled
-     * past its amount in the meantime, the restored rows give way (the newer settlements win).
-     */
-    public function reconcileRestored(Transaction $transaction): void
-    {
-        $rows = TransactionSettlement::query()
-            ->live()
-            ->where(fn (Builder $query) => $query
-                ->where('income_transaction_id', $transaction->id)
-                ->orWhere('expense_transaction_id', $transaction->id))
-            ->get();
-
-        foreach ($rows as $row) {
-            $restoredIsIncome = $row->income_transaction_id === $transaction->id;
-            $counterpartId = $restoredIsIncome ? $row->expense_transaction_id : $row->income_transaction_id;
-            $side = $restoredIsIncome ? TransactionType::Expense : TransactionType::Income;
-
-            $counterpartAmount = self::cents(Transaction::query()->whereKey($counterpartId)->value('amount'));
-            $overflow = ($this->settledCents([$counterpartId], $side)[$counterpartId] ?? 0) - $counterpartAmount;
-
-            if ($overflow <= 0) {
-                continue;
-            }
-
-            $kept = self::cents($row->amount) - $overflow;
-
-            if ($kept > 0) {
-                $row->update(['amount' => self::decimal($kept)]);
-            } else {
-                $row->delete();
-            }
-        }
-    }
-
-    /**
      * The settled part of a set of expenses or incomes, per category and currency: what the
      * opt-in "net" totals take off. Pass a query already limited to the transactions that count.
      *

@@ -161,7 +161,9 @@ class CounterpartyService
      * advanced minus received: positive means they owe the owner, negative that they
      * overpaid (the owner owes them).
      *
-     * @return Collection<int, array{id: int, name: string, balances: list<array{currency: string, advanced: float, settled: float, outstanding: float, received: float, unallocated: float, balance: float}>}>
+     * `over_settled_count` is how many transactions of the person are settled for more than their amount.
+     *
+     * @return Collection<int, array{id: int, name: string, over_settled_count: int, balances: list<array{currency: string, advanced: float, settled: float, outstanding: float, received: float, unallocated: float, balance: float}>}>
      */
     public function balances(User $user, ?int $counterpartyId = null): Collection
     {
@@ -203,6 +205,7 @@ class CounterpartyService
             $totals[$row->counterparty_id][$row->currency]['settled'] += SettlementService::cents($row->total);
         }
 
+        $overSettledCounts = array_count_values(array_column($this->overSettled($user, $counterpartyId), 'counterparty_id'));
         $rows = [];
 
         foreach ($user->counterparties()->when($counterpartyId !== null, fn ($query) => $query->whereKey($counterpartyId))->orderBy('name')->get() as $counterparty) {
@@ -222,19 +225,77 @@ class CounterpartyService
                 ];
             }
 
-            $rows[] = ['id' => $counterparty->id, 'name' => $counterparty->name, 'balances' => $balances];
+            $rows[] = [
+                'id' => $counterparty->id,
+                'name' => $counterparty->name,
+                'over_settled_count' => $overSettledCounts[$counterparty->id] ?? 0,
+                'balances' => $balances,
+            ];
         }
 
         return $this->balanceRows($rows);
     }
 
     /**
-     * @param  array<int, array{id: int, name: string, balances: list<array{currency: string, advanced: float, settled: float, outstanding: float, received: float, unallocated: float, balance: float}>}>  $rows
-     * @return Collection<int, array{id: int, name: string, balances: list<array{currency: string, advanced: float, settled: float, outstanding: float, received: float, unallocated: float, balance: float}>}>
+     * @param  array<int, array{id: int, name: string, over_settled_count: int, balances: list<array{currency: string, advanced: float, settled: float, outstanding: float, received: float, unallocated: float, balance: float}>}>  $rows
+     * @return Collection<int, array{id: int, name: string, over_settled_count: int, balances: list<array{currency: string, advanced: float, settled: float, outstanding: float, received: float, unallocated: float, balance: float}>}>
      */
     private function balanceRows(array $rows): Collection
     {
         return new Collection($rows);
+    }
+
+    /**
+     * Transactions settled for more than their amount, which restoring a deleted transaction can
+     * cause (nothing is trimmed then). Compared in cents in SQL, live settlements only. `settlement_ids`
+     * are the settlements to remove one of.
+     *
+     * @return list<array{transaction_id: int, counterparty_id: int, side: string, currency: string, date: string, description: string|null, amount: float, settled: float, over: float, settlement_ids: list<int>}>
+     */
+    public function overSettled(User $user, ?int $counterpartyId = null): array
+    {
+        $rows = [];
+
+        foreach ([TransactionType::Expense, TransactionType::Income] as $side) {
+            $column = $side === TransactionType::Income ? 'income_transaction_id' : 'expense_transaction_id';
+
+            $found = TransactionSettlement::query()
+                ->live()
+                ->join('transactions', 'transactions.id', '=', "transaction_settlements.{$column}")
+                ->where('transactions.user_id', $user->id)
+                ->whereNull('transactions.deleted_at')
+                ->whereNotNull('transactions.counterparty_id')
+                ->when($counterpartyId !== null, fn ($query) => $query->where('transactions.counterparty_id', $counterpartyId))
+                ->groupBy('transactions.id', 'transactions.counterparty_id', 'transactions.currency', 'transactions.date', 'transactions.description', 'transactions.amount')
+                ->havingRaw('round(sum(transaction_settlements.amount) * 100) > round(transactions.amount * 100)')
+                ->selectRaw('transactions.id as id, transactions.counterparty_id as counterparty_id, transactions.currency as currency, transactions.date as date, transactions.description as description, transactions.amount as amount, sum(transaction_settlements.amount) as settled, group_concat(transaction_settlements.id) as settlement_ids')
+                ->orderBy('transactions.date')
+                ->orderBy('transactions.id')
+                ->toBase()
+                ->get();
+
+            foreach ($found as $row) {
+                $amount = SettlementService::cents($row->amount);
+                $settled = SettlementService::cents($row->settled);
+                $ids = array_map('intval', explode(',', (string) $row->settlement_ids));
+                sort($ids);
+
+                $rows[] = [
+                    'transaction_id' => (int) $row->id,
+                    'counterparty_id' => (int) $row->counterparty_id,
+                    'side' => $side->value,
+                    'currency' => (string) $row->currency,
+                    'date' => substr((string) $row->date, 0, 10),
+                    'description' => $row->description === null ? null : (string) $row->description,
+                    'amount' => (float) ($amount / 100),
+                    'settled' => (float) ($settled / 100),
+                    'over' => (float) (($settled - $amount) / 100),
+                    'settlement_ids' => $ids,
+                ];
+            }
+        }
+
+        return $rows;
     }
 
     /**
@@ -299,6 +360,7 @@ class CounterpartyService
                     ),
                 ];
             })->values()->all(),
+            'over_settled' => $this->overSettled($user, $counterparty->id),
             'settlements' => TransactionSettlement::query()
                 ->live()
                 ->whereIn('income_transaction_id', $incomes->modelKeys())
