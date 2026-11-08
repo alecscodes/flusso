@@ -19,6 +19,15 @@ class TransactionObserver
         $account = Account::withTrashed()->findOrFail($transaction->account_id);
         $transaction->currency = $account->currency;
 
+        // Only an expense can be an advance, only for someone, and a transfer is nobody's.
+        if ($transaction->type === TransactionType::Transfer) {
+            $transaction->counterparty_id = null;
+        }
+
+        if ($transaction->type !== TransactionType::Expense || $transaction->counterparty_id === null) {
+            $transaction->is_advance = false;
+        }
+
         if ($transaction->type !== TransactionType::Transfer) {
             $transaction->to_account_id = null;
             $transaction->to_amount = null;
@@ -72,6 +81,10 @@ class TransactionObserver
         $this->recalculate($transaction);
     }
 
+    /**
+     * Its settlements count again as they were: any over-settlement this causes is
+     * shown to the owner (see CounterpartyService::overSettled), never fixed silently.
+     */
     public function restored(Transaction $transaction): void
     {
         $this->recalculate($transaction);

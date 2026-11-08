@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -16,7 +17,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laravel\Passport\Contracts\OAuthenticatable;
 use Laravel\Passport\HasApiTokens;
 
-#[Fillable(['name', 'email', 'password', 'reset_date'])]
+#[Fillable(['name', 'email', 'password', 'reset_date', 'count_advances_until_settled'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
 class User extends Authenticatable implements OAuthenticatable
 {
@@ -28,7 +29,7 @@ class User extends Authenticatable implements OAuthenticatable
      *
      * @var array<string, mixed>
      */
-    protected $attributes = ['reset_date' => null];
+    protected $attributes = ['reset_date' => null, 'count_advances_until_settled' => false];
 
     /**
      * Get the attributes that should be cast.
@@ -40,6 +41,7 @@ class User extends Authenticatable implements OAuthenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'count_advances_until_settled' => 'boolean',
             'two_factor_confirmed_at' => 'datetime',
         ];
     }
@@ -62,10 +64,28 @@ class User extends Authenticatable implements OAuthenticatable
         return $this->hasMany(Transaction::class);
     }
 
+    /** @return HasMany<Counterparty, $this> */
+    public function counterparties(): HasMany
+    {
+        return $this->hasMany(Counterparty::class);
+    }
+
+    /** @return HasMany<Statement, $this> */
+    public function statements(): HasMany
+    {
+        return $this->hasMany(Statement::class);
+    }
+
     /** @return HasMany<RecurringPayment, $this> */
     public function recurringPayments(): HasMany
     {
         return $this->hasMany(RecurringPayment::class);
+    }
+
+    /** @return HasMany<DismissedRecurringSuggestion, $this> */
+    public function dismissedRecurringSuggestions(): HasMany
+    {
+        return $this->hasMany(DismissedRecurringSuggestion::class);
     }
 
     /** @return HasMany<Payment, $this> */
@@ -97,12 +117,14 @@ class User extends Authenticatable implements OAuthenticatable
     /**
      * The current financial period, from the reset day to the day before the next
      * one. The reset day is clamped to the month's length (31 -> Feb 28/29).
+     * With `$at`, the period that contains that moment instead of the current one.
      *
      * @return array{start: CarbonImmutable, end: CarbonImmutable}
      */
-    public function getFinancialPeriod(): array
+    public function getFinancialPeriod(?CarbonInterface $at = null): array
     {
-        $month = now()->startOfMonth();
+        $now = CarbonImmutable::instance($at ?? now());
+        $month = $now->startOfMonth();
 
         if ($this->reset_date === null) {
             return ['start' => $month, 'end' => $month->endOfMonth()];
@@ -112,7 +134,7 @@ class User extends Authenticatable implements OAuthenticatable
 
         $start = $resetDayIn($month);
 
-        if (now()->lt($start)) {
+        if ($now->lt($start)) {
             $start = $resetDayIn($month->subMonth());
             $nextStart = $resetDayIn($month);
         } else {

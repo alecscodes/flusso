@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import { AmountDisplay, CategoryBadge } from '@/components/data-display';
+import {
+    AmountDisplay,
+    CategoryBadge,
+    DismissedSuggestions,
+    RecurringSuggestions,
+} from '@/components/data-display';
 import { RecurringPaymentForm } from '@/components/forms';
 import {
     Badge,
@@ -17,7 +22,13 @@ import {
     store as recurringPaymentStore,
     update as recurringPaymentUpdate,
 } from '@/routes/planned-payments';
-import type { Account, Category, RecurringPayment } from '@/types';
+import type {
+    Account,
+    Category,
+    DismissedSuggestion,
+    RecurringPayment,
+    RecurringSuggestion,
+} from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { Calendar, ChevronDown, Plus, RefreshCw } from '@lucide/vue';
 import { computed, ref } from 'vue';
@@ -26,17 +37,42 @@ interface Props {
     recurringPayments: RecurringPayment[];
     accounts: Account[];
     categories: Category[];
+    /** Deferred: undefined until it has loaded. */
+    suggestions?: RecurringSuggestion[];
+    dismissedSuggestions: DismissedSuggestion[];
 }
 
 const props = defineProps<Props>();
 
-const { formatDate } = useDate();
+const { formatDate, toInputFormat } = useDate();
 
 const showCreateModal = ref(false);
 const editingRule = ref<RecurringPayment | null>(null);
 // A closing dialog keeps its content until it has faded out.
 const lastEditingRule = useLastValue(editingRule);
 const showFinished = ref(false);
+const creatingFrom = ref<RecurringSuggestion | null>(null);
+const lastCreatingFrom = useLastValue(creatingFrom);
+
+// A suggestion's next charge may already be due: the plan then starts today.
+const suggestionPrefill = computed(() => {
+    const suggestion = lastCreatingFrom.value;
+
+    if (!suggestion) return null;
+
+    const today = toInputFormat(new Date());
+
+    return {
+        name: suggestion.label,
+        account_id: suggestion.account_id,
+        category_id: suggestion.category_id ?? undefined,
+        amount: suggestion.amount,
+        interval_type: suggestion.interval_type,
+        interval_value: suggestion.interval_value,
+        start_date:
+            suggestion.next_expected > today ? suggestion.next_expected : today,
+    };
+});
 
 const current = computed(() =>
     props.recurringPayments.filter((rule) => rule.status !== 'finished'),
@@ -99,6 +135,13 @@ function deleteRule(rule: RecurringPayment) {
                 Add planned payment
             </Button>
         </div>
+
+        <RecurringSuggestions
+            :suggestions="suggestions"
+            @create="creatingFrom = $event"
+        />
+
+        <DismissedSuggestions :dismissed="dismissedSuggestions" />
 
         <div
             v-if="current.length > 0"
@@ -183,6 +226,15 @@ function deleteRule(rule: RecurringPayment) {
                             class="text-sm text-muted-foreground"
                         >
                             From: {{ rule.account.name }}
+                        </div>
+                        <div
+                            v-if="rule.price_change"
+                            class="text-sm text-amber-600 dark:text-amber-400"
+                        >
+                            Price changed: was
+                            {{ rule.price_change.rule_amount }}, last paid
+                            {{ rule.price_change.last_paid_amount }}
+                            {{ rule.currency }}
                         </div>
                         <div
                             v-if="progress(rule)"
@@ -303,6 +355,25 @@ function deleteRule(rule: RecurringPayment) {
                 :action="recurringPaymentStore.url()"
                 @success="showCreateModal = false"
                 @cancel="showCreateModal = false"
+            />
+        </Modal>
+
+        <Modal
+            :open="!!creatingFrom"
+            title="Add planned payment"
+            description="Review what we found before you plan it"
+            size="lg"
+            @close="creatingFrom = null"
+        >
+            <RecurringPaymentForm
+                v-if="lastCreatingFrom"
+                :key="lastCreatingFrom.key"
+                :prefill="suggestionPrefill"
+                :accounts="accounts"
+                :categories="categories"
+                :action="recurringPaymentStore.url()"
+                @success="creatingFrom = null"
+                @cancel="creatingFrom = null"
             />
         </Modal>
 

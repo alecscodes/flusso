@@ -4,6 +4,7 @@ import { useCurrency } from '@/composables';
 import { cn } from '@/lib/utils';
 import type { Account } from '@/types';
 import {
+    AlertCircle,
     CreditCard,
     MoreHorizontal,
     Pencil,
@@ -35,6 +36,13 @@ const { formatCurrency } = useCurrency();
 const balance = computed(() => parseFloat(props.account.balance));
 const initialBalance = computed(() =>
     parseFloat(props.account.initial_balance),
+);
+
+const isBelowThreshold = computed(
+    () =>
+        !props.account.is_savings &&
+        props.account.alert_threshold !== null &&
+        balance.value <= parseFloat(props.account.alert_threshold),
 );
 
 const balanceChange = computed(() => {
@@ -97,6 +105,13 @@ const gradientClass = computed(() => {
                         >
                             <PiggyBank class="h-3 w-3" />
                             Savings
+                        </span>
+                        <span
+                            v-if="isBelowThreshold"
+                            class="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400"
+                        >
+                            <AlertCircle class="h-3 w-3" />
+                            Low balance
                         </span>
                     </div>
                     <p class="text-sm text-muted-foreground">

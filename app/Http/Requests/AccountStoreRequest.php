@@ -28,6 +28,7 @@ class AccountStoreRequest extends FormRequest
             'currency' => ['required', 'string', 'size:3', 'uppercase'],
             'balance' => ['nullable', 'numeric', 'min:0', 'max:9999999999.99', 'decimal:0,2'],
             'is_savings' => ['sometimes', 'boolean'],
+            'alert_threshold' => ['nullable', 'numeric', 'min:-9999999999.99', 'max:9999999999.99', 'decimal:0,2'],
         ];
     }
 }

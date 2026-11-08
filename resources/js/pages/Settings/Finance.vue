@@ -1,17 +1,21 @@
 <script setup lang="ts">
 import FinanceController from '@/actions/App/Http/Controllers/Settings/FinanceController';
-import { Button, Input, Label } from '@/components/ui';
+import { Button, Checkbox, Input, Label } from '@/components/ui';
 import { Form, Head } from '@inertiajs/vue3';
+import { ref } from 'vue';
 
 interface Props {
     resetDate: number | null;
+    countAdvancesUntilSettled?: boolean;
     currentPeriod: {
         start: string;
         end: string;
     };
 }
 
-defineProps<Props>();
+const props = defineProps<Props>();
+
+const countNet = ref(props.countAdvancesUntilSettled ?? false);
 </script>
 
 <template>
@@ -58,6 +62,27 @@ defineProps<Props>();
                     Your monthly period starts on this day. E.g. 15 = from 15th
                     to 14th next month. Affects dashboard summary.
                 </p>
+            </div>
+
+            <div class="space-y-2">
+                <div class="flex items-start gap-3">
+                    <Checkbox id="count_net" v-model="countNet" />
+                    <div>
+                        <Label for="count_net">
+                            Count advances only until they are settled
+                        </Label>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            Money you paid for other people stops counting as
+                            your spending (and what they paid back as income)
+                            once it is settled. Off by default.
+                        </p>
+                    </div>
+                </div>
+                <input
+                    type="hidden"
+                    name="count_advances_until_settled"
+                    :value="countNet ? 1 : 0"
+                />
             </div>
 
             <div class="rounded-2xl border border-border bg-muted/30 p-6">

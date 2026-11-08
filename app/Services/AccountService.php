@@ -26,7 +26,7 @@ class AccountService
     }
 
     /**
-     * @param  array{name: string, currency: string, balance?: numeric|null, is_savings?: bool|null}  $data
+     * @param  array{name: string, currency: string, balance?: numeric|null, is_savings?: bool|null, alert_threshold?: numeric|null}  $data
      */
     public function createAccount(User $user, array $data): Account
     {
@@ -35,6 +35,7 @@ class AccountService
             'currency' => strtoupper($data['currency']),
             'initial_balance' => $data['balance'] ?? 0,
             'is_savings' => $data['is_savings'] ?? false,
+            'alert_threshold' => $data['alert_threshold'] ?? null,
         ]);
 
         $account->recalculateBalance();
@@ -43,7 +44,7 @@ class AccountService
     }
 
     /**
-     * @param  array{name?: string, currency?: string, is_savings?: bool|null}  $data
+     * @param  array{name?: string, currency?: string, is_savings?: bool|null, alert_threshold?: numeric|null}  $data
      */
     public function updateAccount(Account $account, array $data): Account
     {
@@ -51,6 +52,7 @@ class AccountService
             'name' => $data['name'] ?? $account->name,
             'currency' => $data['currency'] ?? $account->currency,
             'is_savings' => $data['is_savings'] ?? $account->is_savings,
+            'alert_threshold' => array_key_exists('alert_threshold', $data) ? $data['alert_threshold'] : $account->alert_threshold,
         ]);
 
         if ($account->wasChanged('currency')) {
