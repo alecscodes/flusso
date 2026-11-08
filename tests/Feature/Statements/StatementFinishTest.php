@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\Statements\PdfLineParser;
 use App\Services\Statements\StatementMatcher;
 use App\Services\Statements\StatementService;
+use Illuminate\Bus\UniqueLock;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
@@ -437,8 +438,9 @@ test('reading again after a failed AI read tries the model once more', function 
     [$user, $statement] = statementsFinishPendingStatement();
     $statement->update(['parse_status' => StatementParseStatus::AiFailed]);
 
-    // A failed job releases its unique lock; the fake queue never ran it, so release it here.
-    Cache::flush();
+    // A failed job releases its unique lock; the fake queue never ran it, so release it here
+    // (the array store keeps locks apart from its values, so Cache::flush() would not do it).
+    (new UniqueLock(Cache::driver()))->release(new ParseStatementWithAi($statement->id));
 
     actingAs($user)->post(route('statements.reparse', $statement));
 
