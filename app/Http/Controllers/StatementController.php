@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\AiFeature;
 use App\Enums\StatementLineStatus;
+use App\Enums\StatementParseStatus;
 use App\Http\Requests\StatementUpdateRequest;
 use App\Http\Requests\StatementUploadRequest;
 use App\Models\Category;
@@ -62,7 +63,7 @@ class StatementController extends Controller
         ]);
 
         $statements = $user->statements()
-            ->select(['id', 'user_id', 'account_id', 'institution', 'account_label', 'period_start', 'period_end', 'original_filename', 'mime_type', 'size', 'parser', 'lines_truncated', 'text_truncated', 'created_at'])
+            ->select(['id', 'user_id', 'account_id', 'institution', 'account_label', 'period_start', 'period_end', 'original_filename', 'mime_type', 'size', 'parser', 'lines_truncated', 'text_truncated', 'date_order_assumed', 'parse_status', 'created_at'])
             ->with('account:id,name')
             ->withCount([
                 'lines',
@@ -129,6 +130,10 @@ class StatementController extends Controller
             ? 'Statement added to your vault.'
             : count($added).' statements added to your vault.');
 
+        if (collect($added)->contains(fn (Statement $statement) => $statement->parse_status === StatementParseStatus::PendingAi)) {
+            FlashToast::info('The AI is reading what could not be read directly. This can take a few minutes.');
+        }
+
         if ($duplicates !== []) {
             FlashToast::warning('Skipped, already in your vault: '.implode(', ', $duplicates));
         }
@@ -183,7 +188,11 @@ class StatementController extends Controller
                 'has_text' => $textLength > 0,
                 'counts' => collect(StatementLineStatus::cases())->mapWithKeys(fn (StatementLineStatus $case) => [$case->value => (int) ($counts[$case->value] ?? 0)])->all(),
                 'unmatched_totals' => $this->unmatchedTotals($statement),
-                'can_reparse' => ($counts[StatementLineStatus::Imported->value] ?? 0) + ($counts[StatementLineStatus::Ignored->value] ?? 0) === 0,
+                'sign_uncertain_count' => $statement->lines()
+                    ->where('sign_uncertain', true)
+                    ->whereIn('match_status', [StatementLineStatus::Unmatched->value, StatementLineStatus::Matched->value])
+                    ->count(),
+                'can_reparse' =>($counts[StatementLineStatus::Imported->value] ?? 0) + ($counts[StatementLineStatus::Ignored->value] ?? 0) === 0,
             ],
             'lines' => $lines->through(fn (StatementLine $line) => [
                 'id' => $line->id,
@@ -192,6 +201,7 @@ class StatementController extends Controller
                 'currency' => $line->currency,
                 'description' => $line->description,
                 'parsed_by' => $line->parsed_by,
+                'sign_uncertain' => $line->sign_uncertain,
                 'match_status' => $line->match_status->value,
                 'matched_transaction' => $line->matchedTransaction ? $this->transactionSummary($line->matchedTransaction) : null,
                 'suggested_category_id' => $suggestedCategories[$line->id] ?? null,
@@ -230,7 +240,9 @@ class StatementController extends Controller
         $this->authorize('update', $statement);
 
         if ($this->statementService->reprocess($statement)) {
-            FlashToast::success('Statement read again.');
+            FlashToast::success($statement->parse_status === StatementParseStatus::PendingAi
+                ? 'Statement read again. The AI is reading it, which can take a few minutes.'
+                : 'Statement read again.');
         } else {
             FlashToast::error('Some lines were already imported or ignored, so the statement is not read again.');
         }
@@ -323,6 +335,8 @@ class StatementController extends Controller
             'parser' => $statement->parser,
             'lines_truncated' => (bool) $statement->lines_truncated,
             'text_truncated' => (bool) $statement->text_truncated,
+            'date_order_assumed' => $statement->date_order_assumed,
+            'parse_status' => $statement->parse_status->value,
             'lines_count' => (int) $statement->lines_count,
             'matched_lines_count' => (int) $statement->matched_lines_count,
             'unmatched_lines_count' => (int) $statement->unmatched_lines_count,

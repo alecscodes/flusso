@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\StatementParseStatus;
 use App\Models\Statement;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -32,6 +33,7 @@ class StatementFactory extends Factory
             'path' => 'statements/test/'.fake()->uuid().'.csv',
             'extracted_text' => null,
             'parser' => null,
+            'parse_status' => StatementParseStatus::Done,
             'parsed_at' => null,
         ];
     }

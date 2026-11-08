@@ -14,9 +14,9 @@ import {
 import { useCurrency, useDate } from '@/composables';
 import { download, index, show, store } from '@/routes/statements';
 import type { PaginatedData } from '@/types';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePoll } from '@inertiajs/vue3';
 import { Archive, Download, Search, Upload, X } from '@lucide/vue';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 interface StatementSummary {
     id: number;
@@ -30,6 +30,7 @@ interface StatementSummary {
     parser: string | null;
     lines_truncated: boolean;
     text_truncated: boolean;
+    parse_status: 'done' | 'pending_ai' | 'ai_failed';
     lines_count: number;
     matched_lines_count: number;
     unmatched_lines_count: number;
@@ -81,6 +82,15 @@ const props = defineProps<Props>();
 
 const { formatDate } = useDate();
 const { formatCurrency } = useCurrency();
+
+// While the AI reads a file in the background, look for the result every few seconds.
+const poll = usePoll(5000, { only: ['statements'] }, { autoStart: false });
+
+watch(
+    () => props.statements.data.some((s) => s.parse_status === 'pending_ai'),
+    (waiting) => (waiting ? poll.start() : poll.stop()),
+    { immediate: true },
+);
 
 const filters = ref<Filters>({ ...props.filters });
 const showMoreFilters = ref(
@@ -559,6 +569,18 @@ const statusVariant: Record<
                         </p>
                     </div>
                     <div class="flex flex-wrap items-center gap-2">
+                        <Badge
+                            v-if="statement.parse_status === 'pending_ai'"
+                            variant="secondary"
+                        >
+                            Reading with AI…
+                        </Badge>
+                        <Badge
+                            v-else-if="statement.parse_status === 'ai_failed'"
+                            variant="destructive"
+                        >
+                            AI could not read this file
+                        </Badge>
                         <Badge
                             v-if="
                                 statement.lines_truncated ||

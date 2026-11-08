@@ -25,6 +25,15 @@ services:
       test: [CMD, pgrep, -f, schedule:work]
       interval: 10s
 
+  # Background jobs: reading a statement with AI can take minutes, so it never runs in the upload request.
+  queue:
+    <<: *app
+    command: php artisan queue:work --tries=1 --timeout=600
+    stop_grace_period: 10m
+    healthcheck:
+      test: [CMD, pgrep, -f, queue:work]
+      interval: 10s
+
   # Optional local model, off by default: `docker compose --profile ai up -d`,
   # then `docker compose exec ollama ollama pull qwen3:4b` and point Settings > AI at http://ollama:11434.
   ollama:

@@ -30,6 +30,8 @@ return new class extends Migration
             $table->string('parser')->nullable();
             $table->boolean('lines_truncated')->default(false);
             $table->boolean('text_truncated')->default(false);
+            $table->boolean('date_order_assumed')->default(false);
+            $table->string('parse_status', 16)->default('done');
             $table->timestamp('parsed_at')->nullable();
             $table->timestamps();
 
@@ -48,6 +50,7 @@ return new class extends Migration
             $table->text('description');
             $table->text('raw_line')->nullable();
             $table->string('parsed_by', 16)->default('csv');
+            $table->boolean('sign_uncertain')->default(false);
             $table->foreignId('matched_transaction_id')->nullable()->constrained('transactions')->nullOnDelete();
             $table->string('match_status', 16)->default('unmatched');
             $table->timestamps();

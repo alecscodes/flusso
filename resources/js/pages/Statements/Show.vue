@@ -13,6 +13,7 @@ import { useCurrency, useDate } from '@/composables';
 import {
     destroy,
     download,
+    flipLineSign,
     ignoreLine,
     importLines,
     index,
@@ -22,7 +23,7 @@ import {
     update,
 } from '@/routes/statements';
 import type { PaginatedData } from '@/types';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePoll } from '@inertiajs/vue3';
 import { ArrowLeft, Download, FileText, RefreshCw, Trash2 } from '@lucide/vue';
 import { computed, reactive, ref, watch } from 'vue';
 
@@ -39,6 +40,9 @@ interface StatementDetail {
     parser: string | null;
     lines_truncated: boolean;
     text_truncated: boolean;
+    date_order_assumed: boolean;
+    parse_status: 'done' | 'pending_ai' | 'ai_failed';
+    sign_uncertain_count: number;
     lines_count: number;
     parsed_at: string | null;
     has_text: boolean;
@@ -59,6 +63,7 @@ interface Line {
     currency: string | null;
     description: string;
     parsed_by: string;
+    sign_uncertain: boolean;
     match_status: string;
     matched_transaction: Candidate | null;
     suggested_category_id: number | null;
@@ -273,6 +278,27 @@ function submitImport(everyUnmatched: boolean): void {
     );
 }
 
+function flipSign(line: Line): void {
+    router.post(
+        flipLineSign.url({ statement: props.statement.id, line: line.id }),
+        {},
+        { preserveScroll: true },
+    );
+}
+
+// While the AI reads the file in the background, look for the result every few seconds.
+const poll = usePoll(
+    5000,
+    { only: ['statement', 'lines', 'candidates'] },
+    { autoStart: false },
+);
+
+watch(
+    () => props.statement.parse_status,
+    (status) => (status === 'pending_ai' ? poll.start() : poll.stop()),
+    { immediate: true },
+);
+
 function setAside(line: Line, restore: boolean): void {
     const route = restore ? restoreLine : ignoreLine;
 
@@ -447,6 +473,44 @@ function setAside(line: Line, restore: boolean): void {
         </Card>
 
         <p
+            v-if="statement.parse_status === 'pending_ai'"
+            class="rounded-xl border border-primary/30 bg-primary/10 p-3 text-sm text-foreground"
+            role="status"
+        >
+            Reading with AI… This can take a few minutes; the lines appear here
+            when it is done.
+        </p>
+        <p
+            v-else-if="statement.parse_status === 'ai_failed'"
+            class="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+            role="alert"
+        >
+            AI could not read this file. It is still kept and its text is
+            searchable; you can try Read again.
+        </p>
+        <p
+            v-if="statement.date_order_assumed"
+            class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300"
+            role="status"
+        >
+            Date order assumed: day/month. Nothing in this statement shows
+            whether 03/04 means 3 April or 4 March, so check the dates.
+        </p>
+        <p
+            v-if="statement.sign_uncertain_count > 0"
+            class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300"
+            role="status"
+        >
+            {{ statement.sign_uncertain_count }}
+            {{
+                statement.sign_uncertain_count === 1 ? 'line has' : 'lines have'
+            }}
+            a sign that could not be told from the debit and credit columns and
+            {{ statement.sign_uncertain_count === 1 ? 'is' : 'are' }} shown as
+            money in. Check them, and use Flip sign where the amount is money
+            out, before importing.
+        </p>
+        <p
             v-if="statement.lines_truncated"
             class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300"
             role="status"
@@ -602,6 +666,18 @@ function setAside(line: Line, restore: boolean): void {
                             >
                                 AI-parsed
                             </Badge>
+                            <Badge
+                                v-if="
+                                    line.sign_uncertain &&
+                                    ['unmatched', 'matched'].includes(
+                                        line.match_status,
+                                    )
+                                "
+                                variant="warning"
+                                title="The sign could not be read from the columns of the PDF."
+                            >
+                                Check sign
+                            </Badge>
                             <span
                                 :class="[
                                     'font-medium tabular-nums',
@@ -615,6 +691,18 @@ function setAside(line: Line, restore: boolean): void {
                             <Badge :variant="statusVariant[line.match_status]">
                                 {{ line.match_status }}
                             </Badge>
+                            <Button
+                                v-if="
+                                    ['unmatched', 'matched'].includes(
+                                        line.match_status,
+                                    ) && Number(line.amount) !== 0
+                                "
+                                size="sm"
+                                variant="ghost"
+                                @click="flipSign(line)"
+                            >
+                                Flip sign
+                            </Button>
                             <Button
                                 v-if="line.match_status === 'unmatched'"
                                 size="sm"

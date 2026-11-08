@@ -104,23 +104,42 @@ final class Normalizer
      */
     public static function detectDayFirst(array $values): bool
     {
-        $dayFirst = true;
+        return self::dateOrder($values)['dayFirst'];
+    }
+
+    /**
+     * The order of the all-numeric dates ("03/04/2024") of a whole file: any date
+     * with a first number above 12 proves day-first, one with a second number above
+     * 12 proves month-first. Without proof it is day-first, and `assumed` says that
+     * this was a guess (there were numeric dates, none of them decisive).
+     *
+     * @param  list<string>  $values
+     * @return array{dayFirst: bool, assumed: bool}
+     */
+    public static function dateOrder(array $values): array
+    {
+        $numeric = false;
+        $monthFirst = false;
 
         foreach ($values as $value) {
             if (preg_match('/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-]\d{2,4}/', trim($value), $m) !== 1) {
                 continue;
             }
 
+            $numeric = true;
+
             if ((int) $m[1] > 12) {
-                return true;
+                return ['dayFirst' => true, 'assumed' => false];
             }
 
             if ((int) $m[2] > 12) {
-                $dayFirst = false;
+                $monthFirst = true;
             }
         }
 
-        return $dayFirst;
+        return $monthFirst
+            ? ['dayFirst' => false, 'assumed' => false]
+            : ['dayFirst' => true, 'assumed' => $numeric];
     }
 
     /**
