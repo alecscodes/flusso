@@ -721,15 +721,18 @@ test('a statement overlapping an imported one matches the same transactions and 
     expect(Transaction::query()->count())->toBe(2);
 });
 
-test('two identical lines of one statement still match two different transactions', function () {
+dataset('statementsFinishBackends', ['fts' => [false], 'like' => [true]]);
+
+test('two identical lines against two identical transactions stay ambiguous and are never linked to one transaction', function () {
     [, $account, $statement] = statementsMatchSetup();
     $first = statementsLine($statement, '2024-03-10', -5.00);
     $second = statementsLine($statement, '2024-03-10', -5.00);
     statementsTransaction($account, '2024-03-10', 5.00);
     statementsTransaction($account, '2024-03-10', 5.00);
 
-    expect(app(StatementMatcher::class)->match($statement))->toBe(['matched' => 2, 'unmatched' => 0])
-        ->and($first->fresh()->matched_transaction_id)->not->toBe($second->fresh()->matched_transaction_id);
+    expect(app(StatementMatcher::class)->match($statement))->toBe(['matched' => 0, 'unmatched' => 2])
+        ->and($first->fresh()->matched_transaction_id)->toBeNull()
+        ->and($second->fresh()->matched_transaction_id)->toBeNull();
 });
 
 test('a line that several transactions fit is refused unless it is imported on its own with an explicit force', function () {
@@ -880,7 +883,7 @@ test('a search excerpt is cut in the database around the first hit, with or with
     expect($result['id'])->toBe($statement->id)
         ->and($length)->toBeLessThan(400)
         ->and(collect($result['snippet'])->contains(fn (array $segment) => $segment['hit'] && strtolower($segment['text']) === 'sanzione'))->toBeTrue();
-})->with('statementsSearchBackends');
+})->with('statementsFinishBackends');
 
 test('line totals are counted in SQL, so no cap hides matches', function (bool $withoutFts) {
     if ($withoutFts) {
@@ -903,4 +906,4 @@ test('line totals are counted in SQL, so no cap hides matches', function (bool $
     expect($results[$big->id]['lines_total'])->toBe(1100)
         ->and($results[$big->id]['lines'])->toHaveCount(StatementSearch::MAX_LINES_PER_STATEMENT)
         ->and($results[$small->id]['lines_total'])->toBe(1);
-})->with('statementsSearchBackends');
+})->with('statementsFinishBackends');
