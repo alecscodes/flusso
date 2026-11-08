@@ -11,7 +11,7 @@ use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[Name('list_accounts')]
-#[Description('List the accounts with id, name, currency, current balance (in the account\'s own currency) and whether it is a savings account. Archived accounts are not listed.')]
+#[Description('List the accounts with id, name, currency, current balance (in the account\'s own currency) whether it is a savings account and its low-balance alert threshold (null when none). Archived accounts are not listed.')]
 #[IsReadOnly]
 class ListAccounts extends FlussoTool
 {

@@ -346,6 +346,60 @@ test('a dismissal can be taken back', function () {
         ->and(DismissedRecurringSuggestion::count())->toBe(0);
 });
 
+test('merchant aliases are one merchant', function () {
+    [$user, $account, $category] = subscriptionsSetup();
+    subscriptionsCharge($user, $account, $category, 'ElevenLabs', 22, ['2026-04-20']);
+    subscriptionsCharge($user, $account, $category, '11Labs', 22, ['2026-05-20']);
+
+    expect(subscriptionsFor($user))->toHaveCount(1)
+        ->and(subscriptionsFor($user)[0]['key'])->toBe('elevenlabs')
+        ->and(subscriptionsFor($user)[0]['occurrences'])->toBe(2);
+
+    config(['flusso.merchant_aliases' => []]);
+
+    expect(subscriptionsFor($user))->toBeEmpty();
+});
+
+test('a dismissal under an alias hides the canonical merchant and is taken back with either name', function () {
+    [$user, $account, $category] = subscriptionsSetup();
+    subscriptionsCharge($user, $account, $category, 'Eleven Labs', 22, ['2026-04-20', '2026-05-20']);
+
+    actingAs($user)->post(route('planned-payments.suggestions.dismiss'), ['key' => '11labs', 'kind' => 'not_recurring'])->assertRedirect();
+
+    expect(DismissedRecurringSuggestion::firstOrFail()->normalized_key)->toBe('elevenlabs')
+        ->and(subscriptionsFor($user))->toBeEmpty();
+
+    DismissedRecurringSuggestion::query()->update(['normalized_key' => '11labs']);
+    expect(subscriptionsFor($user))->toBeEmpty();
+
+    actingAs($user)->delete(route('planned-payments.suggestions.restore', ['key' => 'elevenlabs']))->assertRedirect();
+
+    expect(DismissedRecurringSuggestion::count())->toBe(0)
+        ->and(subscriptionsFor($user))->toHaveCount(1);
+});
+
+test('the planned payments page lists what is hidden, so it can be shown again', function () {
+    [$user] = subscriptionsSetup();
+    $other = User::factory()->create();
+    DismissedRecurringSuggestion::factory()->temporary('2026-09-01')->create(['user_id' => $user->id, 'normalized_key' => 'cursor']);
+    DismissedRecurringSuggestion::factory()->temporary('2026-06-01')->create(['user_id' => $user->id, 'normalized_key' => 'ended']);
+    DismissedRecurringSuggestion::factory()->temporary('2026-09-01')->create(['user_id' => $other->id, 'normalized_key' => 'secret']);
+    actingAs($user)->post(route('planned-payments.suggestions.dismiss'), ['key' => 'netflix', 'kind' => 'not_recurring']);
+
+    actingAs($user)->get(route('planned-payments.index'))
+        ->assertInertia(fn ($page) => $page->component('RecurringPayments/Index')
+            ->has('dismissedSuggestions', 2)
+            ->where('dismissedSuggestions.0.key', 'cursor')
+            ->where('dismissedSuggestions.0.kind', 'temporary')
+            ->where('dismissedSuggestions.0.snooze_until', '2026-09-01')
+            ->where('dismissedSuggestions.1.key', 'netflix')
+            ->where('dismissedSuggestions.1.snooze_until', null));
+
+    actingAs($user)->delete(route('planned-payments.suggestions.restore', ['key' => 'cursor']))->assertRedirect();
+
+    expect(app(RecurringSuggestionService::class)->dismissedFor($user)->pluck('key')->all())->toBe(['netflix']);
+});
+
 test('dismissals are validated', function (array $input, string $invalidField) {
     [$user] = subscriptionsSetup();
 

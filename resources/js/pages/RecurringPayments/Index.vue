@@ -2,6 +2,7 @@
 import {
     AmountDisplay,
     CategoryBadge,
+    DismissedSuggestions,
     RecurringSuggestions,
 } from '@/components/data-display';
 import { RecurringPaymentForm } from '@/components/forms';
@@ -24,6 +25,7 @@ import {
 import type {
     Account,
     Category,
+    DismissedSuggestion,
     RecurringPayment,
     RecurringSuggestion,
 } from '@/types';
@@ -37,6 +39,7 @@ interface Props {
     categories: Category[];
     /** Deferred: undefined until it has loaded. */
     suggestions?: RecurringSuggestion[];
+    dismissedSuggestions: DismissedSuggestion[];
 }
 
 const props = defineProps<Props>();
@@ -137,6 +140,8 @@ function deleteRule(rule: RecurringPayment) {
             :suggestions="suggestions"
             @create="creatingFrom = $event"
         />
+
+        <DismissedSuggestions :dismissed="dismissedSuggestions" />
 
         <div
             v-if="current.length > 0"

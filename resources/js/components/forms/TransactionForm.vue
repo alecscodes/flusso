@@ -383,7 +383,11 @@ async function readQuickEntry() {
         )) as QuickEntryResult;
 
         if (result.entries.length === 0) {
-            quickMessage.value = 'No amount found. Try e.g. "cafea 2.5 cash".';
+            quickMessage.value =
+                result.unparsed.length > 0 &&
+                result.unparsed.some((line) => line.includes('ambiguous'))
+                    ? `Not understood: ${result.unparsed.join('; ')}`
+                    : 'No amount found. Try e.g. "cafea 2.5 cash".';
         } else if (result.entries.length === 1) {
             await applyQuickEntry(result.entries[0]);
             quickText.value = '';

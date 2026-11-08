@@ -2,6 +2,7 @@ export { default as AccountCard } from './AccountCard.vue';
 export { default as AmountDisplay } from './AmountDisplay.vue';
 export { default as BalanceSummary } from './BalanceSummary.vue';
 export { default as CategoryBadge } from './CategoryBadge.vue';
+export { default as DismissedSuggestions } from './DismissedSuggestions.vue';
 export { default as HeadsUp } from './HeadsUp.vue';
 export { default as PaymentCard } from './PaymentCard.vue';
 export { default as RecurringSuggestions } from './RecurringSuggestions.vue';

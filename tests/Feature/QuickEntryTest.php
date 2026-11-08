@@ -71,7 +71,32 @@ test('amounts keep exactly what was typed', function (string $text, string $amou
     'lei word' => ['cafea 3,10 lei', '3.10'],
     'thousands and decimals' => ['cafea 1.234,56', '1234.56'],
     'english thousands' => ['cafea 1,234.56', '1234.56'],
+    'english thousands with cents' => ['cafea 1,000.50', '1000.50'],
+    'european thousands with cents' => ['cafea 1.000,50', '1000.50'],
+    'several thousands groups' => ['cafea 1.000.000', '1000000'],
+    'thousand without separator' => ['cafea 1000', '1000'],
 ]);
+
+test('an amount with a separator and exactly three digits is ambiguous and never guessed', function (string $text) {
+    $result = quickEntryParse(User::factory()->create(), $text);
+
+    expect($result['entries'])->toBeEmpty()
+        ->and($result['unparsed'])->toBe([$text.' (ambiguous amount: write 1000 or 1,00)']);
+})->with([
+    'dot' => 'cafea 1.000',
+    'comma' => 'cafea 1,000',
+    'larger' => 'chirie 12.345',
+    'a currency does not decide' => 'cafea 1.000 eur',
+    'attached currency' => 'cafea 1.000€',
+]);
+
+test('an ambiguous line does not stop the other lines', function () {
+    $result = quickEntryParse(User::factory()->create(), "cafea 1.000\npizza 17");
+
+    expect($result['entries'])->toHaveCount(1)
+        ->and($result['entries'][0]['amount'])->toBe('17')
+        ->and($result['unparsed'])->toBe(['cafea 1.000 (ambiguous amount: write 1000 or 1,00)']);
+});
 
 test('an amount with more than two decimals is not guessed', function () {
     $result = quickEntryParse(User::factory()->create(), 'cafea 2.5555');

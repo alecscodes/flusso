@@ -59,10 +59,11 @@ class RecurringSuggestionService
         $currencies = $user->accounts()->pluck('currency', 'id');
         $categoryIds = $user->categories()->pluck('id')->all();
         $plannedKeys = $user->recurringPayments()->pluck('name')
-            ->map(fn (string $name) => DescriptionMatcher::normalize($name))
+            ->map(fn (string $name) => $this->merchantKey($name))
             ->filter()
             ->all();
-        $dismissals = $user->dismissedRecurringSuggestions()->get()->keyBy('normalized_key');
+        $dismissals = $user->dismissedRecurringSuggestions()->get()
+            ->keyBy(fn (DismissedRecurringSuggestion $dismissal) => $this->canonicalKey($dismissal->normalized_key));
 
         $transactions = $user->transactions()
             ->where('type', TransactionType::Expense->value)
@@ -76,10 +77,10 @@ class RecurringSuggestionService
 
         $rows = [];
 
-        foreach ($transactions->groupBy(fn (Transaction $transaction) => DescriptionMatcher::normalize($transaction->description).'|'.$transaction->account_id) as $merchantOnAccount) {
+        foreach ($transactions->groupBy(fn (Transaction $transaction) => $this->merchantKey($transaction->description).'|'.$transaction->account_id) as $merchantOnAccount) {
             /** @var Collection<int, Transaction> $group */
             $group = $merchantOnAccount->values();
-            $key = DescriptionMatcher::normalize($group->firstOrFail()->description);
+            $key = $this->merchantKey($group->firstOrFail()->description);
 
             if ($key === '' || $this->isPlanned($key, $plannedKeys) || ($dismissals->get($key)?->hidesOn($today) ?? false)) {
                 continue;
@@ -103,7 +104,7 @@ class RecurringSuggestionService
     public function dismiss(User $user, string $key, SuggestionDismissalKind $kind, ?string $snoozeUntil = null): DismissedRecurringSuggestion
     {
         return $user->dismissedRecurringSuggestions()->updateOrCreate(
-            ['normalized_key' => $key],
+            ['normalized_key' => $this->canonicalKey($key)],
             [
                 'kind' => $kind,
                 'snooze_until' => $kind === SuggestionDismissalKind::Temporary
@@ -118,7 +119,62 @@ class RecurringSuggestionService
      */
     public function restore(User $user, string $key): void
     {
-        $user->dismissedRecurringSuggestions()->where('normalized_key', $key)->delete();
+        $canonical = $this->canonicalKey($key);
+
+        $user->dismissedRecurringSuggestions()->get()
+            ->filter(fn (DismissedRecurringSuggestion $dismissal) => $this->canonicalKey($dismissal->normalized_key) === $canonical)
+            ->each(fn (DismissedRecurringSuggestion $dismissal) => $dismissal->delete());
+    }
+
+    /**
+     * What is hidden right now, to offer taking it back: "not recurring" ones and temporary ones
+     * that have not ended yet, the soonest to come back first.
+     *
+     * @return Collection<int, array{key: string, label: string, kind: string, snooze_until: string|null}>
+     */
+    public function dismissedFor(User $user, ?CarbonInterface $now = null): Collection
+    {
+        $today = ($now ?? now())->toDateString();
+
+        $rows = $user->dismissedRecurringSuggestions()->get()
+            ->filter(fn (DismissedRecurringSuggestion $dismissal) => $dismissal->hidesOn($today))
+            ->map(fn (DismissedRecurringSuggestion $dismissal) => [
+                'key' => $dismissal->normalized_key,
+                'label' => $dismissal->normalized_key,
+                'kind' => $dismissal->kind->value,
+                'snooze_until' => $dismissal->snooze_until?->toDateString(),
+            ])
+            ->sortBy([['kind', 'desc'], ['snooze_until', 'asc'], ['key', 'asc']])
+            ->values()
+            ->all();
+
+        return $this->dismissedRows($rows);
+    }
+
+    /**
+     * The normalised merchant of a description, with every alias folded into its canonical name.
+     */
+    private function merchantKey(?string $description): string
+    {
+        return $this->canonicalKey(DescriptionMatcher::normalize($description));
+    }
+
+    /**
+     * @param  string  $key  an already normalised merchant
+     */
+    private function canonicalKey(string $key): string
+    {
+        foreach ((array) config('flusso.merchant_aliases', []) as $canonical => $aliases) {
+            $canonicalKey = DescriptionMatcher::normalize((string) $canonical);
+
+            foreach ((array) $aliases as $alias) {
+                if (DescriptionMatcher::normalize((string) $alias) === $key) {
+                    return $canonicalKey;
+                }
+            }
+        }
+
+        return $key;
     }
 
     /**
@@ -263,6 +319,15 @@ class RecurringSuggestionService
      * @return Collection<int, array{key: string, label: string, interval_type: string, interval_value: int, amount: string, previous_amount: string, currency: string, account_id: int, category_id: int|null, occurrences: int, last_date: string, next_expected: string, price_jumped: bool}>
      */
     private function suggestionRows(array $rows): Collection
+    {
+        return new Collection($rows);
+    }
+
+    /**
+     * @param  array<int, array{key: string, label: string, kind: string, snooze_until: string|null}>  $rows
+     * @return Collection<int, array{key: string, label: string, kind: string, snooze_until: string|null}>
+     */
+    private function dismissedRows(array $rows): Collection
     {
         return new Collection($rows);
     }

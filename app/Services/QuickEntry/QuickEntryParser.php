@@ -20,6 +20,9 @@ class QuickEntryParser
 
     public const MAX_DESCRIPTION_LENGTH = 200;
 
+    /** Said about a line whose amount could be read two ways ("1.000": one thousand, or one?). */
+    public const AMBIGUOUS_AMOUNT_REASON = 'ambiguous amount: write 1000 or 1,00';
+
     /** Words that only say "this is money in" and are not part of the description. */
     private const INCOME_MARKERS = ['primit', 'primita', 'incasat', 'incasata', 'received'];
 
@@ -65,6 +68,12 @@ class QuickEntryParser
                 continue;
             }
 
+            if ($this->hasAmbiguousAmount($segment)) {
+                $unparsed[] = Str::limit($segment, self::MAX_DESCRIPTION_LENGTH, '').' ('.self::AMBIGUOUS_AMOUNT_REASON.')';
+
+                continue;
+            }
+
             $entry = count($entries) < self::MAX_ENTRIES ? $this->parseSegment($segment, $accounts, $today) : null;
 
             if ($entry === null) {
@@ -77,6 +86,22 @@ class QuickEntryParser
         }
 
         return ['entries' => $entries, 'unparsed' => $unparsed];
+    }
+
+    /**
+     * Money is never guessed: one separator followed by exactly three digits ("1.000", "12,345")
+     * is a thousand or a decimal fraction, and nothing else on the line (not even a currency)
+     * says which. "1,000.50", "1.000,50", "1.000.000" and "2.5" are not ambiguous.
+     */
+    private function hasAmbiguousAmount(string $segment): bool
+    {
+        foreach (preg_split('/\s+/u', mb_strtolower($segment), -1, PREG_SPLIT_NO_EMPTY) ?: [] as $token) {
+            if (preg_match('/^[+-]?(?:€\s*)?[1-9]\d{0,2}[.,]\d{3}(?:€|eur|euro|euros|ron|lei|leu)?$/u', $token) === 1) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -218,10 +243,8 @@ class QuickEntryParser
             $decimalSeparator = $lastDot > $lastComma ? '.' : ',';
         } elseif ($lastDot !== false || $lastComma !== false) {
             $separator = $lastDot !== false ? '.' : ',';
-            $parts = explode($separator, $number);
-            $looksLikeThousands = strlen($parts[count($parts) - 1]) === 3 && strlen($parts[0]) <= 3 && $parts[0] !== '0';
 
-            if (count($parts) === 2 && ! $looksLikeThousands) {
+            if (substr_count($number, $separator) === 1) {
                 $decimalSeparator = $separator;
             }
         }

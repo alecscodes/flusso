@@ -13,7 +13,7 @@ use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Tools\Annotations\IsDestructive;
 
 #[Name('create_account')]
-#[Description('Create an account. `balance` is the opening balance (default 0); later changes come from transactions only.')]
+#[Description('Create an account. `balance` is the opening balance (default 0); later changes come from transactions only. `alert_threshold` is an optional low-balance alert level.')]
 #[IsDestructive(false)]
 class CreateAccount extends FlussoTool
 {
@@ -36,6 +36,7 @@ class CreateAccount extends FlussoTool
             'currency' => $schema->string()->description('3-letter code, e.g. EUR or RON. Cannot be changed once the account has transactions.')->required(),
             'balance' => $schema->number()->min(0)->description('Opening balance.'),
             'is_savings' => $schema->boolean()->description('Savings accounts are left out of the available balance.'),
+            'alert_threshold' => $schema->number()->nullable()->description('Warn when the balance (after what is due) falls to or below this amount, in the account\'s currency. Omit or null for no alert.'),
         ];
     }
 }
