@@ -4,12 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Enums\StatementLineStatus;
 use App\Http\Requests\StatementImportRequest;
+use App\Http\Requests\StatementLineSignRequest;
 use App\Models\Statement;
 use App\Models\StatementLine;
 use App\Services\Statements\StatementImporter;
 use App\Services\Statements\StatementMatcher;
 use App\Support\FlashToast;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Picking statement lines to import as transactions, and setting lines aside (ignored) or back.
@@ -71,6 +73,30 @@ class StatementImportController extends Controller
             FlashToast::success('Line restored.');
         } else {
             FlashToast::error('Only an ignored line can be restored.');
+        }
+
+        return redirect()->back(fallback: route('statements.show', $statement));
+    }
+
+    /**
+     * Turn money in into money out or the other way round, for a line read with the wrong sign.
+     * One conditional update, only while the line is not imported or ignored; the matches are
+     * worked out again because the direction of a line decides which transfers it can match.
+     */
+    public function flipSign(StatementLineSignRequest $request, Statement $statement, StatementLine $line): RedirectResponse
+    {
+        $flipped = StatementLine::query()
+            ->whereKey($line->id)
+            ->where('user_id', $request->user()->id)
+            ->whereIn('match_status', [StatementLineStatus::Unmatched->value, StatementLineStatus::Matched->value])
+            ->where('amount', '!=', 0)
+            ->update(['amount' => DB::raw('-amount'), 'sign_uncertain' => false]);
+
+        if ($flipped === 1) {
+            $this->matcher->match($statement);
+            FlashToast::success('Sign flipped.');
+        } else {
+            FlashToast::error('Only a line that is not imported or ignored, and not 0.00, can change sign.');
         }
 
         return redirect()->back(fallback: route('statements.show', $statement));

@@ -3,6 +3,8 @@
 namespace App\Services\Statements;
 
 use App\Enums\StatementLineStatus;
+use App\Enums\StatementParseStatus;
+use App\Jobs\ParseStatementWithAi;
 use App\Models\Statement;
 use App\Models\StatementLine;
 use App\Models\User;
@@ -22,7 +24,8 @@ class StatementService
     /** Hard cap per file, in kilobytes. */
     public const MAX_SIZE_KB = 20480;
 
-    public const MAX_TEXT_CHARACTERS = 20000000;
+    /** Longest text kept (and indexed) per statement; a normal statement is under 1 MB. */
+    public const MAX_TEXT_CHARACTERS = 5_000_000;
 
     public function __construct(
         private readonly PdfTextExtractor $pdfText,
@@ -83,8 +86,10 @@ class StatementService
 
     /**
      * Read the file again: text, lines (replacing the open ones), search index and matching.
+     * The deterministic parsers answer here; when they find nothing and the model may be
+     * asked, the statement waits for the queued ParseStatementWithAi job.
      */
-    public function process(Statement $statement, int $aiChunks = AiLineParser::MAX_CHUNKS): void
+    public function process(Statement $statement): void
     {
         $disk = Storage::disk('local');
 
@@ -95,48 +100,50 @@ class StatementService
         $text = (string) mb_convert_encoding(str_replace("\0", '', $text), 'UTF-8', 'UTF-8');
         $textTruncated = mb_strlen($text) > self::MAX_TEXT_CHARACTERS;
         $text = $textTruncated ? mb_substr($text, 0, self::MAX_TEXT_CHARACTERS) : $text;
-        $result = $this->parser->parse($text, ! $statement->isPdf(), $aiChunks);
+        $result = $this->parser->parse($text, ! $statement->isPdf());
+        $needsAi = $result->lines === [] && $text !== '' && $this->parser->canUseAi();
 
-        // The index rows of the old lines are found through the lines, so forget first.
-        $this->index->forget($statement);
+        $this->replaceLines($statement, $result, [
+            'extracted_text' => $text === '' ? null : $text,
+            'text_truncated' => $textTruncated,
+            'parse_status' => $needsAi ? StatementParseStatus::PendingAi : StatementParseStatus::Done,
+        ]);
 
-        DB::transaction(function () use ($statement, $text, $textTruncated, $result) {
-            $statement->lines()->delete();
+        if ($needsAi) {
+            $this->dispatchAiParse($statement);
+        }
+    }
 
-            $now = now();
+    /**
+     * The model-assisted read of a statement waiting for it (the queued job's work).
+     * Whatever the model finds replaces the lines; nothing usable is a failed read.
+     */
+    public function completeWithAi(Statement $statement): void
+    {
+        if ($statement->parse_status !== StatementParseStatus::PendingAi) {
+            return;
+        }
 
-            foreach (array_chunk($result->lines, 200) as $chunk) {
-                StatementLine::query()->insert(array_map(fn (ParsedLine $line) => [
-                    'statement_id' => $statement->id,
-                    'user_id' => $statement->user_id,
-                    'posted_on' => $line->date,
-                    'amount' => $line->amount,
-                    'currency' => $line->currency,
-                    'description' => $line->description,
-                    'raw_line' => mb_substr($line->raw, 0, 1000),
-                    'parsed_by' => $line->parsedBy,
-                    'match_status' => StatementLineStatus::Unmatched->value,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ], $chunk));
-            }
+        $result = $this->parser->parseWithAi((string) $statement->extracted_text);
 
-            $statement->forceFill([
-                'extracted_text' => $text === '' ? null : $text,
-                'parser' => $result->parser,
-                'lines_truncated' => $result->truncated,
-                'text_truncated' => $textTruncated,
-                'parsed_at' => $now,
-                'institution' => $statement->institution ?? $result->institution,
-                'period_start' => $statement->period_start ?? $result->periodStart(),
-                'period_end' => $statement->period_end ?? $result->periodEnd(),
-            ])->save();
-        });
+        if ($result === null) {
+            $this->markAiFailed($statement->id);
 
-        $statement->refresh();
+            return;
+        }
 
-        $this->index->index($statement);
-        $this->matcher->match($statement);
+        $this->replaceLines($statement, $result, ['parse_status' => StatementParseStatus::Done]);
+    }
+
+    /**
+     * Mark a statement that is still waiting for the model as unreadable by it.
+     */
+    public function markAiFailed(int $statementId): void
+    {
+        Statement::query()
+            ->whereKey($statementId)
+            ->where('parse_status', StatementParseStatus::PendingAi->value)
+            ->update(['parse_status' => StatementParseStatus::AiFailed->value]);
     }
 
     /**
@@ -156,6 +163,70 @@ class StatementService
         $this->process($statement);
 
         return true;
+    }
+
+    /**
+     * Swap the statement's lines for the parse result, then update its search index and matches.
+     *
+     * @param  array<string, mixed>  $attributes  what else to save on the statement
+     */
+    private function replaceLines(Statement $statement, ParseResult $result, array $attributes): void
+    {
+        // The index rows of the old lines are found through the lines, so forget first.
+        $this->index->forget($statement);
+
+        DB::transaction(function () use ($statement, $result, $attributes) {
+            $statement->lines()->delete();
+
+            $now = now();
+
+            foreach (array_chunk($result->lines, 200) as $chunk) {
+                StatementLine::query()->insert(array_map(fn (ParsedLine $line) => [
+                    'statement_id' => $statement->id,
+                    'user_id' => $statement->user_id,
+                    'posted_on' => $line->date,
+                    'amount' => $line->amount,
+                    'currency' => $line->currency,
+                    'description' => $line->description,
+                    'raw_line' => mb_substr($line->raw, 0, 1000),
+                    'parsed_by' => $line->parsedBy,
+                    'sign_uncertain' => $line->signUncertain,
+                    'match_status' => StatementLineStatus::Unmatched->value,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ], $chunk));
+            }
+
+            $statement->forceFill([
+                ...$attributes,
+                'parser' => $result->parser,
+                'lines_truncated' => $result->truncated,
+                'date_order_assumed' => $result->dateOrderAssumed,
+                'parsed_at' => $now,
+                'institution' => $statement->institution ?? $result->institution,
+                'period_start' => $statement->period_start ?? $result->periodStart(),
+                'period_end' => $statement->period_end ?? $result->periodEnd(),
+            ])->save();
+        });
+
+        $statement->refresh();
+
+        $this->index->index($statement);
+        $this->matcher->match($statement);
+    }
+
+    /**
+     * The upload must not fail because the queue is down: the statement is kept and shows the failure.
+     */
+    private function dispatchAiParse(Statement $statement): void
+    {
+        try {
+            ParseStatementWithAi::dispatch($statement->id);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            $this->markAiFailed($statement->id);
+        }
     }
 
     private function blankToNull(mixed $value): ?string

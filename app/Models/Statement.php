@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Casts\DateOnly;
+use App\Enums\StatementParseStatus;
 use App\Services\Statements\StatementSearchIndex;
 use Database\Factories\StatementFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -40,6 +41,8 @@ class Statement extends Model
         'parser',
         'lines_truncated',
         'text_truncated',
+        'date_order_assumed',
+        'parse_status',
         'parsed_at',
     ];
 
@@ -51,6 +54,8 @@ class Statement extends Model
             'size' => 'integer',
             'lines_truncated' => 'boolean',
             'text_truncated' => 'boolean',
+            'date_order_assumed' => 'boolean',
+            'parse_status' => StatementParseStatus::class,
             'parsed_at' => 'datetime',
         ];
     }
