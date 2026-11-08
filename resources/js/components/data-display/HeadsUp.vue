@@ -71,8 +71,15 @@ function markAlertsRead() {
                                     ({{ formatDate(payment.due_date) }})
                                 </span>
                             </span>
-                            <span>
-                                {{ payment.amount }} {{ account.currency }}
+                            <span
+                                :class="{
+                                    'text-destructive': payment.rate_missing,
+                                }"
+                            >
+                                {{ payment.amount }} {{ payment.currency }}
+                                <template v-if="payment.rate_missing">
+                                    (no rate)
+                                </template>
                             </span>
                         </li>
                     </ul>

@@ -73,22 +73,16 @@ class InsightsService
      */
     public function forPeriod(User $user, ?CarbonInterface $anchor = null): array
     {
-        $period = $user->getFinancialPeriod($anchor);
-        $previous = $user->getFinancialPeriod($period['start']->subDay());
-        $currency = $this->currencyService->getPrimaryCurrency($user);
-
-        $summary = $this->transactionService->getTransactionSummaryForPeriod($user, $period['start'], $period['end']);
-        $previousSummary = $this->transactionService->getTransactionSummaryForPeriod($user, $previous['start'], $previous['end']);
+        $figures = $this->figures($user, $anchor);
+        $period = $figures['range'];
+        $previous = $figures['previous_range'];
 
         $spending = $this->spendingByCategory($user, $period);
         $previousSpending = $this->spendingByCategory($user, $previous);
+        $topCategories = $this->topCategories($spending, $previousSpending);
 
-        $insights = [
-            'period' => [
-                'start' => $period['start']->toDateString(),
-                'end' => $period['end']->toDateString(),
-                'is_current' => now()->betweenIncluded($period['start'], $period['end']),
-            ],
+        return [
+            'period' => $figures['period'],
             'previous_period' => [
                 'start' => $previous['start']->toDateString(),
                 'end' => $previous['end']->toDateString(),
@@ -97,68 +91,93 @@ class InsightsService
                 'previous' => $previous['start']->toDateString(),
                 'next' => $period['end']->endOfDay()->lt(now()) ? $period['end']->addDay()->toDateString() : null,
             ],
-            'currency' => $currency,
-            'is_estimate' => $this->hasForeignCurrency($user, $period, $currency),
-            'summary' => $summary,
-            'previous_summary' => $previousSummary,
-            'expense_change' => $this->change($summary['expenses'], $previousSummary['expenses']),
-            'top_categories' => $this->topCategories($spending, $previousSpending),
+            'currency' => $figures['currency'],
+            'is_estimate' => $figures['is_estimate'],
+            'summary' => $figures['summary'],
+            'previous_summary' => $figures['previous_summary'],
+            'expense_change' => $figures['expense_change'],
+            'top_categories' => $topCategories,
             'unusual_categories' => $this->unusualCategories($spending, $this->history($user, $previous, $previousSpending)),
-            'biggest_expenses' => $this->biggestExpenses($user, $period, $currency),
+            'biggest_expenses' => $this->biggestExpenses($user, $period, $figures['currency']),
             'payments' => $this->payments($user),
             'people' => $this->people($user),
             'liquidity' => $this->liquidityMention($user),
-            'sentence' => '',
+            'sentence' => $this->sentence($figures['summary']['expenses'], $figures['expense_change'], $figures['currency'], $topCategories[0]['name'] ?? null),
         ];
-
-        $insights['sentence'] = $this->sentence($insights);
-
-        return $insights;
     }
 
     /**
-     * The compact version for the dashboard card.
+     * The compact version for the dashboard card: the same numbers and sentence as
+     * forPeriod(), without the history, payments, people and liquidity queries.
      *
      * @return array{period: array{start: string, end: string, is_current: bool}, currency: string, is_estimate: bool, summary: array{income: float, expenses: float, net: float, transaction_count: int}, expense_change: Change, sentence: string}
      */
     public function cardFor(User $user): array
     {
-        $insights = $this->forPeriod($user);
+        $figures = $this->figures($user);
+        $topCategories = $this->topCategories($this->spendingByCategory($user, $figures['range']), []);
 
         return [
-            'period' => $insights['period'],
-            'currency' => $insights['currency'],
-            'is_estimate' => $insights['is_estimate'],
-            'summary' => $insights['summary'],
-            'expense_change' => $insights['expense_change'],
-            'sentence' => $insights['sentence'],
+            'period' => $figures['period'],
+            'currency' => $figures['currency'],
+            'is_estimate' => $figures['is_estimate'],
+            'summary' => $figures['summary'],
+            'expense_change' => $figures['expense_change'],
+            'sentence' => $this->sentence($figures['summary']['expenses'], $figures['expense_change'], $figures['currency'], $topCategories[0]['name'] ?? null),
+        ];
+    }
+
+    /**
+     * What the card and the full page share: the period and the one before it, the primary
+     * currency and both summaries.
+     *
+     * @return array{range: PeriodRange, previous_range: PeriodRange, period: array{start: string, end: string, is_current: bool}, currency: string, is_estimate: bool, summary: array{income: float, expenses: float, net: float, transaction_count: int}, previous_summary: array{income: float, expenses: float, net: float, transaction_count: int}, expense_change: Change}
+     */
+    private function figures(User $user, ?CarbonInterface $anchor = null): array
+    {
+        $range = $user->getFinancialPeriod($anchor);
+        $previousRange = $user->getFinancialPeriod($range['start']->subDay());
+        $currency = $this->currencyService->getPrimaryCurrency($user);
+
+        $summary = $this->transactionService->getTransactionSummaryForPeriod($user, $range['start'], $range['end']);
+        $previousSummary = $this->transactionService->getTransactionSummaryForPeriod($user, $previousRange['start'], $previousRange['end']);
+
+        return [
+            'range' => $range,
+            'previous_range' => $previousRange,
+            'period' => [
+                'start' => $range['start']->toDateString(),
+                'end' => $range['end']->toDateString(),
+                'is_current' => now()->betweenIncluded($range['start'], $range['end']),
+            ],
+            'currency' => $currency,
+            'is_estimate' => $this->hasForeignCurrency($user, $range, $currency),
+            'summary' => $summary,
+            'previous_summary' => $previousSummary,
+            'expense_change' => $this->change($summary['expenses'], $previousSummary['expenses']),
         ];
     }
 
     /**
      * The deterministic one-sentence summary, e.g. "You spent 1,200.00 EUR, 12% more than last period, mostly on Groceries."
      *
-     * @param  Insights  $insights
+     * @param  Change  $change
      */
-    public function sentence(array $insights): string
+    private function sentence(float $expenses, array $change, string $currency, ?string $topCategory): string
     {
-        $expenses = $insights['summary']['expenses'];
-
         if ($expenses <= 0) {
             return 'No expenses were recorded in this period.';
         }
 
-        $sentence = 'You spent '.number_format($expenses, 2).' '.$insights['currency'];
-        $percent = $insights['expense_change']['percent'];
+        $sentence = 'You spent '.number_format($expenses, 2).' '.$currency;
+        $percent = $change['percent'];
 
         if ($percent !== null && abs($percent) >= 0.1) {
             $sentence .= ', '.rtrim(rtrim(number_format(abs($percent), 1), '0'), '.').'% '.($percent > 0 ? 'more' : 'less').' than last period';
         }
 
-        $top = $insights['top_categories'][0] ?? null;
-
-        if ($top !== null) {
-            $sentence .= ', mostly on '.$top['name'];
+        if ($topCategory !== null) {
+            $sentence .= ', mostly on '.$topCategory;
         }
 
         return $sentence.'.';
