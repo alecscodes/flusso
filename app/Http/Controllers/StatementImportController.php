@@ -103,6 +103,25 @@ class StatementImportController extends Controller
     }
 
     /**
+     * The owner checked a line whose sign was uncertain and it is right as read.
+     */
+    public function confirmSign(StatementLineSignRequest $request, Statement $statement, StatementLine $line): RedirectResponse
+    {
+        $confirmed = StatementLine::query()
+            ->whereKey($line->id)
+            ->where('user_id', $request->user()->id)
+            ->where('sign_uncertain', true)
+            ->whereIn('match_status', [StatementLineStatus::Unmatched->value, StatementLineStatus::Matched->value])
+            ->update(['sign_uncertain' => false]);
+
+        $confirmed === 1
+            ? FlashToast::success('Sign confirmed.')
+            : FlashToast::error('Only a line with an uncertain sign that is not imported or ignored can be confirmed.');
+
+        return redirect()->back(fallback: route('statements.show', $statement));
+    }
+
+    /**
      * Change the status only if the line is still in the expected one (a single conditional update).
      */
     private function moveLine(StatementLine $line, StatementLineStatus $from, StatementLineStatus $to): bool

@@ -85,6 +85,7 @@ Route::middleware('auth')->group(function () {
         Route::post('{statement}/lines/{line}/ignore', 'ignore')->name('ignore-line');
         Route::post('{statement}/lines/{line}/restore', 'restore')->name('restore-line');
         Route::post('{statement}/lines/{line}/flip-sign', 'flipSign')->name('flip-line-sign');
+        Route::post('{statement}/lines/{line}/confirm-sign', 'confirmSign')->name('confirm-line-sign');
     });
     Route::get('insights', [InsightsController::class, 'index'])->name('insights.index');
     Route::get('currency/rates', [CurrencyController::class, 'getRates'])->name('currency.rates');

@@ -11,6 +11,7 @@ import {
 } from '@/components/ui';
 import { useCurrency, useDate } from '@/composables';
 import {
+    confirmLineSign,
     destroy,
     download,
     flipLineSign,
@@ -278,6 +279,14 @@ function submitImport(everyUnmatched: boolean): void {
     );
 }
 
+function confirmSign(line: Line): void {
+    router.post(
+        confirmLineSign.url({ statement: props.statement.id, line: line.id }),
+        {},
+        { preserveScroll: true },
+    );
+}
+
 function flipSign(line: Line): void {
     router.post(
         flipLineSign.url({ statement: props.statement.id, line: line.id }),
@@ -507,8 +516,9 @@ function setAside(line: Line, restore: boolean): void {
             }}
             a sign that could not be told from the debit and credit columns and
             {{ statement.sign_uncertain_count === 1 ? 'is' : 'are' }} shown as
-            money in. Check them, and use Flip sign where the amount is money
-            out, before importing.
+            money in. They are not imported until you check them: use Flip sign
+            where the amount is money out, or Sign is right where it is money
+            in.
         </p>
         <p
             v-if="statement.lines_truncated"
@@ -691,6 +701,19 @@ function setAside(line: Line, restore: boolean): void {
                             <Badge :variant="statusVariant[line.match_status]">
                                 {{ line.match_status }}
                             </Badge>
+                            <Button
+                                v-if="
+                                    line.sign_uncertain &&
+                                    ['unmatched', 'matched'].includes(
+                                        line.match_status,
+                                    )
+                                "
+                                size="sm"
+                                variant="ghost"
+                                @click="confirmSign(line)"
+                            >
+                                Sign is right
+                            </Button>
                             <Button
                                 v-if="
                                     ['unmatched', 'matched'].includes(

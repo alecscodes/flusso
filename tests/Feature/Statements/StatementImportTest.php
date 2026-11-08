@@ -522,3 +522,29 @@ test('the page tells what importing everything would add, per currency', functio
             ->where('statement.unmatched_totals.1.currency', 'RON')
             ->where('statement.unmatched_totals.1.expense', 2.5));
 });
+
+test('a line with an uncertain sign is refused until the owner flips it or confirms it', function () {
+    [$user, $account, $statement] = statementImportSetup();
+    $line = statementImportLine($statement, 40.00, ['description' => 'Unsure', 'sign_uncertain' => true]);
+
+    actingAs($user)->post(route('statements.import-lines', $statement), statementImportPayload([$line]));
+
+    expect(Transaction::query()->where('description', 'Unsure')->exists())->toBeFalse()
+        ->and($line->fresh()->match_status)->toBe(StatementLineStatus::Unmatched);
+
+    actingAs($user)->post(route('statements.confirm-line-sign', [$statement, $line]))->assertRedirect();
+    expect($line->fresh()->sign_uncertain)->toBeFalse();
+
+    actingAs($user)->post(route('statements.import-lines', $statement), statementImportPayload([$line]));
+
+    expect(Transaction::query()->where('description', 'Unsure')->firstOrFail()->type)->toBe(TransactionType::Income);
+});
+
+test('only the owner can confirm a sign', function () {
+    [, , $statement] = statementImportSetup();
+    $line = statementImportLine($statement, 40.00, ['sign_uncertain' => true]);
+
+    actingAs(User::factory()->create())->post(route('statements.confirm-line-sign', [$statement, $line]))->assertForbidden();
+
+    expect($line->fresh()->sign_uncertain)->toBeTrue();
+});

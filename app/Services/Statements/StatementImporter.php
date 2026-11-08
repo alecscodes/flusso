@@ -179,6 +179,10 @@ class StatementImporter
      */
     private function refusal(StatementLine $line, Account $account, TransactionType $type, ?int $categoryId, array $categoryTypes): ?string
     {
+        if ($line->sign_uncertain) {
+            return 'The sign of this line is uncertain (money in or out): flip it, or confirm it is right, before importing.';
+        }
+
         if ($line->currency !== null && strtoupper($line->currency) !== strtoupper($account->currency)) {
             return "The line is in {$line->currency} but the account is in {$account->currency}; nothing is converted.";
         }
